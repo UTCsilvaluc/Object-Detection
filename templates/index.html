@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Object Detection (物体検出)</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            
+            <label for="image">Select Image (画像を選択)</label>
+            <input type="file" id="image" name="image" accept="image/*" required>
+
+            <label for="img_name">Image Name (画像名)</label>
+            <input type="text" id="img_name" name="img_name" placeholder="Enter image name / 画像名を入力" required>
+
+            <label for="img_desc">Description (説明)</label>
+            <input type="text" id="img_desc" name="img_desc" placeholder="Enter description / 説明を入力">
+
+            <label for="img_date">Date (日付)</label>
+            <input type="datetime-local" id="img_date" name="img_date">
+
+            <label for="img_location">Location (場所)</label>
+            <input type="text" id="img_location" name="img_location" placeholder="City / Place / 都市・場所">
+
+            <p class="note">Please enter the latitude and longitude of the image.  
+            (画像の緯度と経度を入力してください)</p>
+            
+            <label for="img_latitude">Latitude (緯度)</label>
+            <input type="text" id="img_latitude" name="img_latitude" placeholder="Ex: 35.6895">
+
+            <label for="img_longitude">Longitude (経度)</label>
+            <input type="text" id="img_longitude" name="img_longitude" placeholder="Ex: 139.6917">
+
+            <label for="img_source">Image Source (画像ソース)</label>
+            <input type="text" id="img_source" name="img_source" placeholder="Ex: Camera / Dataset / カメラ・データセット">
+
+            <button type="submit">Upload and Detect (アップロードして検出)</button>
+        </form>
+    </div>
+</body>
+</html>
