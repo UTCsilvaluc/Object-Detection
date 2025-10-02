@@ -56,7 +56,7 @@ def detect_yolo(image_path, save=True):
         cv2.imwrite(save_path, cv2.cvtColor(img_result, cv2.COLOR_RGB2BGR))
         print(f"YOLO result saved to {save_path}")
 
-    return results
+    return (results , img , img_result , save_path)
 
 
 # =====================
@@ -135,28 +135,111 @@ mask_generator = SamAutomaticMaskGenerator(
     min_mask_region_area=10000
 )
 
-def segment_sam(image_path, save=True):
+def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
+    """
+    Filtre, dédoublonne et fusionne les segments partiels.
+    - min_area : aire minimale en pixels
+    - iou_thresh : seuil d'inclusion pour supprimer les doublons
+    - merge_thresh : seuil d'IoU pour fusionner deux masques partiels
+    """
+    # Étape 1 : filtrer par aire
+    filtered = []
+    for mask in masks:
+        seg = mask["segmentation"].astype(np.uint8)
+        area = np.sum(seg)
+        if area >= min_area:
+            filtered.append(seg)
+
+    # Étape 2 : supprimer les doublons (inclusions)
+    unique_masks = []
+    for i, seg1 in enumerate(filtered):
+        keep = True
+        for j, seg2 in enumerate(filtered):
+            if i == j:
+                continue
+            inter = np.logical_and(seg1, seg2).sum()
+            area1 = seg1.sum()
+            if area1 > 0 and inter / area1 > iou_thresh:
+                keep = False
+                break
+        if keep:
+            unique_masks.append(seg1)
+
+    # Étape 3 : fusionner les masques qui se chevauchent trop
+    merged = []
+    used = [False] * len(unique_masks)
+
+    for i in range(len(unique_masks)):
+        if used[i]:
+            continue
+        seg_i = unique_masks[i].copy()
+        for j in range(i + 1, len(unique_masks)):
+            if used[j]:
+                continue
+            seg_j = unique_masks[j]
+            inter = np.logical_and(seg_i, seg_j).sum()
+            union = np.logical_or(seg_i, seg_j).sum()
+            iou = inter / union if union > 0 else 0
+            if iou > merge_thresh:
+                # Fusion → OR logique
+                seg_i = np.logical_or(seg_i, seg_j).astype(np.uint8)
+                used[j] = True
+        merged.append(seg_i)
+        used[i] = True
+
+    # Reconstruire dans le format SAM
+    final_masks = [{"segmentation": m.astype(np.uint8)} for m in merged]
+    return final_masks
+
+
+def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     masks = mask_generator.generate(image_rgb)
 
-    # Visualisation
-    plt.figure(figsize=(10,10))
-    plt.imshow(image_rgb)
-    for mask in masks:
-        seg = mask["segmentation"]
-        plt.contour(seg, colors=np.random.rand(3,), linewidths=1)
-    plt.axis("off")
-    #plt.show()
+    # Filtrer, dédoublonner et fusionner
+    masks = filter_and_merge_segments(masks, min_area=min_area, 
+                                      iou_thresh=iou_thresh, 
+                                      merge_thresh=merge_thresh)
 
     if save:
-        save_path = os.path.join(sam_dir, os.path.basename(image_path))
-        plt.savefig(save_path)
+        base_name = os.path.splitext(os.path.basename(image_path))[0]
+        save_dir = os.path.join(sam_dir, base_name)
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 1) Image globale avec contours
+        plt.figure(figsize=(10, 10))
+        plt.imshow(image_rgb)
+        for mask in masks:
+            seg = mask["segmentation"]
+            plt.contour(seg, colors=np.random.rand(3,), linewidths=1)
+        plt.axis("off")
+        global_path = os.path.join(save_dir, f"{base_name}_all_masks.png")
+        plt.savefig(global_path)
         plt.close()
-        print(f"SAM result saved to {save_path}")
+        print(f"Global SAM result saved to {global_path}")
+
+        # 2) Sauvegarder chaque objet isolé
+        for idx, mask in enumerate(masks):
+            seg = mask["segmentation"].astype(np.uint8)
+            obj_img = cv2.bitwise_and(image_rgb, image_rgb, mask=seg)
+
+            ys, xs = np.where(seg > 0)
+            if len(xs) > 0 and len(ys) > 0:
+                x_min, x_max = xs.min(), xs.max()
+                y_min, y_max = ys.min(), ys.max()
+                obj_crop = obj_img[y_min:y_max, x_min:x_max]
+            else:
+                obj_crop = obj_img
+
+            obj_path = os.path.join(save_dir, f"{base_name}_obj_{idx+1}.png")
+            cv2.imwrite(obj_path, cv2.cvtColor(obj_crop, cv2.COLOR_RGB2BGR))
+            print(f"Saved merged object {idx+1} to {obj_path}")
 
     return masks
 
+
+"""
 # =====================
 # Exemple : parcours toutes les images
 # =====================
@@ -165,9 +248,10 @@ images = sorted([f for f in os.listdir(image_folder) if f.lower().endswith(('.jp
 
 for img_file in images:
     img_path = os.path.join(image_folder, img_file)
-    print(f"\nProcessing {img_file} with YOLO...")
-    detect_yolo(img_path)
-    print(f"Processing {img_file} with Faster R-CNN...")
-    detect_fasterrcnn(img_path)
+    #print(f"\nProcessing {img_file} with YOLO...")
+    #detect_yolo(img_path)
+    #print(f"Processing {img_file} with Faster R-CNN...")
+    #detect_fasterrcnn(img_path)
     print(f"Processing {img_file} with SAM...")
     segment_sam(img_path)
+"""

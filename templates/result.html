@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='result.css') }}">
+    <script>
+        function toggleAccordion(id) {
+            const content = document.getElementById(id);
+            content.style.display = (content.style.display === "block") ? "none" : "block";
+        }
+        function addMetadataField(index) {
+            const container = document.getElementById(`meta-${index}`);
+            let div = document.createElement('div');
+            div.className = 'meta-field';
+            div.innerHTML = `
+                <input type="text" name="meta_${index}_key[]" placeholder="Clé">
+                <input type="text" name="meta_${index}_value[]" placeholder="Valeur">
+            `;  
+            container.appendChild(div);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <h1>Annotated Image</h1>
+            <div class="image-box">
+                <img src="data:image/png;base64,{{ result.annotated_image }}" alt="Annotated YOLO Result">
+            </div>
+            <div class="info">
+                <p><strong>Name:</strong> {{ img_name }}</p>
+                <p><strong>Description:</strong> {{ img_desc }}</p>
+                <p><strong>Date:</strong> {{ img_date }}</p>
+                <p><strong>Location:</strong> {{ img_location }} ({{ img_latitude }}, {{ img_longitude }})</p>
+                <p><strong>Source:</strong> {{ img_source }}</p>
+                <p><strong>Objects detected:</strong> {{ result.num_objects }}</p>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+            <h2>Detected Objects</h2>
+                <form action="" method="post">
+                    <div class="accordion">
+                        
+                        <div class="accordion-item">
+                            {% for obj in result.objects %}
+                                <div class="accordion-header" onclick="toggleAccordion('obj{{ loop.index }}')">
+                                    Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
+                                </div>
+                                <div class="accordion-content" id="obj{{ loop.index }}">
+                                    <div class="obj-wrapper">
+                                        <div class="left-obj-info">
+                                            <p><strong>BBox:</strong> {{ obj.bbox }}</p>
+                                            <img src="data:image/png;base64,{{ obj.crop_base64 }}" alt="Object {{ loop.index }}">
+                                        </div>
+                                        <div class="right-obj-info">
+                                            <div class="metadata-container" id="meta-{{ loop.index0 }}"></div>
+                                            <button type="button" onclick="addMetadataField('{{ loop.index0 }}')">+ Add metadata</button>
+                                        </div>
+                                    </div>`
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="submit-box">
+                            <button type="submit">Enregistrer toutes les métadonnées</button>
+                        </div>
+                    <a href="{{ url_for('index') }}" class="back-button">Upload Another Image</a>
+                </form>
+        </div>
+    </div>
+</body>
+</html>
