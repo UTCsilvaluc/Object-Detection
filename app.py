@@ -74,7 +74,16 @@ def save_image_permanently(temp_path, dest_dir, new_name):
 def save_metadata():
     # Récupération des métadonnées via le helper
     metadata = get_form_metadata(request)
+    print(f"Received metadata: {metadata}")
     img_name = metadata.get("name", "unnamed")  # valeur par défaut si vide
+
+    print(f"Image name: {img_name}")
+    print(f"Image description: {metadata.get('desc')}")
+    print(f"Image date: {metadata.get('date')}")
+    print(f"Image location: {metadata.get('location')}")
+    print(f"Image latitude: {metadata.get('latitude')}")
+    print(f"Image longitude: {metadata.get('longitude')}")
+    print(f"Image source: {metadata.get('source')}")
 
     annotated_image_path = empty_to_none(request.form.get("annotated_image"))  # temp path
     original_image_path = empty_to_none(request.form.get("original_image"))    # temp path

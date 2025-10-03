@@ -32,11 +32,11 @@
                 <img src="{{ annotated_image_path}}" alt="Annotated YOLO Result">
             </div>
             <div class="info">
-                <p><strong>Name:</strong> {{ img_name }}</p>
-                <p><strong>Description:</strong> {{ img_desc }}</p>
-                <p><strong>Date:</strong> {{ img_date }}</p>
-                <p><strong>Location:</strong> {{ img_location }} ({{ img_latitude }}, {{ img_longitude }})</p>
-                <p><strong>Source:</strong> {{ img_source }}</p>
+                <p><strong>Name:</strong> {{ name }}</p>
+                <p><strong>Description:</strong> {{ desc }}</p>
+                <p><strong>Date:</strong> {{ date }}</p>
+                <p><strong>Location:</strong> {{ location }} ({{ latitude }}, {{ longitude }})</p>
+                <p><strong>Source:</strong> {{ source }}</p>
                 <p><strong>Objects detected:</strong> {{ result.num_objects }}</p>
                 <p><strong>Model used:</strong> {{ model }}</p>
             </div>
@@ -46,13 +46,13 @@
         <div class="right-panel">
             <h2>Detected Objects</h2>
                 <form action="{{url_for('save_metadata')}}" method="post">
-                    <input type="hidden" name="img_name" value="{{ img_name }}">
-                    <input type="hidden" name="img_desc" value="{{ img_desc }}">
-                    <input type="hidden" name="img_date" value="{{ img_date }}">
-                    <input type="hidden" name="img_location" value="{{ img_location }}">
-                    <input type="hidden" name="img_latitude" value="{{ img_latitude }}">
-                    <input type="hidden" name="img_longitude" value="{{ img_longitude }}">
-                    <input type="hidden" name="img_source" value="{{ img_source }}">
+                    <input type="hidden" name="img_name" value="{{ name }}">
+                    <input type="hidden" name="img_desc" value="{{ desc }}">
+                    <input type="hidden" name="img_date" value="{{ date }}">
+                    <input type="hidden" name="img_location" value="{{ location }}">
+                    <input type="hidden" name="img_latitude" value="{{ latitude }}">
+                    <input type="hidden" name="img_longitude" value="{{ longitude }}">
+                    <input type="hidden" name="img_source" value="{{ source }}">
                     <input type="hidden" name="annotated_image" value="{{ annotated_image_path }}">
                     <input type="hidden" name="original_image" value="{{ original_image_path }}">
                     <input type="hidden" name="num_objects" value="{{ result.num_objects }}">

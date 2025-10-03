@@ -1,7 +1,7 @@
 import os
 import ast
 def empty_to_none(value):
-    if value is None or value.strip() == "":
+    if value is None or value.strip() == "" or value.strip().lower() == "none":
         return None
     return value
 
