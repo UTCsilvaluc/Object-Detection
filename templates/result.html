@@ -10,14 +10,15 @@
             const content = document.getElementById(id);
             content.style.display = (content.style.display === "block") ? "none" : "block";
         }
-        function addMetadataField(index) {
-            const container = document.getElementById(`meta-${index}`);
+        function addMetadataField(objIndex) {
+            const container = document.getElementById(`meta-${objIndex}`);
+            const metaIndex = container.children.length; // numéro de la métadonnée
             let div = document.createElement('div');
             div.className = 'meta-field';
             div.innerHTML = `
-                <input type="text" name="meta_${index}_key[]" placeholder="Clé">
-                <input type="text" name="meta_${index}_value[]" placeholder="Valeur">
-            `;  
+                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][key]" placeholder="Clé">
+                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][value]" placeholder="Valeur">
+            `;
             container.appendChild(div);
         }
     </script>
@@ -28,7 +29,7 @@
         <div class="left-panel">
             <h1>Annotated Image</h1>
             <div class="image-box">
-                <img src="data:image/png;base64,{{ result.annotated_image }}" alt="Annotated YOLO Result">
+                <img src="{{ annotated_image_path}}" alt="Annotated YOLO Result">
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ img_name }}</p>
@@ -37,13 +38,25 @@
                 <p><strong>Location:</strong> {{ img_location }} ({{ img_latitude }}, {{ img_longitude }})</p>
                 <p><strong>Source:</strong> {{ img_source }}</p>
                 <p><strong>Objects detected:</strong> {{ result.num_objects }}</p>
+                <p><strong>Model used:</strong> {{ model }}</p>
             </div>
         </div>
 
         <!-- RIGHT PANEL -->
         <div class="right-panel">
             <h2>Detected Objects</h2>
-                <form action="" method="post">
+                <form action="{{url_for('save_metadata')}}" method="post">
+                    <input type="hidden" name="img_name" value="{{ img_name }}">
+                    <input type="hidden" name="img_desc" value="{{ img_desc }}">
+                    <input type="hidden" name="img_date" value="{{ img_date }}">
+                    <input type="hidden" name="img_location" value="{{ img_location }}">
+                    <input type="hidden" name="img_latitude" value="{{ img_latitude }}">
+                    <input type="hidden" name="img_longitude" value="{{ img_longitude }}">
+                    <input type="hidden" name="img_source" value="{{ img_source }}">
+                    <input type="hidden" name="annotated_image" value="{{ annotated_image_path }}">
+                    <input type="hidden" name="original_image" value="{{ original_image_path }}">
+                    <input type="hidden" name="num_objects" value="{{ result.num_objects }}">
+                    <input type="hidden" name="model" value="{{ model }}">
                     <div class="accordion">
                         
                         <div class="accordion-item">
@@ -55,13 +68,18 @@
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="data:image/png;base64,{{ obj.crop_base64 }}" alt="Object {{ loop.index }}">
+                                            <img src="{{ obj.obj_crop_path }}" alt="Object {{ loop.index }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
+
                                         </div>
                                         <div class="right-obj-info">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][class_id]" value="{{ obj.class_id }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][score]" value="{{ obj.score }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][bbox]" value="{{ obj.bbox }}">
                                             <div class="metadata-container" id="meta-{{ loop.index0 }}"></div>
                                             <button type="button" onclick="addMetadataField('{{ loop.index0 }}')">+ Add metadata</button>
                                         </div>
-                                    </div>`
+                                    </div>
                                 </div>
                             {% endfor %}
                         </div>

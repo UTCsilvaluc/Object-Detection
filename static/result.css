@@ -92,14 +92,13 @@ h1 {
     margin-top: 5px;
 }
 
-.right-obj-info {
-    flex: 1; 
-}
 
 .meta-field {
     display: flex;
     gap: 10px;
     margin-bottom: 8px;
+    max-width: 100%;
+    overflow: auto;
 }
 
 .meta-field input {

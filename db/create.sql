@@ -45,6 +45,7 @@ CREATE TABLE Object (
 
 CREATE TABLE ObjectInstance (
     object_id INT NOT NULL,
+    version_number INT NOT NULL,
     image_id INT NOT NULL,
     coords_x REAL,
     coords_y REAL,
@@ -53,8 +54,8 @@ CREATE TABLE ObjectInstance (
     confidence_score NUMERIC(4, 3),
     cropped_file_path TEXT,
     FOREIGN KEY (object_id) REFERENCES Object(object_id) ON DELETE CASCADE,
-    FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
-    PRIMARY KEY (object_id, image_id)
+    FOREIGN KEY (version_number, image_id) REFERENCES VersionedImage(version_number, image_id) ON DELETE CASCADE,
+    PRIMARY KEY (object_id, image_id, version_number)
 );
 
 CREATE TABLE Metadata (
@@ -67,6 +68,25 @@ CREATE TABLE Metadata (
     FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
     PRIMARY KEY (object_id, image_id, key)
 );
+
+CREATE OR REPLACE FUNCTION auto_increment_version()
+RETURNS TRIGGER AS $$
+BEGIN 
+    NEW.version_number := COALESCE(
+        (SELECT MAX(version_number) 
+         FROM VersionedImage 
+         WHERE image_id = NEW.image_id), 0
+    ) + 1;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_auto_increment_version ON VersionedImage;
+
+CREATE TRIGGER trg_auto_increment_version
+BEFORE INSERT ON VersionedImage
+FOR EACH ROW
+EXECUTE FUNCTION auto_increment_version();
 
 -- ==============================================
 -- Auto create the database and run this script with:
