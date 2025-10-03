@@ -1,7 +1,20 @@
+import os
+import ast
 def empty_to_none(value):
     if value is None or value.strip() == "":
         return None
     return value
+
+def normalize_path(path):
+    if path and path.startswith("/static/"):
+        return os.path.join(os.getcwd(), path.lstrip("/"))
+    return path
+
+def parse_bbox(bbox_str):
+    if bbox_str:
+        return [float(x) for x in ast.literal_eval(bbox_str)]
+    return [None, None, None, None]
+
 
 def get_form_metadata(request):
     return {
