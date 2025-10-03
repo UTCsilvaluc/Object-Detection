@@ -9,9 +9,8 @@ import psycopg2
 import shutil
 app = Flask(__name__)
 
-# Dossier local pour stocker les images
-UPLOAD_FOLDER = "img/Images"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dossier static
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # crée le dossier s'il n'existe pas
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 @app.route('/')
@@ -48,16 +47,17 @@ def upload():
         model = "SAM"
 
     print(f"Detected {result_data['num_objects']} objects using {model}")
-    annotated_img_path = save_temp_img(img_result, "annotated")
-    original_img_path = save_temp_img(img, "original")
+    _, annotated_rel_path = save_temp_img(img_result, "annotated")
+    _, original_rel_path = save_temp_img(img, "original")
+
 
     return render_template(
         "result.html",
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template
         model=model,
-        annotated_image_path=annotated_img_path,
-        original_image_path=original_img_path
+        annotated_image_path=annotated_rel_path,
+        original_image_path=original_rel_path
     )
 
 
@@ -90,7 +90,7 @@ def save_metadata():
     num_objects = int(request.form.get("num_objects", 0))
     model = empty_to_none(request.form.get("model"))
 
-    # Correction des chemins si static → absolu
+    # Correction des chemins si static → absolu pour python
     annotated_image_path = normalize_path(annotated_image_path)
     original_image_path = normalize_path(original_image_path)
 
@@ -98,8 +98,9 @@ def save_metadata():
     img_path = save_image_permanently(
         original_image_path, app.config['UPLOAD_FOLDER'], f"{img_name}_original.jpg"
     )
+    file_name_in_db = f"{img_name}_original.jpg"
     image_id = insert_image(
-        img_path,
+        file_name_in_db,
         img_name,
         metadata.get("desc"),
         metadata.get("date"),
@@ -154,7 +155,17 @@ def save_metadata():
             insert_metadata(object_id, image_id, meta_key, meta_value)
             meta_index += 1
 
-    return redirect(url_for("index"))
+    return redirect(url_for("gallery"))
+
+@app.route('/gallery')
+def gallery():
+    try:
+        images = get_all_images() 
+    except Exception as e:
+        print(f"Error fetching images: {e}")
+        images = []
+
+    return render_template('gallery.html', images=images)
 
     
 if __name__ == '__main__':

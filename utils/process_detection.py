@@ -1,21 +1,8 @@
 import cv2
 import numpy as np
-import tempfile, os
 from flask import url_for
+from utils.helper import save_temp_img
 
-def save_temp_img(img_array, obj_index):
-    temp_dir = os.path.join("static", "temp")
-    os.makedirs(temp_dir, exist_ok=True)
-
-    fd, path = tempfile.mkstemp(suffix=f"_obj{obj_index}.png", dir=temp_dir)
-    os.close(fd)
-
-    # Sauvegarder directement l'image numpy
-    cv2.imwrite(path, cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
-
-    # Chemin relatif utilisable par Flask
-    rel_path = os.path.relpath(path, "static")
-    return url_for("static", filename=rel_path)
 
 def process_yolo_results(results, img, img_result):
     """
@@ -37,14 +24,18 @@ def process_yolo_results(results, img, img_result):
         obj_crop = img_rgb[y_min:y_max, x_min:x_max]
 
         # Encoder crop en base64
-        obj_crop_path = save_temp_img(obj_crop, idx)
+        # dans process_yolo_results, même principe
+        obj_crop_abs_path, obj_crop_rel_path = save_temp_img(obj_crop, idx)
+
 
         objects.append({
             "class_id": int(cls_id),
             "score": float(score),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
-            "obj_crop_path": obj_crop_path
+            "obj_crop_path": obj_crop_rel_path,   # chemin relatif pour template
+            "obj_crop_abs_path": obj_crop_abs_path # chemin absolu pour sauvegarde
         })
+
 
     return {
         "num_objects": len(objects),
@@ -66,12 +57,13 @@ def process_SAM(masks , img , img_result):
             obj_crop = obj_img[y_min:y_max , x_min:x_max]
         else:
             obj_crop = obj_img
-        obj_crop_path = save_temp_img(obj_crop, idx)
+        obj_crop_abs_path, obj_crop_rel_path = save_temp_img(obj_crop, idx)
         objects.append({
             "class_id": int(idx),
             "score": float(mask.get("score", 1.0)),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
-            "obj_crop_path": obj_crop_path
+            "obj_crop_path": obj_crop_rel_path,
+            "obj_crop_abs_path": obj_crop_abs_path
         })
 
     return {

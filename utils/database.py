@@ -153,3 +153,30 @@ def insert_metadata(object_id: int , image_id: int , key: str , value: str):
         return False
     finally:
         close_db_connection(conn)
+
+def get_all_images():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = """
+        SELECT image_id, title, description, file_path FROM Image ORDER BY image_id DESC;
+        """
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        images = []
+        for row in rows:
+            images.append({
+                "image_id": row[0],
+                "title": row[1],
+                "description": row[2],
+                "file_path": row[3]
+            })
+        cur.close()
+        return images
+    except Exception as e:
+        print(f"Error fetching images: {e}")
+        return []
+    finally:
+        close_db_connection(conn)

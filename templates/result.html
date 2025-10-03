@@ -29,7 +29,7 @@
         <div class="left-panel">
             <h1>Annotated Image</h1>
             <div class="image-box">
-                <img src="{{ annotated_image_path}}" alt="Annotated YOLO Result">
+                <img src="{{ url_for('static', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ name }}</p>
@@ -68,8 +68,8 @@
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ obj.obj_crop_path }}" alt="Object {{ loop.index }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
+                                            <img src="{{ url_for('static', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_abs_path }}">
 
                                         </div>
                                         <div class="right-obj-info">
