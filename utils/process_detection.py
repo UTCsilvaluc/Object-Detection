@@ -27,9 +27,9 @@ def process_yolo_results(results, img, img_result):
         # dans process_yolo_results, même principe
         obj_crop_abs_path, obj_crop_rel_path = save_temp_img(obj_crop, idx)
 
-
         objects.append({
             "class_id": int(cls_id),
+            "id": int(idx) + 1,  
             "score": float(score),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
             "obj_crop_path": obj_crop_rel_path,   # chemin relatif pour template
@@ -58,10 +58,17 @@ def process_SAM(masks , img , img_result):
         else:
             obj_crop = obj_img
         obj_crop_abs_path, obj_crop_rel_path = save_temp_img(obj_crop, idx)
+        contours , _ = cv2.findContours(segment , cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            contour_points = [[int(x) , int(y)] for x , y in contours[0].squeeze().tolist()]
+        else:
+            contour_points = []
         objects.append({
             "class_id": int(idx),
+            "id": int(idx) + 1,
             "score": float(mask.get("score", 1.0)),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
+            "contour": contour_points,
             "obj_crop_path": obj_crop_rel_path,
             "obj_crop_abs_path": obj_crop_abs_path
         })

@@ -1,11 +1,11 @@
 from flask import Flask , render_template , request , redirect , url_for
+from ultralytics.utils.plotting import colors
 from utils.models import *
 from utils.process_detection import *
 from utils.database import *
 from utils.helper import *
 import os
-import ast
-import psycopg2
+import json
 import shutil
 app = Flask(__name__)
 
@@ -26,11 +26,11 @@ def upload():
     # Sauvegarde temporaire
     img_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    print(f"Saving image to: {img_path}")
     image.save(img_path)
 
     # Récupération des métadonnées via helper
     metadata = get_form_metadata(request)
+    img_name = metadata.get("name", "unnamed")
 
     # Chargement image + YOLO
     img = cv2.imread(img_path)
@@ -46,11 +46,24 @@ def upload():
         result_data = process_SAM(masks, img, img_result)
         model = "SAM"
 
-    print(f"Detected {result_data['num_objects']} objects using {model}")
     _, annotated_rel_path = save_temp_img(img_result, "annotated")
     _, original_rel_path = save_temp_img(img, "original")
 
+    json_dir = os.path.join("static", "json")
+    os.makedirs(json_dir, exist_ok=True)
 
+    JSON_data = {
+        "image_name": img_name,
+        "description": metadata.get("desc"),
+        "date": metadata.get("date"),
+        "location": metadata.get("location"),
+        "latitude": metadata.get("latitude"),
+        "longitude": metadata.get("longitude"),
+        "source": metadata.get("source"),
+        "num_objects": result_data["num_objects"],
+        "objects": result_data.get("objects", [])
+    }
+    save_json(JSON_data, json_dir, img_name)
     return render_template(
         "result.html",
         result=result_data,
@@ -60,100 +73,27 @@ def upload():
         original_image_path=original_rel_path
     )
 
-
-def save_image_permanently(temp_path, dest_dir, new_name):
-    os.makedirs(dest_dir, exist_ok=True)
-    dest_path = os.path.join(dest_dir, new_name)
-    if not os.path.exists(temp_path):
-        raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")
-    if os.path.exists(dest_path):
-        os.remove(dest_path)
-    shutil.move(temp_path, dest_path)
-    return dest_path
 @app.route('/save_metadata', methods=['POST'])
 def save_metadata():
-    # Récupération des métadonnées via le helper
     metadata = get_form_metadata(request)
-    print(f"Received metadata: {metadata}")
-    img_name = metadata.get("name", "unnamed")  # valeur par défaut si vide
-
-    print(f"Image name: {img_name}")
-    print(f"Image description: {metadata.get('desc')}")
-    print(f"Image date: {metadata.get('date')}")
-    print(f"Image location: {metadata.get('location')}")
-    print(f"Image latitude: {metadata.get('latitude')}")
-    print(f"Image longitude: {metadata.get('longitude')}")
-    print(f"Image source: {metadata.get('source')}")
-
-    annotated_image_path = empty_to_none(request.form.get("annotated_image"))  # temp path
-    original_image_path = empty_to_none(request.form.get("original_image"))    # temp path
-    num_objects = int(request.form.get("num_objects", 0))
+    img_name = metadata.get("name", "unnamed")
     model = empty_to_none(request.form.get("model"))
+    num_objects = int(request.form.get("num_objects", 0))
+    max_objects_detected = int(request.form.get("max_object_detected", num_objects))
 
-    # Correction des chemins si static → absolu pour python
-    annotated_image_path = normalize_path(annotated_image_path)
-    original_image_path = normalize_path(original_image_path)
-
-    # Sauvegarde en base et fichiers
-    img_path = save_image_permanently(
-        original_image_path, app.config['UPLOAD_FOLDER'], f"{img_name}_original.jpg"
-    )
-    file_name_in_db = f"{img_name}_original.jpg"
-    image_id = insert_image(
-        file_name_in_db,
+    image_id, version_number = handle_save_images(
+        metadata,
         img_name,
-        metadata.get("desc"),
-        metadata.get("date"),
-        metadata.get("location"),
-        metadata.get("latitude"),
-        metadata.get("longitude"),
-        metadata.get("source")
+        model,
+        app.config["UPLOAD_FOLDER"],
+        os.path.join("static", request.form.get("annotated_image")),
+        os.path.join("static", request.form.get("original_image"))
     )
 
-    img_annotated_path = save_image_permanently(
-        annotated_image_path, app.config['UPLOAD_FOLDER'], f"{img_name}_annotated.jpg"
-    )
-    version_number = insert_annoted_image(image_id, img_annotated_path, model=model)
+    objects_data = handle_detected_objects(request, img_name, image_id, version_number, max_objects_detected , app.config["UPLOAD_FOLDER"])
 
-    # Sauvegarde des objets détectés
-    for i in range(num_objects):
-        class_id = request.form.get(f"objects[{i}][class_id]")
-        score = request.form.get(f"objects[{i}][score]")
-        bbox = request.form.get(f"objects[{i}][bbox]")
-
-        coords_x, coords_y, width, height = parse_bbox(bbox)
-        score = float(score) if score is not None else None
-
-        crop_path = request.form.get(f"objects[{i}][crop_path]")
-        crop_path = normalize_path(crop_path)
-        object_path = save_image_permanently(
-            crop_path, app.config['UPLOAD_FOLDER'], f"{img_name}_obj{i}.jpg"
-        )
-        object_id = create_object(
-            name=f"{img_name}_obj{i}",
-            description=f"Detected object {i} in image {img_name}",
-            type=class_id,
-        )
-
-        create_instance_object(
-            object_id=object_id,
-            version_number=version_number,
-            image_id=image_id,
-            coords_x=coords_x,
-            coords_y=coords_y,
-            width=width,
-            height=height,
-            confidence_score=score,
-            cropped_file_path=object_path,
-        )
-        meta_index = 0
-        while True:
-            meta_key = request.form.get(f"objects[{i}][metadata][{meta_index}][key]")
-            meta_value = request.form.get(f"objects[{i}][metadata][{meta_index}][value]")
-            if meta_key is None or meta_value is None:
-                break
-            insert_metadata(object_id, image_id, meta_key, meta_value)
-            meta_index += 1
+    json_data = build_json(metadata, img_name, num_objects, objects_data)
+    save_json(json_data, os.path.join("static", "json"), img_name)
 
     return redirect(url_for("gallery"))
 
@@ -167,6 +107,56 @@ def gallery():
 
     return render_template('gallery.html', images=images)
 
-    
+@app.route('/remove_object', methods=['POST'])
+def remove_object():
+    data = request.get_json()
+    id = int(data.get('id'))
+    img_name = data.get('img_name')
+    img_original_path = os.path.join("static", data.get('img_original_path'))
+    img_annotated_path = os.path.join("static", data.get('img_annotated_path'))
+    json_path = os.path.join("static", "json", f"{img_name}.json")
+    if not os.path.exists(json_path):
+        return {"error": "JSON file not found"}, 404
+    with open(json_path, 'r', encoding='utf-8') as json_file:
+        result_data = json.load(json_file)
+    # Supprimer l'objet correspondant
+    objects = result_data.get("objects", [])
+    obj_to_delete = next((obj for obj in objects if obj.get("id") == id), None)
+    if obj_to_delete:
+        objects.remove(obj_to_delete)
+        crop_path = obj_to_delete.get("obj_crop_abs_path")
+        if crop_path and os.path.exists(crop_path):
+            os.remove(crop_path)
+    else:
+        return {"error": "Object not found in JSON"}, 404
+
+    # Sauvegarde du JSON mis à jour
+    save_json(result_data, os.path.join("static", "json"), img_name)
+    # Réannotation de l'image
+    image = cv2.imread(img_original_path)
+    for i, obj in enumerate(objects):
+        color = colors(int(obj.get("class_id", 0)), True)  # Couleur unique par class_id
+        color_bgr = (int(color[2]), int(color[1]), int(color[0]))  
+        if "contour" in obj and obj["contour"]:
+            contour = np.array(obj["contour"]).reshape((-1, 1, 2)).astype(np.int32)
+            cv2.drawContours(image, [contour], -1, color_bgr, 2)
+        else:
+            bbox = obj.get("bbox", [0, 0, 0, 0])
+            x1, y1, x2, y2 = map(int, bbox)
+            print(f"Drawing bbox for object {i}: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
+            cv2.rectangle(image, (x1, y1), (x2, y2), color_bgr, 2)
+            cv2.putText(image, f"{obj['class_id']}:{obj['score']:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_bgr, 2)
+
+    # Remplacer l'ancienne image annotée
+    print(f"Suppression de l'ancien fichier annoté: {img_annotated_path}")
+    if os.path.exists(img_annotated_path):
+        os.remove(img_annotated_path)
+
+    cv2.imwrite(img_annotated_path, image)
+
+    return {"success": True, "num_objects": len(objects)}, 200
+
+
 if __name__ == '__main__':
     app.run(debug=True) 
