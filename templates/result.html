@@ -5,7 +5,100 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YOLO Results</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='result.css') }}">
-    <script>
+</head>
+<body>
+    <div class="container">
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <h1>Annotated Image</h1>
+            <div class="image-box">
+                <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
+            </div>
+            <div class="info">
+                <p><strong>Name:</strong> {{ name }}</p>
+                <p><strong>Description:</strong> {{ desc }}</p>
+                <p><strong>Date:</strong> {{ date }}</p>
+                <p><strong>Location:</strong> {{ location }} ({{ latitude }}, {{ longitude }})</p>
+                <p><strong>Source:</strong> {{ source }}</p>
+                <p id="num-objects"><strong>Objects detected:</strong> {{ result.num_objects }}</p>
+                <p><strong>Model used:</strong> {{ model }}</p>
+                <span class="span_type">
+                    <p><strong><label for="imgType">Select a type: </label></strong></p>
+                    <select id="imgType" name="img_type" class="img_type" onchange="changeType(this)">
+                        {% for cls in class_name %}
+                            <option value="{{cls}}">{{cls}}</option>
+                        {% endfor %}
+                        <option value="__new__">+ Add new type</option>
+                    </select>
+                </span>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+            <h2>Detected Objects</h2>
+                <form action="{{url_for('save_metadata')}}" method="post">
+                    <input type="hidden" name="img_name" value="{{ name }}">
+                    <input type="hidden" name="img_desc" value="{{ desc }}">
+                    <input type="hidden" name="img_date" value="{{ date }}">
+                    <input type="hidden" name="img_location" value="{{ location }}">
+                    <input type="hidden" name="img_latitude" value="{{ latitude }}">
+                    <input type="hidden" name="img_longitude" value="{{ longitude }}">
+                    <input type="hidden" name="img_source" value="{{ source }}">
+                    <input type="hidden" name="annotated_image" value="{{ annotated_image_path }}">
+                    <input type="hidden" name="original_image" value="{{ original_image_path }}">
+                    <input type="hidden" name="num_objects" value="{{ result.num_objects }}">
+                    <input type="hidden" name="max_object_detected" value="{{ result.num_objects }}">
+                    <input type="hidden" name="model" value="{{ model }}">
+                    <input type="hidden" name="type" id="hiddenType" value="{{ class_name[O] }}">
+                    <div class="accordion">
+                        
+                        <div class="accordion-item">
+                            {% for obj in result.objects %}
+                            <div class="accordion-section" id="obj{{ obj.id }}">
+                                <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">
+                                    Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
+                                    <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
+                                </div>
+                                <div class="accordion-content" id="obj-data{{ obj.id }}">
+                                    <div class="obj-wrapper">
+                                        <div class="left-obj-info">
+                                            <p><strong>BBox:</strong> {{ obj.bbox }}</p>
+                                            <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
+
+                                        </div>
+                                        <div class="right-obj-info">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][class_id]" value="{{ obj.class_id }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][score]" value="{{ obj.score }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][bbox]" value="{{ obj.bbox }}">
+                                            <div class="metadata-container" id="meta-{{ loop.index0 }}">
+                                                <div class="meta-field">
+                                                    <input type="text" name="objects[{{ loop.index0 }}][metadata][0][key]" value="type" readonly>
+                                                    <select name="objects[{{ loop.index0 }}][metadata][0][value]" class="object_type" onchange="handleNewType(this)" required>
+                                                        {% for cls in class_name %}
+                                                            <option value="{{cls}}">{{cls}}</option>
+                                                        {% endfor %}
+                                                            <option value="__new__">+ Add new type</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button type="button" onclick="addMetadataField('{{ loop.index0 }}')">+ Add metadata</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="submit-box">
+                            <a href="{{ url_for('index') }}" class="back-button">Upload Another Image</a>
+                            <button type="submit">Register all metadata</button>
+                        </div>
+                </form>
+        </div>
+    </div>
+</body>
+<script>
         let isSubmitting = false;
         document.querySelector('form').addEventListener('submit', function(event) {
             if (isSubmitting) {
@@ -51,13 +144,11 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    alert("data is a")
                     const objElement = document.getElementById(`obj${objID}`);
                     if (objElement) objElement.remove();
                     let image_box = document.querySelector('.image-box img');
                     image_box.src = image_box.src + '?t=' + new Date().getTime();
                     document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
-                    alert('Object deleted successfully.');
                 } else {
                     alert('Failed to delete the object.');
                 }
@@ -67,78 +158,51 @@
                 alert('An error occurred while trying to delete the object.');
             });
         }
+
+        function handleNewType(selectedItem){
+            if (selectedItem.value === "__new__") {
+                const typeName = prompt("Enter the new type name or nothing to cancel the action:")
+                if (!typeName) {
+                    selectedItem.selectedIndex = 0;
+                    return;
+                }
+                const typeDesc = prompt("Enter a description for this type:");
+                fetch("/add_class" , {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json"},
+                    body: JSON.stringify({name: typeName , description: typeDesc})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success){
+                        document.querySelectorAll(".object_type").forEach(sel => {
+                            const newOption = document.createElement("option");
+                            newOption.value = typeName;
+                            newOption.textContent = typeName;
+                            sel.insertBefore(newOption, sel.querySelector('option[value="__new__"]'));
+                        })
+                        const newOption = document.createElement("option");
+                        newOption.value = typeName;
+                        newOption.textContent = typeName;
+                        let selecteurImage = document.getElementById("imgType");
+                        selecteurImage.insertBefore(newOption , selecteurImage.querySelector('option[value="__new__"]'));
+                        selectedItem.value = typeName;
+                    } else {
+                        alert("Failed to add new type: " + data.error);
+                        selectElem.selectedIndex = 0;
+                    }
+                })
+                .catch(err => {
+                    alert("Error while adding a new type.");
+                    selectElem.selectedIndex = 0;
+                });
+            }
+        }
+        function changeType(selectedItem){
+            handleNewType(selectedItem);
+            let selecteur = document.getElementById("imgType");
+            const hidden = document.getElementById("hiddenType");
+            hidden.value = selecteur.value;
+        }
     </script>
-</head>
-<body>
-    <div class="container">
-        <!-- LEFT PANEL -->
-        <div class="left-panel">
-            <h1>Annotated Image</h1>
-            <div class="image-box">
-                <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
-            </div>
-            <div class="info">
-                <p><strong>Name:</strong> {{ name }}</p>
-                <p><strong>Description:</strong> {{ desc }}</p>
-                <p><strong>Date:</strong> {{ date }}</p>
-                <p><strong>Location:</strong> {{ location }} ({{ latitude }}, {{ longitude }})</p>
-                <p><strong>Source:</strong> {{ source }}</p>
-                <p id="num-objects"><strong>Objects detected:</strong> {{ result.num_objects }}</p>
-                <p><strong>Model used:</strong> {{ model }}</p>
-            </div>
-        </div>
-
-        <!-- RIGHT PANEL -->
-        <div class="right-panel">
-            <h2>Detected Objects</h2>
-                <form action="{{url_for('save_metadata')}}" method="post">
-                    <input type="hidden" name="img_name" value="{{ name }}">
-                    <input type="hidden" name="img_desc" value="{{ desc }}">
-                    <input type="hidden" name="img_date" value="{{ date }}">
-                    <input type="hidden" name="img_location" value="{{ location }}">
-                    <input type="hidden" name="img_latitude" value="{{ latitude }}">
-                    <input type="hidden" name="img_longitude" value="{{ longitude }}">
-                    <input type="hidden" name="img_source" value="{{ source }}">
-                    <input type="hidden" name="annotated_image" value="{{ annotated_image_path }}">
-                    <input type="hidden" name="original_image" value="{{ original_image_path }}">
-                    <input type="hidden" name="num_objects" value="{{ result.num_objects }}">
-                    <input type="hidden" name="max_object_detected" value="{{ result.num_objects }}">
-                    <input type="hidden" name="model" value="{{ model }}">
-                    <div class="accordion">
-                        
-                        <div class="accordion-item">
-                            {% for obj in result.objects %}
-                            <div class="accordion-section" id="obj{{ obj.id }}">
-                                <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">
-                                    Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
-                                    <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
-                                </div>
-                                <div class="accordion-content" id="obj-data{{ obj.id }}">
-                                    <div class="obj-wrapper">
-                                        <div class="left-obj-info">
-                                            <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
-
-                                        </div>
-                                        <div class="right-obj-info">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][class_id]" value="{{ obj.class_id }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][score]" value="{{ obj.score }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][bbox]" value="{{ obj.bbox }}">
-                                            <div class="metadata-container" id="meta-{{ loop.index0 }}"></div>
-                                            <button type="button" onclick="addMetadataField('{{ loop.index0 }}')">+ Add metadata</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div class="submit-box">
-                            <a href="{{ url_for('index') }}" class="back-button">Upload Another Image</a>
-                            <button type="submit">Register all metadata</button>
-                        </div>
-                </form>
-        </div>
-    </div>
-</body>
 </html>

@@ -25,18 +25,18 @@ def close_db_connection(conn):
     except Exception as e:
         print(f"Error closing database connection: {e}")    
 
-def insert_image(file_path, title, description=None, capture_date=None, location_name=None, latitude=None, longitude=None, source_type=None):
+def insert_image(file_path, title, description=None, capture_date=None, location_name=None, latitude=None, longitude=None, source_type=None, type=None):
     conn = get_db_connection()
     if not conn:
         return False
     try:
         cur = conn.cursor()
         insert_query = """
-        INSERT INTO Image (file_path, title, description, capture_date, location_name, latitude, longitude, source_type)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO Image (file_path, title, description, capture_date, location_name, latitude, longitude, source_type, type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING image_id;
         """
-        cur.execute(insert_query, (file_path, title, description, capture_date, location_name, latitude, longitude, source_type))
+        cur.execute(insert_query, (file_path, title, description, capture_date, location_name, latitude, longitude, source_type, type))
         image_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
@@ -178,5 +178,54 @@ def get_all_images():
     except Exception as e:
         print(f"Error fetching images: {e}")
         return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_classes():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = "SELECT name FROM Class;"
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        class_names = [row[0] for row in rows]
+        return class_names
+    except Exception as e:
+        print(f"Error fetching classes: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def check_if_class_exist(name):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM Class WHERE name = %s;", (name,))
+        exists = cur.fetchone() is not None
+        return exists
+    except Exception as e:
+        print(f"Error checking class existence: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def create_new_class(name, desc):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        query = "INSERT INTO Class VALUES(%s , %s);"
+        cur.execute(query , (name , desc))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error creating a new class : {e}")
+        return False
     finally:
         close_db_connection(conn)

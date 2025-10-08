@@ -7,10 +7,15 @@ DROP TABLE IF EXISTS ObjectInstance CASCADE;
 DROP TABLE IF EXISTS Object CASCADE;
 DROP TABLE IF EXISTS VersionedImage CASCADE;
 DROP TABLE IF EXISTS Image CASCADE;
+DROP TABLE IF EXISTS Class CASCADE;
 
 -- ==============================================
 -- 2. Tables
 -- ==============================================
+CREATE TABLE Class(
+    name VARCHAR(255) PRIMARY KEY,
+    description TEXT
+);
 
 CREATE TABLE Image (
     image_id SERIAL PRIMARY KEY,
@@ -22,7 +27,8 @@ CREATE TABLE Image (
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
     upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    source_type TEXT
+    source_type TEXT,
+    type VARCHAR(255) REFERENCES Class(name) ON DELETE CASCADE
 );
 
 CREATE TABLE VersionedImage (
@@ -68,6 +74,18 @@ CREATE TABLE Metadata (
     FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
     PRIMARY KEY (object_id, image_id, key)
 );
+
+INSERT INTO Class (name, description) VALUES
+('Person', 'Human individual detected in the image'),
+('Building', 'Architectural structures such as houses, temples, or towers'),
+('Artifact', 'Historical or cultural objects, tools, or art pieces'),
+('Animal', 'Domestic or wild animals'),
+('Plant', 'Vegetation including trees, flowers, and crops'),
+('Landscape', 'Natural scenery, including mountains, rivers, and terrain'),
+('Historical Map', 'Old maps representing geographical information'),
+('Historical Document', 'Documents of historical value or manuscripts'),
+('Inscription', 'Text or carvings engraved on surfaces or objects');
+
 
 CREATE OR REPLACE FUNCTION auto_increment_version()
 RETURNS TRIGGER AS $$

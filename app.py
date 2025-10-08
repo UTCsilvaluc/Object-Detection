@@ -6,12 +6,24 @@ from utils.database import *
 from utils.helper import *
 import os
 import json
-import shutil
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dossier static
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # crée le dossier s'il n'existe pas
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+@app.route('/add_class' , methods=['POST'])
+def add_class():
+    data = request.get_json() or {}
+    name = data.get("name" , "")
+    desc = data.get("description" , "")
+    if not name:
+        return {"success": False, "error": "Class name is required."}, 400
+    if (check_if_class_exist(name=name)):
+        return {"success":False , "error": "Class already exists."}, 409
+    req = create_new_class(name , desc)
+    if req:
+        return {"success":True} , 201
+    return {"success":False , "error": "insertion failed."} , 500
 @app.route('/temp/img/<path:filename>')
 def temp_img(filename):
     return send_from_directory(build_img_temp_path() , filename)
@@ -67,13 +79,16 @@ def upload():
         "objects": result_data.get("objects", [])
     }
     save_json(JSON_data, json_dir, img_name)
+    class_name = get_all_classes()
+    print(class_name)
     return render_template(
         "result.html",
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template
         model=model,
         annotated_image_path=annotated_rel_path,
-        original_image_path=original_rel_path
+        original_image_path=original_rel_path,
+        class_name = class_name
     )
 
 @app.route('/save_metadata', methods=['POST'])

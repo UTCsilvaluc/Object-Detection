@@ -48,9 +48,6 @@ def normalize_path(path):
 
 def save_image_permanently(temp_path, dest_dir, new_name):
     os.makedirs(dest_dir, exist_ok=True)
-    print("temp path :" , temp_path)
-    print("temp dest :" , dest_dir)
-    print("temp new name :" , new_name)
     dest_path = os.path.join(dest_dir, new_name)
     if not os.path.exists(temp_path):
         raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")
@@ -98,7 +95,8 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
         metadata.get("location"),
         metadata.get("latitude"),
         metadata.get("longitude"),
-        metadata.get("source")
+        metadata.get("source"),
+        metadata.get("type")
     )
     img_annotated_path = save_image_permanently(
         annotated_image_path, upload_folder, f"{img_name}_annotated.jpg"

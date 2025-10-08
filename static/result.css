@@ -101,6 +101,28 @@ h1 {
     margin-top: 5px;
 }
 
+.span_type{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+.img_type{
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background: linear-gradient(135deg, #74ebd5, #9face6);
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.img_type:hover{
+    border-color: #5a67d8;
+    box-shadow: 0 0 5px rgba(90,103,216,0.5);
+}
 
 .meta-field {
     display: flex;
@@ -110,10 +132,12 @@ h1 {
     overflow: auto;
 }
 
-.meta-field input {
+.meta-field input,
+.meta-field select {
     flex: 1;
     padding: 5px;
 }
+
 
 button {
     background: #5a67d8;
