@@ -23,8 +23,7 @@ def upload():
     if not image:
         return "No image uploaded", 400
 
-    # Sauvegarde temporaire
-    img_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+    img_path = build_img_temp_path(image.filename)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     image.save(img_path)
 
@@ -49,8 +48,9 @@ def upload():
     _, annotated_rel_path = save_temp_img(img_result, "annotated")
     _, original_rel_path = save_temp_img(img, "original")
 
-    json_dir = os.path.join("static", "json")
+    json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
+    os.remove(img_path)
 
     JSON_data = {
         "image_name": img_name,
@@ -93,7 +93,7 @@ def save_metadata():
     objects_data = handle_detected_objects(request, img_name, image_id, version_number, max_objects_detected , app.config["UPLOAD_FOLDER"])
 
     json_data = build_json(metadata, img_name, num_objects, objects_data)
-    save_json(json_data, os.path.join("static", "json"), img_name)
+    #save_json(json_data, build_json_temp_path(), img_name)
 
     return redirect(url_for("gallery"))
 
@@ -114,10 +114,10 @@ def remove_object():
     img_name = data.get('img_name')
     img_original_path = os.path.join("static", data.get('img_original_path'))
     img_annotated_path = os.path.join("static", data.get('img_annotated_path'))
-    json_path = os.path.join("static", "json", f"{img_name}.json")
-    if not os.path.exists(json_path):
+    json_file_path = build_json_temp_path(f"{img_name}.json")
+    if not os.path.exists(json_file_path):
         return {"error": "JSON file not found"}, 404
-    with open(json_path, 'r', encoding='utf-8') as json_file:
+    with open(json_file_path, 'r', encoding='utf-8') as json_file:
         result_data = json.load(json_file)
     # Supprimer l'objet correspondant
     objects = result_data.get("objects", [])
@@ -131,7 +131,7 @@ def remove_object():
         return {"error": "Object not found in JSON"}, 404
 
     # Sauvegarde du JSON mis à jour
-    save_json(result_data, os.path.join("static", "json"), img_name)
+    save_json(result_data, build_json_temp_path(), img_name)
     # Réannotation de l'image
     image = cv2.imread(img_original_path)
     for i, obj in enumerate(objects):
@@ -157,6 +157,26 @@ def remove_object():
 
     return {"success": True, "num_objects": len(objects)}, 200
 
-
+@app.route('/clear_temp', methods=['POST'])
+def clear_temp():
+    data = request.get_json()
+    json_name = data.get("img_name", "")
+    json_dir = build_json_temp_path(f"{json_name}.json")
+    img_original_path = os.path.join("static", data.get('img_original_path'))
+    img_annotated_path = os.path.join("static", data.get('img_annotated_path'))
+    if os.path.exists(json_dir):
+        with open(json_dir, 'r', encoding='utf-8') as json_file:
+            result_data = json.load(json_file)
+        for obj in result_data.get("objects", []):
+            crop_path = obj.get("obj_crop_abs_path")
+            if crop_path and os.path.exists(crop_path):
+                os.remove(crop_path)
+        os.remove(img_original_path) if os.path.exists(img_original_path) else None
+        os.remove(img_annotated_path) if os.path.exists(img_annotated_path) else None
+        os.remove(json_dir)
+        return {"success": True}, 200
+    else:
+        return {"error": "JSON file not found"}, 404
 if __name__ == '__main__':
+    cleanup_temp_dir()
     app.run(debug=True) 

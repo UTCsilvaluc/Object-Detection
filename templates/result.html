@@ -6,6 +6,18 @@
     <title>YOLO Results</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='result.css') }}">
     <script>
+        let isSubmitting = false;
+        document.querySelector('form').addEventListener('submit', function(event) {
+            if (isSubmitting) {
+                event.preventDefault();
+                return;
+            }
+            isSubmitting = true;
+        });
+        window.addEventListener("beforeunload", function () {
+            if (isSubmitting) return;
+            fetch("/clear_temp", { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img_name: "{{ name }}", img_annotated_path: "{{ annotated_image_path }}", img_original_path: "{{ original_image_path }}" }) });
+        });
         function toggleAccordion(id) {
             const content = document.getElementById(id);
             content.style.display = (content.style.display === "block") ? "none" : "block";

@@ -1,0 +1,12 @@
+.DS_Store
+.env
+*.jpg
+img/
+static/temp/
+static/uploads/
+static/json/
+utils/__pycache__/
+checkpoints/sam_vit_h.pth
+yolov8n.pt
+utils/__pycache__/models.cpython-313.pyc
+/utils/__pycache__

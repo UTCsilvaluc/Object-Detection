@@ -5,8 +5,25 @@ import cv2
 import shutil
 import json
 from utils.database import *
+
+def build_json_temp_path(extension=None):
+    """
+    :extension: yourfile.json
+    """
+    if extension is None:
+        return os.path.join("static", "temp", "json")
+    return os.path.join("static", "temp", "json", extension)
+
+def build_img_temp_path(extension=None):
+    """
+    :extension: yourfile.jpg
+    """
+    if extension is None:
+        return os.path.join("static", "temp", "img")
+    return os.path.join("static", "temp", "img", extension)
+
 def save_temp_img(img_array, obj_index):
-    temp_dir = os.path.join("static", "img", "Images", "temp")
+    temp_dir = build_img_temp_path()
     os.makedirs(temp_dir, exist_ok=True)
 
     fd, abs_path = tempfile.mkstemp(suffix=f"_obj{obj_index}.png", dir=temp_dir)
@@ -165,3 +182,13 @@ def build_json(metadata, img_name, num_objects, objects_data):
         "num_objects": num_objects,
         "objects": objects_data
     }
+
+def cleanup_temp_dir():
+    temp_dir_img = build_img_temp_path()
+    temp_json_dir = build_json_temp_path()
+    if os.path.exists(temp_dir_img):
+        shutil.rmtree(temp_dir_img)
+    if os.path.exists(temp_json_dir):
+        shutil.rmtree(temp_json_dir)
+    os.makedirs(temp_dir_img, exist_ok=True)
+    os.makedirs(temp_json_dir, exist_ok=True)
