@@ -75,7 +75,7 @@
         <div class="left-panel">
             <h1>Annotated Image</h1>
             <div class="image-box">
-                <img src="{{ url_for('static', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
+                <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ name }}</p>
@@ -117,8 +117,8 @@
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ url_for('static', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_abs_path }}">
+                                            <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
+                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
 
                                         </div>
                                         <div class="right-obj-info">

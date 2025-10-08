@@ -25,17 +25,15 @@ def build_img_temp_path(extension=None):
 def save_temp_img(img_array, obj_index):
     temp_dir = build_img_temp_path()
     os.makedirs(temp_dir, exist_ok=True)
-
     fd, abs_path = tempfile.mkstemp(suffix=f"_obj{obj_index}.png", dir=temp_dir)
     os.close(fd)
 
     cv2.imwrite(abs_path, cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
 
-    # Chemin relatif pour template
-    rel_path = os.path.relpath(abs_path, "static")
+    # On récupère juste le nom du fichier
+    filename = os.path.basename(abs_path)
+    return abs_path, filename
 
-    # Retourne les deux
-    return abs_path, rel_path
 def empty_to_none(value):
     if value is None or value.strip() == "" or value.strip().lower() == "none":
         return None
@@ -44,13 +42,15 @@ def empty_to_none(value):
 def normalize_path(path):
     if path is None:
         return None
-    # Si ce n'est pas un chemin absolu, le considérer relatif à static
     if not os.path.isabs(path):
-        return os.path.join(os.getcwd(), "static", path)
+        return os.path.join(os.getcwd(), build_img_temp_path(path))
     return path
 
 def save_image_permanently(temp_path, dest_dir, new_name):
     os.makedirs(dest_dir, exist_ok=True)
+    print("temp path :" , temp_path)
+    print("temp dest :" , dest_dir)
+    print("temp new name :" , new_name)
     dest_path = os.path.join(dest_dir, new_name)
     if not os.path.exists(temp_path):
         raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")

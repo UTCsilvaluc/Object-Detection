@@ -1,4 +1,4 @@
-from flask import Flask , render_template , request , redirect , url_for
+from flask import Flask , render_template , request , redirect , url_for , send_from_directory
 from ultralytics.utils.plotting import colors
 from utils.models import *
 from utils.process_detection import *
@@ -12,7 +12,9 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dossier static
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # crée le dossier s'il n'existe pas
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
+@app.route('/temp/img/<path:filename>')
+def temp_img(filename):
+    return send_from_directory(build_img_temp_path() , filename)
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -25,6 +27,7 @@ def upload():
 
     img_path = build_img_temp_path(image.filename)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(build_img_temp_path() , exist_ok=True)
     image.save(img_path)
 
     # Récupération des métadonnées via helper
@@ -45,8 +48,8 @@ def upload():
         result_data = process_SAM(masks, img, img_result)
         model = "SAM"
 
-    _, annotated_rel_path = save_temp_img(img_result, "annotated")
-    _, original_rel_path = save_temp_img(img, "original")
+    _ , annotated_rel_path = save_temp_img(img_result, "annotated")
+    _ , original_rel_path = save_temp_img(img, "original")
 
     json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
@@ -86,8 +89,8 @@ def save_metadata():
         img_name,
         model,
         app.config["UPLOAD_FOLDER"],
-        os.path.join("static", request.form.get("annotated_image")),
-        os.path.join("static", request.form.get("original_image"))
+        build_img_temp_path(request.form.get("annotated_image")),
+        build_img_temp_path(request.form.get("original_image"))
     )
 
     objects_data = handle_detected_objects(request, img_name, image_id, version_number, max_objects_detected , app.config["UPLOAD_FOLDER"])
@@ -112,8 +115,8 @@ def remove_object():
     data = request.get_json()
     id = int(data.get('id'))
     img_name = data.get('img_name')
-    img_original_path = os.path.join("static", data.get('img_original_path'))
-    img_annotated_path = os.path.join("static", data.get('img_annotated_path'))
+    img_original_path = build_img_temp_path(data.get('img_original_path'))
+    img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
     json_file_path = build_json_temp_path(f"{img_name}.json")
     if not os.path.exists(json_file_path):
         return {"error": "JSON file not found"}, 404
@@ -162,8 +165,8 @@ def clear_temp():
     data = request.get_json()
     json_name = data.get("img_name", "")
     json_dir = build_json_temp_path(f"{json_name}.json")
-    img_original_path = os.path.join("static", data.get('img_original_path'))
-    img_annotated_path = os.path.join("static", data.get('img_annotated_path'))
+    img_original_path = build_img_temp_path(data.get('img_original_path'))
+    img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
     if os.path.exists(json_dir):
         with open(json_dir, 'r', encoding='utf-8') as json_file:
             result_data = json.load(json_file)
