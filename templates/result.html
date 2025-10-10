@@ -28,7 +28,7 @@
                         {% for cls in class_name %}
                             <option value="{{cls}}">{{cls}}</option>
                         {% endfor %}
-                        <option value="__new__">+ Add new type</option>
+                        <option value="__new__">+ Add new type</option> 
                     </select>
                 </span>
             </div>
@@ -50,7 +50,7 @@
                     <input type="hidden" name="num_objects" value="{{ result.num_objects }}">
                     <input type="hidden" name="max_object_detected" value="{{ result.num_objects }}">
                     <input type="hidden" name="model" value="{{ model }}">
-                    <input type="hidden" name="type" id="hiddenType" value="{{ class_name[O] }}">
+                    <input type="hidden" name="type" id="hiddenType" value="{{ class_name[0] }}">
                     <div class="accordion">
                         
                         <div class="accordion-item">

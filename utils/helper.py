@@ -9,7 +9,9 @@ import regex
 
 def build_json_temp_path(extension=None):
     """
-    :extension: yourfile.json
+    Build and normalize the path for temporary JSON storage. 
+    :extension: (optional) The filename (e.g., 'data.json'). 
+    If not provided, returns the directory path.
     """
     if extension is None:
         return os.path.join("static", "temp", "json")
@@ -17,13 +19,21 @@ def build_json_temp_path(extension=None):
 
 def build_img_temp_path(extension=None):
     """
-    :extension: yourfile.jpg
+    Build and normalize the path used for temporary image storage.
+    :extension: (optional) The filename (e.g., 'data.jpg').
+    If not provided, returns the directory path.
     """
     if extension is None:
         return os.path.join("static", "temp", "img")
     return os.path.join("static", "temp", "img", extension)
 
-def save_temp_img(img_array, obj_index):
+def save_temp_img(img_array, obj_index: int):
+    """
+    Save a temporary image to use it in /upload
+    :img_array: numpy array of the image in RGB format
+    :obj_index: index of the object (for naming purposes)
+    Returns the absolute path and filename of the saved image.
+    """
     temp_dir = build_img_temp_path()
     os.makedirs(temp_dir, exist_ok=True)
     fd, abs_path = tempfile.mkstemp(suffix=f"_obj{obj_index}.png", dir=temp_dir)
@@ -36,11 +46,22 @@ def save_temp_img(img_array, obj_index):
     return abs_path, filename
 
 def empty_to_none(value):
+    """
+    Aims to convert empty strings or "None" strings to actual None values.
+    :value: input string
+    Returns None if the input is empty or "None" (case insensitive), otherwise returns the original value.
+    """
     if value is None or value.strip() == "" or value.strip().lower() == "none":
         return None
     return value
 
 def normalize_path(path):
+    """
+    Normalize a file path by converting it to an absolute path.
+    Simplify the maintenability of the code.
+    Allow to switch between Flask and HTML contexts.
+    :path: input file path (can be relative or absolute)
+    """
     if path is None:
         return None
     if not os.path.isabs(path):
@@ -48,6 +69,13 @@ def normalize_path(path):
     return path
 
 def save_image_permanently(temp_path, dest_dir, new_name):
+    """
+    move a temporary image to a permanent location if the user saves metadata.
+    :temp_path: absolute path of the temporary image
+    :dest_dir: directory where the image should be moved
+    :new_name: new name for the image file (e.g., 'image1.jpg')
+    Returns the absolute path of the moved image.
+    """
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = os.path.join(dest_dir, new_name)
     if not os.path.exists(temp_path):
@@ -57,18 +85,35 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     shutil.move(temp_path, dest_path)
     return dest_path
 
-def save_json(data, json_dir, filename):
+def save_json(data, json_dir, filename) -> None:
+    """
+    Save JSON data to a file.
+    :data: dictionary to be saved as JSON
+    :json_dir: directory where the JSON file should be saved
+    :filename: name of the JSON file (without .json extension)
+    """
     os.makedirs(json_dir, exist_ok=True)
     with open(os.path.join(json_dir, f"{filename}.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 def parse_bbox(bbox_str):
+    """
+    Parse a bounding box string representation into a list of floats.
+    :bbox_str: string representation of the bounding box (e.g., "[x1, y1, width, height]")
+    Returns a list of four floats: [x1, y1, width, height]
+    If bbox_str is None or empty, returns [None, None, None, None].
+    """
     if bbox_str:
         return [float(x) for x in ast.literal_eval(bbox_str)]
     return [None, None, None, None]
 
 
 def get_form_metadata(request):
+    """
+    Extract metadata from the form in the request.
+    :request: Flask request object containing form data
+    Returns a dictionary with metadata fields. 
+    """
     return {
         "name": empty_to_none(request.form.get("img_name")),
         "desc": empty_to_none(request.form.get("img_desc")),
@@ -77,10 +122,16 @@ def get_form_metadata(request):
         "latitude": empty_to_none(request.form.get("img_latitude")),
         "longitude": empty_to_none(request.form.get("img_longitude")),
         "source": empty_to_none(request.form.get("img_source")),
+        "type": empty_to_none(request.form.get("type"))
     }
 
 def handle_save_images(metadata , img_name , model , upload_folder , annotated_image_path , original_image_path):
     """
+    Handle saving original and annotated images permanently and inserting their records into the database.
+    :metadata: dictionary containing image metadata
+    :img_name: base name for the image files
+    :model: model name used for annotation (can be None)
+    :upload_folder: directory where images should be saved permanently
     :annotated_image_path: Temp path of annotated image, please have it in static folder
     :original_image_path: Temp path of original image please have it in static folder
     """
@@ -121,6 +172,15 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     return image_id , version_number 
 
 def handle_metadata(request , obj_index , object_id , image_id):
+    """
+    Handle metadata for a detected object from the form in the request.
+    Return metadata for a specific object.
+    Use the HTML inputs : objects[{obj_index}][metadata][{meta_index}][key] and objects[{obj_index}][metadata][{meta_index}][value]
+    :request: Flask request object containing form data
+    :obj_index: index of the object (to identify its metadata fields)
+    :object_id: ID of the object in the database
+    :image_id: ID of the image in the database
+    """
     meta_index = 0
     metadata = {}
     while True:
@@ -134,8 +194,17 @@ def handle_metadata(request , obj_index , object_id , image_id):
     return metadata
 
 def handle_detected_objects(request, img_name, image_id, version_number, max_objects , upload_folder):
+    """
+    Handle detected objects from the form in the request and insert them into the database.
+    :request: Flask request object containing form data
+    :img_name: base name for the image files
+    :image_id: ID of the image in the database
+    :version_number: version number of the annotated image
+    :max_objects: maximum number of objects to process, allow to delete false detections.
+    :upload_folder: directory where cropped object images should be saved permanently
+    Returns a dictionary with data of all processed objects.
+    """
     objects_data = {}
-
     for i in range(max_objects):
         class_id = request.form.get(f"objects[{i}][class_id]")
         if class_id is None:
@@ -186,6 +255,14 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     return objects_data
 
 def build_json(metadata, img_name, num_objects, objects_data):
+    """
+    Build a JSON structure containing image and detected objects metadata.
+    :metadata: dictionary containing image metadata
+    :img_name: base name for the image files
+    :num_objects: number of detected objects
+    :objects_data: dictionary containing data of detected objects
+    Returns a dictionary representing the JSON structure.
+    """
     return {
         "image_name": img_name,
         "description": metadata.get("desc"),
@@ -199,6 +276,10 @@ def build_json(metadata, img_name, num_objects, objects_data):
     }
 
 def cleanup_temp_dir():
+    """
+    Clean up temporary directories for images and JSON files.
+    This function removes all files in the temporary directories to free up space.
+    """
     temp_dir_img = build_img_temp_path()
     temp_json_dir = build_json_temp_path()
     if os.path.exists(temp_dir_img):
@@ -210,9 +291,24 @@ def cleanup_temp_dir():
 
 def return_regex_by_name(name: str , enum_values: str = None) -> str:
     """
-    $ : correspond jusqu'à la fin de la chaîne pour la condition.
-    p{L} : toute lettre (alphabets de toutes les langues, y compris japonais).
-    :enum_values: liste des valeurs séparées par des points-virgules (ex: val1;val2;val3)
+    Return a regex pattern based on the provided name.
+    :name: type of the regex pattern to return. Supported types are:
+        - short: short text (1-40 characters, letters, spaces, hyphens, apostrophes)
+        - text: any text (at least 1 character)
+        - int: integer (positive or negative)
+        - short_float: float with up to 2 decimal places (positive or negative)
+        - float: float with any number of decimal places (positive or negative)
+        - coordinate: coordinate format (degrees with optional decimal places)
+        - bool: boolean value (true or false)
+        - date: date in YYYY-MM-DD format
+        - date-hr-sec: date and time in YYYY-MM-DD HH:MM:SS format
+        - string: any string (including empty)
+        - enum: enumeration of specific values (provided in enum_values)
+    The regex patterns use Unicode properties for better international support:
+    ^ : Beginning of the string.
+    $ : End of the string.
+    p{L} : Any letter (alphabets from all languages, including Japanese).
+    :enum_values: List of values separated by semicolons (e.g., val1;val2;val3)
     """
     if enum_values:
         enum_pattern = "|".join([v.strip() for v in enum_values.split(";") if v.strip()])

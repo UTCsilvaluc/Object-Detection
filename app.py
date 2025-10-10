@@ -12,42 +12,6 @@ UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dos
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # crée le dossier s'il n'existe pas
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-@app.route('/add_metadata_key', methods=['POST'])
-def add_metadata_key():
-    data = request.get_json() or {}
-    key = data.get("key" , "")
-    desc = data.get("description" , "")
-    metric = data.get("metric" , "")
-    type = data.get("type" , "text")
-    required = data.get("metric_required" , False)
-    enum_values = data.get("enum_values", "") if type == "enum" else None
-    if not required:
-        metric = None
-    if not key:
-        return {"success": False, "error": "Metadata key is required."}, 400
-    if (check_if_metadata_key_exist(key=key)):
-        return {"success":False , "error": "Metadata key already exists."}, 409
-    regex = return_regex_by_name(type , enum_values=enum_values)
-    req = create_new_metadata_key(key , desc , metric=metric , type=type , enum_values=enum_values , format_pattern=regex)
-    if req:
-        return {"success":True , "regex": regex} , 201
-    return {"success":False , "error": "insertion failed."} , 500
-@app.route('/add_class' , methods=['POST'])
-def add_class():
-    data = request.get_json() or {}
-    name = data.get("name" , "")
-    desc = data.get("description" , "")
-    if not name:
-        return {"success": False, "error": "Class name is required."}, 400
-    if (check_if_class_exist(name=name)):
-        return {"success":False , "error": "Class already exists."}, 409
-    req = create_new_class(name , desc)
-    if req:
-        return {"success":True} , 201
-    return {"success":False , "error": "insertion failed."} , 500
-@app.route('/temp/img/<path:filename>')
-def temp_img(filename):
-    return send_from_directory(build_img_temp_path() , filename)
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -66,7 +30,6 @@ def upload():
     # Récupération des métadonnées via helper
     metadata = get_form_metadata(request)
     img_name = metadata.get("name", "unnamed")
-
     # Chargement image + YOLO
     img = cv2.imread(img_path)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -113,6 +76,42 @@ def upload():
         metadata_keys=metadata_keys
     )
 
+@app.route('/add_metadata_key', methods=['POST'])
+def add_metadata_key():
+    data = request.get_json() or {}
+    key = data.get("key" , "")
+    desc = data.get("description" , "")
+    metric = data.get("metric" , "")
+    type = data.get("type" , "text")
+    required = data.get("metric_required" , False)
+    enum_values = data.get("enum_values", "") if type == "enum" else None
+    if not required:
+        metric = None
+    if not key:
+        return {"success": False, "error": "Metadata key is required."}, 400
+    if (check_if_metadata_key_exist(key=key)):
+        return {"success":False , "error": "Metadata key already exists."}, 409
+    regex = return_regex_by_name(type , enum_values=enum_values)
+    req = create_new_metadata_key(key , desc , metric=metric , type=type , enum_values=enum_values , format_pattern=regex)
+    if req:
+        return {"success":True , "regex": regex} , 201
+    return {"success":False , "error": "insertion failed."} , 500
+@app.route('/add_class' , methods=['POST'])
+def add_class():
+    data = request.get_json() or {}
+    name = data.get("name" , "")
+    desc = data.get("description" , "")
+    if not name:
+        return {"success": False, "error": "Class name is required."}, 400
+    if (check_if_class_exist(name=name)):
+        return {"success":False , "error": "Class already exists."}, 409
+    req = create_new_class(name , desc)
+    if req:
+        return {"success":True} , 201
+    return {"success":False , "error": "insertion failed."} , 500
+@app.route('/temp/img/<path:filename>')
+def temp_img(filename):
+    return send_from_directory(build_img_temp_path() , filename)
 @app.route('/save_metadata', methods=['POST'])
 def save_metadata():
     metadata = get_form_metadata(request)
@@ -129,7 +128,6 @@ def save_metadata():
         build_img_temp_path(request.form.get("annotated_image")),
         build_img_temp_path(request.form.get("original_image"))
     )
-
     objects_data = handle_detected_objects(request, img_name, image_id, version_number, max_objects_detected , app.config["UPLOAD_FOLDER"])
 
     json_data = build_json(metadata, img_name, num_objects, objects_data)
@@ -146,6 +144,19 @@ def gallery():
         images = []
 
     return render_template('gallery.html', images=images)
+@app.route('/view_image/<int:image_id>')
+def view_image(image_id):
+    image_data = get_image_by_id(image_id)
+    if not image_data:
+        return "Image not found", 404
+    versionedImages = get_versions_by_image_id(image_id)
+    objects = get_objects_by_image_version(image_id , versionedImages[0]['version_number']) if versionedImages else []
+    idx = 0
+    for obj in objects:
+        obj_metadata = get_metadata_by_object_id(image_id=image_id, object_id=obj['object_id'])
+        objects[idx]['metadatas'] = obj_metadata
+        idx += 1
+    return render_template('viewer.html', image=image_data, versions=versionedImages, objects=objects, object_number=len(objects))
 
 @app.route('/remove_object', methods=['POST'])
 def remove_object():

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Viewer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='viewer.css') }}">
+</head>
+<body>
+  <div class="container">
+        <div class="left-panel">
+      <h1>Image Information</h1>
+      <div class="info-box">
+        <div class="info-item">
+          <span class="info-label">Title:</span>
+          <span class="info-value">{{ image.title }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Location:</span>
+          <span class="info-value">{{ image.location_name }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Date Captured:</span>
+          <span class="info-value">{{ image.capture_date }}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">Class:</span>
+          <span class="tag">{{ image.type }}</span>
+        </div>
+      </div>
+
+      <div class="meta-section">
+        <h2>Metadata</h2>
+        <div class="meta-grid">
+          <div class="meta-card">
+            <p><strong>Object Detected:</strong> {{ object_number }}</p>
+            <p><strong>Height:</strong> 1080 px</p>
+          </div>
+          <div class="meta-card">
+            <p><strong>Format:</strong> JPEG</p>
+            <p><strong>Source:</strong> Digital Archive</p>
+          </div>
+          <div class="meta-card">
+            <p><strong>Latitude:</strong> {{ image.latitude }}</p>
+            <p><strong>Longitude:</strong> {{ image.longitude }}</p>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="objects-section">
+        <h2>Detected Objects</h2>
+        <div class="accordion">
+            {% for object in objects %}
+          <div class="accordion-item">
+            <div class="accordion-header">{{ object.class }}</div>
+            <div class="accordion-content">
+              <div class="obj-wrapper">
+                <div class="left-obj-info">
+                  <img src="{{ url_for('static', filename='img/Images/' + object.cropped_file_path) }}" alt="Object Preview">
+                  <p><strong>Class:</strong> {{ object.class }}</p>
+                  <p><strong>Confidence:</strong> {{ object.confidence }}</p>
+                  <p><strong>Width:</strong> {{ object.width }}</p>
+                  <p><strong>Height:</strong> {{ object.height }}</p>
+                </div>
+                <div class="obj-meta">
+                    <h1>Metadatas of the object : </h1>
+                    {% for elem in object.metadatas %}
+                        <p><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
+                    {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+            {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ==== RIGHT PANEL : IMAGE DISPLAY ==== -->
+    <div class="right-panel">
+      <div class="image-box">
+        <img src="{{ url_for('static', filename='img/Images/' + image.file_path) }}" alt="Main Image">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Simple accordion toggle
+    document.querySelectorAll('.accordion-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const content = header.nextElementSibling;
+        content.style.display = content.style.display === 'block' ? 'none' : 'block';
+      });
+    });
+  </script>
+</body>
+</html>

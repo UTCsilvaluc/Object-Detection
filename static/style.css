@@ -46,6 +46,7 @@ label {
 
 /* Champs de saisie */
 input[type="text"],
+input[type="number"],
 input[type="datetime-local"],
 input[type="file"] {
     padding: 10px;

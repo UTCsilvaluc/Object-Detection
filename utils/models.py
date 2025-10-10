@@ -44,6 +44,12 @@ for d in [yolo_dir, faster_dir, sam_dir]:
 yolo_model = YOLO('yolov8n.pt')  
 
 def detect_yolo(image_path, save=True):
+    """
+    Detect objects in an image using the YOLO model.
+    :image_path: Path to the input image.
+    :save: Whether to save the annotated image.
+    :returns: Tuple (results, original_image, annotated_image, save_path)
+    """
     img = cv2.imread(image_path)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -85,6 +91,14 @@ COCO_INSTANCE_CATEGORY_NAMES = [
 ]
 
 def detect_fasterrcnn(image_path, threshold=0.3, save=True):
+    """
+    Not used in the main app, but kept for reference.
+    Detect objects in an image using the Faster R-CNN model.
+    :image_path: Path to the input image.
+    :threshold: Score threshold for displaying boxes.
+    :save: Whether to save the annotated image.
+    :returns: The raw output from the model.
+    """
     img = cv2.imread(image_path)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_tensor = F.to_tensor(img_rgb).to(device)
@@ -140,12 +154,13 @@ mask_generator = SamAutomaticMaskGenerator(
 
 def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
     """
-    Filtre, dédoublonne et fusionne les segments partiels.
-    - min_area : aire minimale en pixels
-    - iou_thresh : seuil d'inclusion pour supprimer les doublons
-    - merge_thresh : seuil d'IoU pour fusionner deux masques partiels
+    Filter, deduplicate, and merge partial segments. 
+    Allows to narrow down to distinct objects.
+    - min_area : minimum area in pixels
+    - iou_thresh : inclusion threshold to remove duplicates
+    - merge_thresh : IoU threshold to merge two partial masks
     """
-    # Étape 1 : filtrer par aire
+    # Step 1: Filter by area
     filtered = []
     for mask in masks:
         seg = mask["segmentation"].astype(np.uint8)
@@ -153,7 +168,7 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
         if area >= min_area:
             filtered.append(seg)
 
-    # Étape 2 : supprimer les doublons (inclusions)
+    # Step 2: Remove duplicates (inclusions)
     unique_masks = []
     for i, seg1 in enumerate(filtered):
         keep = True
@@ -168,7 +183,7 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
         if keep:
             unique_masks.append(seg1)
 
-    # Étape 3 : fusionner les masques qui se chevauchent trop
+    # Step 3: Merge overlapping masks
     merged = []
     used = [False] * len(unique_masks)
 
@@ -190,17 +205,26 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
         merged.append(seg_i)
         used[i] = True
 
-    # Reconstruire dans le format SAM
+    # Build final list of masks
     final_masks = [{"segmentation": m.astype(np.uint8)} for m in merged]
     return final_masks
 
 
 def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
+    """
+    Segment objects in an image using the SAM model.
+    :image_path: Path to the input image.
+    :save: Whether to save the annotated images.
+    :min_area: Minimum area for filtering segments.
+    :iou_thresh: IoU threshold for deduplication.
+    :merge_thresh: IoU threshold for merging segments.
+    :returns: Tuple (masks, original_image, annotated_image)
+    """
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     masks = mask_generator.generate(image_rgb)
 
-    # Filtrer, dédoublonner et fusionner
+    # Filter, deduplicate, and merge segments
     masks = filter_and_merge_segments(masks, min_area=min_area, 
                                       iou_thresh=iou_thresh, 
                                       merge_thresh=merge_thresh)
@@ -210,7 +234,7 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
         save_dir = os.path.join(sam_dir, base_name)
         os.makedirs(save_dir, exist_ok=True)
 
-        # 1) Image globale avec contours
+        # Save the picture with all masks overlaid
         plt.figure(figsize=(10, 10))
         plt.imshow(image_rgb)
         for mask in masks:
@@ -225,7 +249,7 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
         plt.close()
         print(f"Global SAM result saved to {global_path}")
 
-        # 2) Sauvegarder chaque objet isolé
+        # Save each isolated object
         for idx, mask in enumerate(masks):
             seg = mask["segmentation"].astype(np.uint8)
             obj_img = cv2.bitwise_and(image_rgb, image_rgb, mask=seg)
@@ -241,25 +265,7 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
             obj_path = os.path.join(save_dir, f"{base_name}_obj_{idx+1}.png")
             cv2.imwrite(obj_path, cv2.cvtColor(obj_crop, cv2.COLOR_RGB2BGR))
             print(f"Saved merged object {idx+1} to {obj_path}")
-    #Convert img_pil to numpy array
+    # Convert img_pil to numpy array
     img_pil = np.array(img_pil)
 
     return (masks , image_rgb , img_pil)
-
-
-"""
-# =====================
-# Exemple : parcours toutes les images
-# =====================
-image_folder = "img/Images"
-images = sorted([f for f in os.listdir(image_folder) if f.lower().endswith(('.jpg','.jpeg','.png'))])
-
-for img_file in images:
-    img_path = os.path.join(image_folder, img_file)
-    #print(f"\nProcessing {img_file} with YOLO...")
-    #detect_yolo(img_path)
-    #print(f"Processing {img_file} with Faster R-CNN...")
-    #detect_fasterrcnn(img_path)
-    print(f"Processing {img_file} with SAM...")
-    segment_sam(img_path)
-"""
