@@ -25,7 +25,7 @@ def close_db_connection(conn):
     except Exception as e:
         print(f"Error closing database connection: {e}")    
 
-def insert_image(file_path, title, description=None, capture_date=None, location_name=None, latitude=None, longitude=None, source_type=None, type=None):
+def insert_image(file_path, title, description=None, capture_date=None, location_name=None, latitude:float=None, longitude:float=None, source_type=None, type=None):
     conn = get_db_connection()
     if not conn:
         return False
@@ -97,38 +97,40 @@ def create_object(name: str , description: str = None , type: str = None , embed
         return False
     finally:
         close_db_connection(conn)
-"""
-CREATE TABLE ObjectInstance (
-    object_id INT NOT NULL,
-    version_number INT NOT NULL,
-    image_id INT NOT NULL,
-    coords_x REAL,
-    coords_y REAL,
-    width REAL,
-    height REAL,
-    confidence_score NUMERIC(4, 3),
-    cropped_file_path TEXT,
-    FOREIGN KEY (object_id) REFERENCES Object(object_id) ON DELETE CASCADE,
-    FOREIGN KEY (version_number, image_id) REFERENCES VersionedImage(version_number, image_id) ON DELETE CASCADE,
-    PRIMARY KEY (object_id, image_id, version_number)
-);
-"""
-def create_instance_object(object_id: int , version_number: int , image_id: int , coords_x: float = None , coords_y: float = None , width: float = None , height: float = None , confidence_score: float = None , cropped_file_path: str = None):
+
+def create_instance_object(object_id: int , version_number: int , image_id: int , coords_x: float = None , coords_y: float = None , width: float = None , height: float = None , confidence_score: float = None , cropped_file_path: str = None, instance_value: str = None):
     conn = get_db_connection()
     if conn is None:
         return False
     try:
         cur = conn.cursor()
         insert_query = """
-        INSERT INTO ObjectInstance (object_id, version_number, image_id, coords_x, coords_y, width, height, confidence_score, cropped_file_path)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO ObjectInstance (object_id, version_number, image_id, coords_x, coords_y, width, height, confidence_score, cropped_file_path , class)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s , %s);
         """
-        cur.execute(insert_query, (object_id, version_number, image_id, coords_x, coords_y, width, height, confidence_score, cropped_file_path))
+        cur.execute(insert_query, (object_id, version_number, image_id, coords_x, coords_y, width, height, confidence_score, cropped_file_path, instance_value))
         conn.commit()
         cur.close()
         return True
     except Exception as e:
         print(f"Error inserting object instance: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def update_class_instance_object(object_id: int, version_number: int, image_id: int, new_class: str):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        query = "UPDATE ObjectInstance SET class = %s WHERE object_id = %s AND version_number = %s AND image_id = %s;"
+        cur.execute(query, (new_class, object_id, version_number, image_id))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error updating class in ObjectInstance: {e}")
         return False
     finally:
         close_db_connection(conn)
@@ -161,7 +163,7 @@ def get_all_images():
     try:
         cur = conn.cursor()
         select_query = """
-        SELECT image_id, title, description, file_path FROM Image ORDER BY image_id DESC;
+        SELECT * FROM Image ORDER BY image_id DESC;
         """
         cur.execute(select_query)
         rows = cur.fetchall()
@@ -169,10 +171,17 @@ def get_all_images():
         for row in rows:
             images.append({
                 "image_id": row[0],
-                "title": row[1],
-                "description": row[2],
-                "file_path": row[3]
+                "file_path": row[1],
+                "title": row[2],
+                "description": row[3],
+                "capture_date": row[4],
+                "location_name": row[5],
+                "latitude": row[6],
+                "longitude": row[7],
+                "source_type": row[8],
+                "type": row[9],
             })
+        print(images)
         cur.close()
         return images
     except Exception as e:
@@ -226,6 +235,70 @@ def create_new_class(name, desc):
         return True
     except Exception as e:
         print(f"Error creating a new class : {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def get_all_metadata_keys():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = """
+        SELECT key, description, type, format_pattern, enum_values, metric FROM MetadataDefinition ORDER BY key;
+        """
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        keys = []
+        for row in rows:
+            keys.append({
+                "key": row[0],
+                "description": row[1],
+                "type": row[2],
+                "format_pattern": row[3],
+                "enum_values": row[4],
+                "metric": row[5]
+            })
+        cur.close()
+        return keys
+    except Exception as e:
+        print(f"Error fetching metadata keys: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def check_if_metadata_key_exist(key):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM MetadataDefinition WHERE key = %s;", (key,))
+        exists = cur.fetchone() is not None
+        return exists
+    except Exception as e:
+        print(f"Error checking metadata key existence: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def create_new_metadata_key(key, desc, metric=None, type=None, enum_values=None , format_pattern=None):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO MetadataDefinition (key, description, type, format_pattern, enum_values, metric)
+        VALUES (%s, %s, %s, %s, %s, %s);
+        """
+        cur.execute(insert_query, (key, desc, type, format_pattern, enum_values, metric))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error creating a new metadata key: {e}")
         return False
     finally:
         close_db_connection(conn)

@@ -66,7 +66,6 @@
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
                                             <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
                                             <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
-
                                         </div>
                                         <div class="right-obj-info">
                                             <input type="hidden" name="objects[{{ loop.index0 }}][class_id]" value="{{ obj.class_id }}">
@@ -74,8 +73,8 @@
                                             <input type="hidden" name="objects[{{ loop.index0 }}][bbox]" value="{{ obj.bbox }}">
                                             <div class="metadata-container" id="meta-{{ loop.index0 }}">
                                                 <div class="meta-field">
-                                                    <input type="text" name="objects[{{ loop.index0 }}][metadata][0][key]" value="type" readonly>
-                                                    <select name="objects[{{ loop.index0 }}][metadata][0][value]" class="object_type" onchange="handleNewType(this)" required>
+                                                    <input type="text" name="objects[{{ loop.index0 }}][type]" value="type" readonly>
+                                                    <select name="objects[{{ loop.index0 }}][value]" class="object_type" onchange="handleNewType(this)" required>
                                                         {% for cls in class_name %}
                                                             <option value="{{cls}}">{{cls}}</option>
                                                         {% endfor %}
@@ -92,6 +91,33 @@
                         </div>
                         <div class="submit-box">
                             <a href="{{ url_for('index') }}" class="back-button">Upload Another Image</a>
+                            <button type="button" class="back-button" onclick="createNewMetadata(this)">+ Create a new metadata key</button>
+                            <div class="hid-maker">
+                                <div class="maker_metadata">
+                                    <input type="text" name="new_metadata_key" placeholder="Name of the key you want to create">
+                                    <input type="text" name="new_metadata_desc" placeholder="Description for this key (suggested)">
+                                    <input type="text" name="new_metadata_metric" id="new_metadata_metric" placeholder="Enter metric (e.g. cm or inches)" hidden>
+                                    <select name="new_metadata_type" onchange="handleNewMetadataType(this)" required>
+                                        <option value="short">Short text — (max 40 chars, letters any language)</option>
+                                        <option value="text">Free text — (multi-language, unlimited)</option>
+                                        <option value="int">Integer — (numeric)</option>
+                                        <option value="float">Float — (e.g. 1.800000 or 180)</option>
+                                        <option value="short_float">Short Float — (e.g. 1.8 or 1,80)</option>
+                                        <option value="coordinate">Coordinate — (e.g. 49.8282772)</option>
+                                        <option value="bool">Boolean — (true/false)</option>
+                                        <option value="date">Date — (YYYY-MM-DD)</option>
+                                        <option value="date-hr-sec">Date — (YYYY-MM-DD HH:MM:SS)</option>
+                                        <option value="string">Generic string</option>
+                                        <option value="enum">Enum — (list of possible values, separate with ; : e.g male;female;other)</option>
+                                    </select>
+                                    <span class="metric_required_box"> 
+                                        <label for="new_metadata_metric_required">Is a metric required?</label>
+                                        <input type="checkbox" name="metric_required" id="new_metadata_metric_required" onchange="document.getElementById('new_metadata_metric').hidden = !this.checked ; document.getElementById('new_metadata_metric').required = this.checked;">
+                                    </span>
+                                    <input type="text" name="enum_values" id="enum_values" placeholder="Enter enum values separated by ;" style="display:none;">
+                                    <button type="button" value="Create this new metadata" onclick="createNewMetadataKey(this)">Create this new metadata key</button>
+                                </div>
+                            </div>
                             <button type="submit">Register all metadata</button>
                         </div>
                 </form>
@@ -100,6 +126,48 @@
 </body>
 <script>
         let isSubmitting = false;
+        let metadataUsed = [[]] // pour suivre les métadonnées utilisées pour chaque objet par index
+        let clientMetadataKeys = {{ metadata_keys | tojson }};
+        function returnRegexByName(name, enum_values = null) {
+            if (enum_values !== "null" && enum_values.trim() !== "") {
+                const enumPattern = enum_values
+                    .split(";")
+                    .map(v => v.trim())
+                    .filter(v => v.length > 0)
+                    .join("|");
+                return `^(?:${enumPattern})$`;
+            }
+
+            const patterns = {
+                "short": "^.{1,40}$",                         
+                "text": "^.{1,}$",                           
+                "int": "^-?\\d+$",                           
+                "float": "^-?\\d+(?:[.,]\\d+)?$",            
+                "short_float": "^-?\\d+(?:[.,]\\d{1,2})?$",   
+                "coordinate": "^-?\\d{1,3}(?:[.,]\\d+)?$",    
+                "bool": "^(true|false)$",                     
+                "date": "^\\d{4}-\\d{2}-\\d{2}$",            
+                "date-hr-sec": "^\\d{4}-\\d{2}-\\d{2}\\T\\d{2}:\\d{2}$",
+                "string": "^.*$"                              
+            };
+            return patterns[name] || patterns["string"];
+        }
+        function returnInputTypeByName(name) {
+            const types = {
+                "short": "text",
+                "text": "text",
+                "int": "number",
+                "float": "text",
+                "short_float": "text",
+                "coordinate": "text",
+                "bool": "text",
+                "date": "date",
+                "date-hr-sec": "datetime-local",
+                "string": "text"
+            };
+            return types[name] || types["text"];
+        };
+
         document.querySelector('form').addEventListener('submit', function(event) {
             if (isSubmitting) {
                 event.preventDefault();
@@ -116,15 +184,49 @@
             content.style.display = (content.style.display === "block") ? "none" : "block";
         }
         function addMetadataField(objIndex) {
+            objIndex = parseInt(objIndex);
             const container = document.getElementById(`meta-${objIndex}`);
-            const metaIndex = container.children.length; // numéro de la métadonnée
+            const metaIndex = container.children.length - 1; // numéro de la métadonnée
             let div = document.createElement('div');
             div.className = 'meta-field';
+            mapClientMetadataKeys = []
+            clientMetadataKeys.forEach(meta => {
+                if (!metadataUsed[objIndex]) metadataUsed[objIndex] = [];
+                if (!metadataUsed[objIndex].includes(meta.key) && meta.key !== "type") {
+                    mapClientMetadataKeys.push(meta);
+                }
+            });
+            if (mapClientMetadataKeys.length === 0) {
+                alert("No more metadata keys available to add. Please create a new metadata key.");
+                return;
+            }
             div.innerHTML = `
-                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][key]" placeholder="Clé">
-                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][value]" placeholder="Valeur">
+                <select name="objects[${objIndex}][metadata][${metaIndex}][key]" class="object_type" onchange="changeKey(this , 'objects[${objIndex}][metadata][${metaIndex}][value]')" required>
+                    ${mapClientMetadataKeys.map(meta => `
+                        <option value="${meta.key}"
+                        data-desc="${meta.description}"
+                        data-type="${meta.type}"
+                        data-metric="${meta.metric}"
+                        data-regex="${meta.format_pattern}"
+                        data-enum="${meta.enum_values}"
+                        >${meta.key}</option>
+                    `).join('')}
+                </select>
+                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][value]" placeholder="Valeur" onchange="changeValue(this)" required>
+                <img src="{{ url_for('static', filename='img/svg/cross.png') }}" alt="" class="remove-icon" onclick="removeMetadataField(this)" data-index="${metaIndex}">
             `;
             container.appendChild(div);
+            const elemKey = document.querySelector(`select[name="objects[${objIndex}][metadata][${metaIndex}][key]"]`);
+            const desc = elemKey.options[0].getAttribute("data-desc");
+            const metric = elemKey.options[0].getAttribute("data-metric");
+            const regex = returnRegexByName( elemKey.options[0].getAttribute("data-type") , elemKey.options[0].getAttribute("data-enum"));
+            let inputValue = document.querySelector(`input[name="objects[${objIndex}][metadata][${metaIndex}][value]"]`);
+            inputValue.placeholder = desc ? desc : "Value";
+            inputValue.pattern = regex ? regex : "";
+            inputValue.type = returnInputTypeByName( elemKey.options[0].getAttribute("data-type") );
+            title = "Description: " + (desc ? desc : "Value") + (metric != "null" ? " | Metric: " + metric : "") + (regex ? " | Format: " + regex : "");
+            inputValue.title = title;
+            metadataUsed[objIndex].push(elemKey.value);
         }
         function removeObject(objID , num_objects) {
             if (!confirm('Are you sure you want to delete this object?')) return;
@@ -204,5 +306,150 @@
             const hidden = document.getElementById("hiddenType");
             hidden.value = selecteur.value;
         }
+        function createNewMetadata(button){
+            document.querySelector('.hid-maker').classList.toggle('visible');
+            if (button.innerHTML.includes('-')) {
+                button.innerHTML = button.innerHTML.replace('-', '+');
+                document.querySelector('input[name="new_metadata_key"]').required = true;
+                document.querySelector('input[name="new_metadata_desc"]').required = true;
+            } else {
+                button.innerHTML = button.innerHTML.replace('+', '-');
+                document.querySelector('input[name="new_metadata_key"]').value = "";
+                document.querySelector('input[name="new_metadata_key"]').required = false;
+                document.querySelector('input[name="new_metadata_desc"]').value = "";
+                document.querySelector('input[name="new_metadata_desc"]').required = false;
+                document.querySelector('input[name="new_metadata_metric"]').value = "";
+                document.querySelector('input[name="new_metadata_metric"]').hidden = true;
+                document.querySelector('input[name="new_metadata_metric"]').required = false;
+                document.querySelector('select[name="new_metadata_type"]').value = "short";
+                document.querySelector('input[name="metric_required"]').checked = false;
+                document.getElementById("enum_values").style.display = "none";
+                document.querySelector('input[name="enum_values"]').value = "";
+            }
+        }
+        function handleNewMetadataType(selectedItem){
+            if (selectedItem.value === "enum"){
+                document.getElementById("enum_values").style.display = "block";
+            } else {
+                document.getElementById("enum_values").style.display = "none";
+            }
+        }
+        function createNewMetadataKey(button){
+            const makerDiv = button.closest('.maker_metadata');
+            const key = makerDiv.querySelector('input[name="new_metadata_key"]').value.trim();
+            const desc = makerDiv.querySelector('input[name="new_metadata_desc"]').value.trim();
+            const metric = makerDiv.querySelector('input[name="new_metadata_metric"]').value.trim();
+            const type = makerDiv.querySelector('select[name="new_metadata_type"]').value;
+            const metric_required = makerDiv.querySelector('input[name="metric_required"]').checked;
+            const enum_values = (type === "enum") ? makerDiv.querySelector('input[name="enum_values"]').value.trim() : "";
+            if (!key || !desc || (metric_required && !metric) || (type === "enum" && !enum_values)) {
+                alert("Please fill in all required fields.");
+                return;
+            }
+            fetch("/add_metadata_key", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    key: key,
+                    description: desc,
+                    metric: metric,
+                    type: type,
+                    metric_required: metric_required,
+                    enum_values: enum_values
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Metadata key created successfully.");
+                    document.querySelectorAll(".meta-field select[name$='[key]']").forEach(input => {
+                        console.log(input);
+                        const newOption = document.createElement("option");
+                        newOption.value = key;
+                        newOption.textContent = key;
+                        newOption.setAttribute("data-desc", desc);
+                        newOption.setAttribute("data-type", type);
+                        newOption.setAttribute("data-metric", metric);
+                        newOption.setAttribute("data-enum", enum_values);
+                        input.insertBefore(newOption, input.querySelector('option[value="type"]'));
+                    });
+                    document.getElementById("enum_values").style.display = "none";
+                    document.querySelector('.hid-maker').classList.remove('visible');
+                    document.querySelector('button[onclick="createNewMetadata(this)"]').innerHTML = document.querySelector('button[onclick="createNewMetadata(this)"]').innerHTML.replace('-', '+');
+                    clientMetadataKeys.push({
+                        key: key,
+                        "description": desc,
+                        "type": type,
+                        "metric": metric,
+                        "format_pattern": data.regex, // ou génère le regex côté client si nécessaire
+                        "enum_values": enum_values
+                    });
+                    makerDiv.querySelector('input[name="new_metadata_key"]').value = "";
+                    makerDiv.querySelector('input[name="new_metadata_desc"]').value = "";
+                    makerDiv.querySelector('input[name="new_metadata_metric"]').value = "";
+                    makerDiv.querySelector('select[name="new_metadata_type"]').value = "short";
+                    makerDiv.querySelector('input[name="metric_required"]').checked = false;
+                    makerDiv.querySelector('input[name="new_metadata_metric"]').hidden = true;
+                    makerDiv.querySelector('input[name="new_metadata_metric"]').required = false;
+                    makerDiv.querySelector('input[name="enum_values"]').value = "";
+                } else {
+                    alert("Failed to create metadata key: " + data.error);
+                }
+            });
+        }
+        function changeKey(selectElem , inputElem){
+            const selectedOption = selectElem.options[selectElem.selectedIndex];
+            const type = selectedOption.getAttribute("data-type");
+            const desc = selectedOption.getAttribute("data-desc");
+            const metric = selectedOption.getAttribute("data-metric");
+            const enumValues = selectedOption.getAttribute("data-enum");
+            const regex = returnRegexByName(type, enumValues);
+            let inputValue = document.querySelector(`input[name="${inputElem}"]`);
+            inputValue.placeholder = desc ? desc : "Value";
+            inputValue.value = "";
+            inputValue.pattern = regex ? regex : "";  
+            inputValue.type = returnInputTypeByName(type);
+            title = "Description: " + (desc ? desc : "Value") + (metric != "null" ? " | Metric: " + metric : "") + (regex ? " | Format: " + regex : "");
+            inputValue.title = title;
+            if (type === "bool") {
+                inputValue.value = "false";
+            }
+        }
+        function changeValue(inputElem) {
+            const pattern = inputElem.getAttribute("pattern");
+            if (pattern) {
+                const regex = new RegExp(pattern);
+                if (!regex.test(inputElem.value)) {
+                    alert("The value you entered does not match the required format. Please hover over the input field to see the expected format.");
+                    inputElem.setCustomValidity("Invalid value format");
+                } else {
+                    inputElem.setCustomValidity("");
+                }
+            }
+        }
+        function removeMetadataField(img){
+            if (!confirm('Are you sure you want to delete this metadata field?')) return;
+            const parent = img.closest('.meta-field');
+            const container = parent.parentNode;
+            const id = container.id.split('-')[1];
+            let startIndex = parseInt(img.getAttribute("data-index"));
+            let index = metadataUsed[id].indexOf( parent.querySelector('select').value );
+            if (index > -1) { 
+                metadataUsed[id].splice(index, 1); 
+            }
+            parent.remove();
+            for (let i = startIndex + 1; i < container.children.length; i++) {
+                let child = container.children[i];
+                let selectElem = child.querySelector('select');
+                let inputElem = child.querySelector('input');
+                let trashIcon = child.querySelector('.remove-icon');
+                trashIcon.setAttribute("data-index", i - 1);
+                selectElem.name = `objects[${id}][metadata][${i-1}][key]`;
+                selectElem.setAttribute("onchange", `changeKey(this , 'objects[${id}][metadata][${i-1}][value]')`);
+                inputElem.name = `objects[${id}][metadata][${i-1}][value]`;
+                
+            }
+        }
+
     </script>
 </html>

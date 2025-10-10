@@ -11,6 +11,27 @@ app = Flask(__name__)
 UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dossier static
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # crée le dossier s'il n'existe pas
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+@app.route('/add_metadata_key', methods=['POST'])
+def add_metadata_key():
+    data = request.get_json() or {}
+    key = data.get("key" , "")
+    desc = data.get("description" , "")
+    metric = data.get("metric" , "")
+    type = data.get("type" , "text")
+    required = data.get("metric_required" , False)
+    enum_values = data.get("enum_values", "") if type == "enum" else None
+    if not required:
+        metric = None
+    if not key:
+        return {"success": False, "error": "Metadata key is required."}, 400
+    if (check_if_metadata_key_exist(key=key)):
+        return {"success":False , "error": "Metadata key already exists."}, 409
+    regex = return_regex_by_name(type , enum_values=enum_values)
+    req = create_new_metadata_key(key , desc , metric=metric , type=type , enum_values=enum_values , format_pattern=regex)
+    if req:
+        return {"success":True , "regex": regex} , 201
+    return {"success":False , "error": "insertion failed."} , 500
 @app.route('/add_class' , methods=['POST'])
 def add_class():
     data = request.get_json() or {}
@@ -80,7 +101,7 @@ def upload():
     }
     save_json(JSON_data, json_dir, img_name)
     class_name = get_all_classes()
-    print(class_name)
+    metadata_keys = get_all_metadata_keys()
     return render_template(
         "result.html",
         result=result_data,
@@ -88,7 +109,8 @@ def upload():
         model=model,
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,
-        class_name = class_name
+        class_name=class_name,
+        metadata_keys=metadata_keys
     )
 
 @app.route('/save_metadata', methods=['POST'])

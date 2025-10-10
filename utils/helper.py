@@ -5,6 +5,7 @@ import cv2
 import shutil
 import json
 from utils.database import *
+import regex
 
 def build_json_temp_path(extension=None):
     """
@@ -87,14 +88,28 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
         original_image_path, upload_folder, f"{img_name}_original.jpg"
     )
     file_name_in_db = f"{img_name}_original.jpg"
+    latitude = metadata.get("latitude")
+    longitude = metadata.get("longitude")
+    if latitude is not None:
+        try:
+            latitude = latitude.replace(',', '.')
+            latitude = float(latitude)
+        except ValueError:
+            latitude = None
+    if longitude is not None:
+        try:
+            longitude = longitude.replace(',', '.')
+            longitude = float(longitude)
+        except ValueError:
+            longitude = None
     image_id = insert_image(
         file_name_in_db,
         img_name,
         metadata.get("desc"),
         metadata.get("date"),
         metadata.get("location"),
-        metadata.get("latitude"),
-        metadata.get("longitude"),
+        latitude,
+        longitude,
         metadata.get("source"),
         metadata.get("type")
     )
@@ -130,6 +145,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         bbox = request.form.get(f"objects[{i}][bbox]")
         coords_x, coords_y, width, height = parse_bbox(bbox)
         score = float(score) if score is not None else None
+        instance_value = request.form.get(f"objects[{i}][value]")
 
         # Sauvegarde du crop
         crop_path = normalize_path(request.form.get(f"objects[{i}][crop_path]"))
@@ -153,6 +169,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
             height=height,
             confidence_score=score,
             cropped_file_path=object_file_name,
+            instance_value=instance_value
         )
 
         # Métadonnées spécifiques à l'objet
@@ -190,3 +207,26 @@ def cleanup_temp_dir():
         shutil.rmtree(temp_json_dir)
     os.makedirs(temp_dir_img, exist_ok=True)
     os.makedirs(temp_json_dir, exist_ok=True)
+
+def return_regex_by_name(name: str , enum_values: str = None) -> str:
+    """
+    $ : correspond jusqu'à la fin de la chaîne pour la condition.
+    p{L} : toute lettre (alphabets de toutes les langues, y compris japonais).
+    :enum_values: liste des valeurs séparées par des points-virgules (ex: val1;val2;val3)
+    """
+    if enum_values:
+        enum_pattern = "|".join([v.strip() for v in enum_values.split(";") if v.strip()])
+        return f'^(?:{enum_pattern})$'
+    patterns = {
+        "short": r'^[\p{L}\p{M}\'’\-\s]{1,40}$',  
+        "text": r'^.{1,}$',                         
+        "int": r'^-?\d+$',  
+        "short_float": r'^-?\d+([.,]\d{1,2})?$',                           
+        "float": r'^-?\d+([.,]\d+)?$',                    
+        "coordinate": r'^-?\d{1,3}([.,]\d+)?$',        
+        "bool": r'^(true|false)$',                      
+        "date": r'^\d{4}-\d{2}-\d{2}$',                
+        "date-hr-sec": r'^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$',
+        "string": r'^.*$',                                          
+    }
+    return patterns.get(name, r'^.*$')

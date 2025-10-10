@@ -9,11 +9,13 @@
 <body>
     <div class="gallery-container">
         {% for image in images %}
-        <div class="gallery-item">
-            <img src="{{ url_for('static', filename='img/Images/' + image.file_path) }}" alt="{{ image.name }}">
+        <div class="gallery-item" onclick="window.location.href='{{ url_for('view_image', image_id=image.id) }}'">
+            <img src="{{ url_for('static', filename='img/Images/' + image.file_path) }}" alt="{{ image.title }}">
             <div class="info">
-                <h3>{{ image.name }}</h3>
-                <p>{{ image.description }}</p>
+                <h3>Title : {{ image.title }}</h3>
+                <p>Description : {{ image.description }}</p>
+                <p>Capture Date : {{ image.capture_date }}</p>
+                <p>Location Name : {{ image.location_name }}</p>
             </div>
         </div>
         {% endfor %}

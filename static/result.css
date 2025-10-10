@@ -70,7 +70,14 @@ h1 {
     cursor: pointer;
     filter: invert(1);
 }
-
+.remove-icon {
+    max-width: 100%;
+    max-height: 100%;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    float: right;
+}
 .accordion-content {
     display: none;
     padding: 10px;
@@ -130,6 +137,7 @@ h1 {
     margin-bottom: 8px;
     max-width: 100%;
     overflow: auto;
+    align-items: center;
 }
 
 .meta-field input,
@@ -170,4 +178,88 @@ button:hover {
     transition: background 0.3s ease;
     margin-bottom: 10px;
     text-decoration: none;
+}
+
+.hid-maker {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.hid-maker.visible {
+    display: block;
+    opacity: 1;
+}
+.metric_required_box {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.metric_required_box label {
+    font-size: 12px;
+    color: #555;
+}
+.maker_metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: linear-gradient(135deg, #eef2ff, #f8faff);
+    border: 1px solid #cbd5e0;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px auto;
+    width: 90%;
+    box-shadow: 0 2px 5px rgba(90, 103, 216, 0.15);
+    transition: all 0.3s ease;
+}
+
+.maker_metadata:hover {
+    box-shadow: 0 4px 10px rgba(90, 103, 216, 0.25);
+    transform: translateY(-2px);
+}
+
+.maker_metadata input[type="text"],
+.maker_metadata select {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.maker_metadata input[type="text"]:focus,
+.maker_metadata select:focus {
+    border-color: #5a67d8;
+    box-shadow: 0 0 5px rgba(90,103,216,0.3);
+}
+
+.maker_metadata select {
+    background: linear-gradient(135deg, #74ebd5, #9face6);
+    color: #fff;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.maker_metadata select option {
+    color: #333;
+    background: #fff;
+}
+
+.maker_metadata input::placeholder {
+    color: #999;
+    font-style: italic;
+}
+
+.maker_metadata input[type="text"]:required:invalid {
+    border-color: #e53e3e;
+}
+
+.maker_metadata input[type="text"]:required:valid {
+    border-color: #38a169;
+}
+
+.maker_metadata button {
+    align-self: center;
+    margin-top: 5px;
 }

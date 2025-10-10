@@ -39,11 +39,11 @@ body {
 
 .gallery-item .info {
     padding: 10px;
-    text-align: center;
     flex-grow: 1;
 }
 
 .gallery-item .info h3 {
+    text-align: center;
     margin: 5px 0;
     font-size: 16px;
     color: #333;
@@ -53,10 +53,12 @@ body {
 }
 
 .gallery-item .info p {
+    font-weight: bold;  
+    float: left;
     margin: 0;
     font-size: 14px;
     color: #666;
-    height: 36px; /* Limite hauteur pour texte long */
+    max-height: 36px; /* Limite hauteur pour texte long */
     overflow: hidden;
 }
 
