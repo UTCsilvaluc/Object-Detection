@@ -137,8 +137,12 @@ def detect_fasterrcnn(image_path, threshold=0.3, save=True):
 
 # =====================
 # 3. SAM
-# =====================
-sam_checkpoint = "checkpoints/sam_vit_h.pth"
+# ====================
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+print("Project root:", PROJECT_ROOT)
+CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
+
+sam_checkpoint = os.path.join(CHECKPOINTS_DIR, "sam_vit_h.pth")
 model_type = "vit_h"
 
 sam_model = sam_model_registry[model_type](checkpoint=sam_checkpoint)
