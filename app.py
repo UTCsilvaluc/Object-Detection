@@ -16,6 +16,73 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 def index():
     return render_template('index.html')
 
+@app.route('/re_run_analysis', methods=['POST'])
+def re_run_analysis():
+    img_name = request.form.get("img_name", "")
+    img_annotated_path = request.form.get("img_annotated_path", "")
+    img_original_path = request.form.get("img_original_path", "")
+    img_original_path = build_img_temp_path(img_original_path)
+    img_annotated_path = build_img_temp_path(img_annotated_path)
+    if not os.path.exists(img_original_path):
+        return {"error": "Image not found"}, 404
+    sam_parameters = {}
+    sam_parameters["points_per_side"] = int(request.form.get("points_per_side", 16))
+    sam_parameters["pred_iou_thresh"] = float(request.form.get("pred_iou_thresh", 0.9))
+    sam_parameters["stability_score_thresh"] = float(request.form.get("stability_score_thresh", 0.9))
+    sam_parameters["min_mask_region_area"] = int(request.form.get("min_mask_region_area", 10000))
+
+    #Sauvegarder une nouvelle image localement
+    img_cv = cv2.imread(img_original_path)
+    mask_generator = SamAutomaticMaskGenerator(
+        sam_model,
+        points_per_side=sam_parameters["points_per_side"],
+        pred_iou_thresh=sam_parameters["pred_iou_thresh"],
+        stability_score_thresh=sam_parameters["stability_score_thresh"],
+        min_mask_region_area=sam_parameters["min_mask_region_area"]
+    )
+    read_json = build_json_temp_path(f"{img_name}.json")
+    img_data = {}
+    if os.path.exists(read_json):
+        with open(read_json, 'r', encoding='utf-8') as json_file:
+            old_data = json.load(json_file)
+        for key in ["description", "date", "location", "latitude", "longitude", "source"]:
+            if key in old_data:
+                img_data[key] = old_data[key]
+    masks, _, img_result = segment_sam(img_original_path, min_area=sam_parameters["min_mask_region_area"], iou_thresh=sam_parameters["pred_iou_thresh"], merge_thresh=0.3 , mask_generator=mask_generator)
+    result_data = process_SAM(masks, img_cv, img_result)
+    model = "SAM"
+    _ , annotated_rel_path = save_temp_img(img_result, "annotated")
+    _ , original_rel_path = save_temp_img(img_cv, "original")
+    clear_temp(json_name=img_name , img_original_path=img_original_path , img_annotated_path=img_annotated_path)
+
+    json_dir = build_json_temp_path()
+    os.makedirs(json_dir, exist_ok=True)
+    JSON_data = {
+        "image_name": img_name,
+        "description": img_data.get("description"),
+        "date": img_data.get("date"),
+        "location": img_data.get("location"),
+        "latitude": img_data.get("latitude"),
+        "longitude": img_data.get("longitude"),
+        "source": img_data.get("source"),
+        "num_objects": result_data["num_objects"],
+        "objects": result_data.get("objects", [])
+    }
+    save_json(JSON_data, json_dir, img_name)
+    class_name = get_all_classes()
+    metadata_keys = get_all_metadata_keys()
+    return render_template(
+        "result.html",
+        result=result_data,
+        name=img_name,
+        **img_data,
+        **sam_parameters,
+        model=model,
+        annotated_image_path=annotated_rel_path,
+        original_image_path=original_rel_path,
+        class_name=class_name,
+        metadata_keys=metadata_keys
+    )
 @app.route('/upload', methods=['POST'])
 def upload():
     image = request.files['image']
@@ -69,6 +136,7 @@ def upload():
         "result.html",
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template
+        **defaultSamParameters(), 
         model=model,
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,
@@ -209,12 +277,12 @@ def remove_object():
     return {"success": True, "num_objects": len(objects)}, 200
 
 @app.route('/clear_temp', methods=['POST'])
-def clear_temp():
-    data = request.get_json()
-    json_name = data.get("img_name", "")
+def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None):
+    data = request.get_json() if json_name is None else {}
+    json_name = data.get("img_name", "") if not json_name else json_name
     json_dir = build_json_temp_path(f"{json_name}.json")
-    img_original_path = build_img_temp_path(data.get('img_original_path'))
-    img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
+    img_original_path = data.get("img_original_path", "") if not img_original_path else img_original_path
+    img_annotated_path = data.get("img_annotated_path", "") if not img_annotated_path else img_annotated_path
     if os.path.exists(json_dir):
         with open(json_dir, 'r', encoding='utf-8') as json_file:
             result_data = json.load(json_file)
@@ -224,6 +292,7 @@ def clear_temp():
                 os.remove(crop_path)
         os.remove(img_original_path) if os.path.exists(img_original_path) else None
         os.remove(img_annotated_path) if os.path.exists(img_annotated_path) else None
+        print(f"La suppression a été réalisée pour {json_dir}")
         os.remove(json_dir)
         return {"success": True}, 200
     else:

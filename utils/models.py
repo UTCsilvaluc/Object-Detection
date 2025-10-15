@@ -138,6 +138,14 @@ def detect_fasterrcnn(image_path, threshold=0.3, save=True):
 # =====================
 # 3. SAM
 # ====================
+def defaultSamParameters():
+    return {
+        "points_per_side": 16, 
+        "pred_iou_thresh": 0.90,
+        "stability_score_thresh": 0.90,
+        "min_mask_region_area": 10000
+    }
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print("Project root:", PROJECT_ROOT)
 CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
@@ -150,10 +158,7 @@ sam_model.to(device='cpu')  # erreur float32 mps
 
 mask_generator = SamAutomaticMaskGenerator(
     sam_model,
-    points_per_side=16,
-    pred_iou_thresh=0.90,
-    stability_score_thresh=0.90,
-    min_mask_region_area=10000
+    **defaultSamParameters()
 )
 
 def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
@@ -214,7 +219,7 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
     return final_masks
 
 
-def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
+def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3 , mask_generator=mask_generator):
     """
     Segment objects in an image using the SAM model.
     :image_path: Path to the input image.

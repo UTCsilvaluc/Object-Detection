@@ -25,6 +25,110 @@ body {
     border-left: 1px solid #ddd;
     overflow-y: auto;
 }
+.top-left {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+}
+#new-analysis-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
+}
+.analysis-panel {
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.analysis-panel.visible {
+    display: block;
+    opacity: 1;
+}
+#new-analysis-btn:hover {
+    transform: translateY(-2px);
+    background: linear-gradient(135deg, #5a67d8, #6b46c1);
+    box-shadow: 0 5px 10px rgba(0,0,0,0.15);
+}
+
+.analysis-panel {
+    background: #f8faff;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+    box-shadow: 0 2px 6px rgba(90,103,216,0.15);
+    transition: all 0.3s ease;
+}
+
+.analysis-panel.hidden {
+    display: none;
+}
+
+.analysis-panel h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+.analysis-panel label {
+    display: block;
+    font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 4px;
+    color: #444;
+}
+
+.analysis-panel input[type="number"],
+.analysis-panel input[type="range"] {
+    width: 100%;
+    margin-bottom: 12px;
+    cursor: pointer;
+}
+
+.analysis-panel input[type="range"] {
+    accent-color: #5a67d8;
+}
+
+#run-analysis {
+    background: linear-gradient(135deg, #7f9cf5, #5a67d8);
+    color: #fff;
+    font-weight: 500;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#run-analysis:hover {
+    background: linear-gradient(135deg, #5a67d8, #434190);
+    transform: translateY(-2px);
+}
+
+.setting {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.setting small {
+    font-size: 12px;
+    color: #666;
+    margin-top: -6px;
+}
+
+
 h1 {
     margin-bottom: 10px;
     color: #333;

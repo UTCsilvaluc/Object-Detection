@@ -10,7 +10,51 @@
     <div class="container">
         <!-- LEFT PANEL -->
         <div class="left-panel">
-            <h1>Annotated Image</h1>
+            <div class="top-left">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+                    <h1>AI Image Analysis</h1>
+                    <button id="new-analysis-btn" type="button" class="primary-btn" onclick="document.getElementById('analysis-panel').classList.toggle('visible')">Try a new AI Analysis</button>
+                </div>
+                <div>
+                    <div id="analysis-panel" class="analysis-panel" hidden>
+                        <form action="{{url_for('re_run_analysis')}}" method="post">
+                            <input type="hidden" name="img_name" id="img_name" value="{{ name }}">
+                            <input type="hidden" name="img_original_path" id="img_original_path" value="{{ original_image_path }}">
+                            <input type="hidden" name="img_annotated_path" id="img_annotated_path" value="{{ annotated_image_path }}">
+                            <h2>Customize the Analysis</h2>
+                            <p class="help-text">
+                                Adjust how the AI looks for objects in the image.
+                                The default settings usually work well, modify them only if needed.
+                            </p>
+                            <div class="setting">
+                                <label for="points_per_side">Detection density</label>
+                                <input id="points_per_side" type="number" min="8" max="64" step="8" value="{{ points_per_side }}">
+                                <small>Higher values = more precise but slower</small>
+                            </div>
+
+                            <div class="setting">
+                                <label for="pred_iou_thresh">Detection confidence</label>
+                                <input id="pred_iou_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ pred_iou_thresh }}">
+                                <small>Lower this if the AI misses some objects</small>
+                            </div>
+
+                            <div class="setting">
+                                <label for="stability_score_thresh">Stability filter</label>
+                                <input id="stability_score_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ stability_score_thresh }}">
+                                <small>Filters out uncertain regions</small>
+                            </div>
+
+                            <div class="setting">
+                                <label for="min_mask_region_area">Minimum object size</label>
+                                <input id="min_mask_region_area" type="number" min="100" max="50000" step="500" value="{{ min_mask_region_area }}">
+                                <small>Smaller values = detect tiny objects</small>
+                            </div>
+
+                            <button type="submit" id="run-analysis" class="secondary-btn"> Run new analysis </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
             <div class="image-box">
                 <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
             </div>
@@ -450,6 +494,47 @@
                 
             }
         }
-
+        async function runAnalysis(button) {
+            button.disabled = true;
+            button.innerText = "Running analysis...";
+            const points_per_side = document.getElementById("points_per_side").value;
+            const pred_iou_thresh = document.getElementById("pred_iou_thresh").value;
+            const stability_score_thresh = document.getElementById("stability_score_thresh").value;
+            const min_mask_region_area = document.getElementById("min_mask_region_area").value;
+            try {
+                const response = await fetch("/re_run_analysis", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    img_name: "{{ name }}",
+                    points_per_side: points_per_side,
+                    pred_iou_thresh: pred_iou_thresh,
+                    stability_score_thresh: stability_score_thresh,
+                    min_mask_region_area: min_mask_region_area,
+                    img_name: "{{ name }}",
+                    img_original_path: "{{ original_image_path }}",
+                    img_annotated_path: "{{ annotated_image_path }}"
+                })
+            });
+                const html = await response.text();
+                if (!response.ok) {
+                    alert("Failed to re-analyze the image. Please try again.");
+                    button.disabled = false;
+                    button.innerText = "Run new analysis";
+                    return;
+                }
+                document.open();
+                document.write(html);
+                document.close();
+            } catch (error) {
+                alert("An error occurred while trying to re-analyze the image. Please try again.");
+                button.disabled = false;
+                button.innerText = "Run new analysis";
+                return;
+            } finally {
+                button.disabled = false;
+                button.innerText = "Run new analysis";
+            }
+        }
     </script>
 </html>
