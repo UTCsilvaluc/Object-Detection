@@ -1,9 +1,13 @@
 from flask import Flask , render_template , request , redirect , url_for , send_from_directory
 from ultralytics.utils.plotting import colors
-from utils.models import *
-from utils.process_detection import *
 from utils.database import *
 from utils.helper import *
+from models.factory import ModelFactory
+from models.pretrained_models import sam_model
+import cv2
+import numpy as np
+from segment_anything import SamAutomaticMaskGenerator
+from models.pretrained_models import defautlSamParameters
 import os
 import json
 app = Flask(__name__)
@@ -33,6 +37,7 @@ def re_run_analysis():
 
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
+    model = ModelFactory.get_model("sam")
     mask_generator = SamAutomaticMaskGenerator(
         sam_model,
         points_per_side=sam_parameters["points_per_side"],
@@ -40,6 +45,8 @@ def re_run_analysis():
         stability_score_thresh=sam_parameters["stability_score_thresh"],
         min_mask_region_area=sam_parameters["min_mask_region_area"]
     )
+    results , img_original , img_result  = model.run(img_original_path , mask_generator=mask_generator)
+    result_data = model.process_results(results , img_original , img_result)
     read_json = build_json_temp_path(f"{img_name}.json")
     img_data = {}
     if os.path.exists(read_json):
@@ -48,8 +55,6 @@ def re_run_analysis():
         for key in ["description", "date", "location", "latitude", "longitude", "source"]:
             if key in old_data:
                 img_data[key] = old_data[key]
-    masks, _, img_result = segment_sam(img_original_path, min_area=sam_parameters["min_mask_region_area"], iou_thresh=sam_parameters["pred_iou_thresh"], merge_thresh=0.3 , mask_generator=mask_generator)
-    result_data = process_SAM(masks, img_cv, img_result)
     model = "SAM"
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
     _ , original_rel_path = save_temp_img(img_cv, "original")
@@ -59,7 +64,7 @@ def re_run_analysis():
     os.makedirs(json_dir, exist_ok=True)
     JSON_data = {
         "image_name": img_name,
-        "description": img_data.get("description"),
+        "desc": img_data.get("description"),
         "date": img_data.get("date"),
         "location": img_data.get("location"),
         "latitude": img_data.get("latitude"),
@@ -100,15 +105,18 @@ def upload():
     # Chargement image + YOLO
     img = cv2.imread(img_path)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    results, img, img_result, save_path = detect_yolo(img_path)
+    model_name = "yolo"
+    model = ModelFactory.get_model(model_name)
+    raw_results , img , img_result  = model.run(img_path)
+    result_data = model.process_results(raw_results , img , img_result)
 
     # Traitement des résultats YOLO
-    result_data = process_yolo_results(results, img, img_result)
     model = "YOLOv8"
     if result_data["num_objects"] == 0:
         print("No objects detected with YOLO, switching to SAM...")
-        masks, _, img_result = segment_sam(img_path)
-        result_data = process_SAM(masks, img, img_result)
+        model = ModelFactory.get_model("sam")
+        raw_results , img , img_result  = model.run(img_path)
+        result_data = model.process_results(raw_results , img , img_result)
         model = "SAM"
 
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
@@ -136,7 +144,7 @@ def upload():
         "result.html",
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template
-        **defaultSamParameters(), 
+        **defautlSamParameters(), 
         model=model,
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,

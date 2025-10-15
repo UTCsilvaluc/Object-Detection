@@ -1,15 +1,16 @@
 import cv2
-import numpy as np
-from flask import url_for
+import numpy as np  
 from utils.helper import save_temp_img
-
-
 def process_yolo_results(results, img, img_result):
     """
     Traite les résultats YOLO :
     - Retourne le nombre d'objets détectés
     - Retourne les infos des objets (classe, score, bbox, crop en base64)
     - Retourne l'image complète annotée en base64
+    :param results: Résultats bruts de YOLO
+    :param img: Image originale (BGR)
+    :param img_result: Image annotée (RGB)
+    :return: Dictionnaire avec les informations des objets détectés
     """
     boxes = results[0].boxes.xyxy.cpu().numpy()   # [x_min, y_min, x_max, y_max]
     cls_ids = results[0].boxes.cls.cpu().numpy().astype(int)
@@ -42,6 +43,16 @@ def process_yolo_results(results, img, img_result):
     }
 
 def process_SAM(masks , img , img_result):
+    """
+    Handle SAM results:
+    - Returns the number of detected objects
+    - Returns object info (id, score, bbox, contour, crop path)
+    - Returns the full annotated image path
+    :param masks: Raw results from SAM
+    :param img: Original image (BGR)
+    :param img_result: Annotated image (RGB)
+    :return: Dictionary with detected object information
+    """
     image_rgb = cv2.cvtColor(img , cv2.COLOR_BGR2RGB)
     objects = []
     for idx, mask in enumerate(masks):
