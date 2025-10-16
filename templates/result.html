@@ -48,6 +48,11 @@
                                 <label for="min_mask_region_area">Minimum object size</label>
                                 <input id="min_mask_region_area" type="number" min="1000" max="50000" step="1000" value="{{ min_mask_region_area }}">
                                 <small>Smaller values = detect tiny objects</small>
+                            </div>  
+                            <div class="setting">
+                                <p> This points will be used for the new analysis. </p>
+                                <p> You can also click directly on the image to add points for analysis. </p>
+                                <span class="points-list"></span>
                             </div>
 
                             <button type="submit" id="run-analysis" class="secondary-btn"> Run new analysis </button>
@@ -56,7 +61,7 @@
                 </div>
             </div>
             <div class="image-box">
-                <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result">
+                <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result" onclick="addPointToAnalyse(this , event);">
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ name }}</p>
@@ -535,6 +540,88 @@
                 button.disabled = false;
                 button.innerText = "Run new analysis";
             }
+        }
+        function addPointToAnalyse(img) {
+            const rect = img.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            const xReal = Math.round(x * (img.naturalWidth / img.width));
+            const yReal = Math.round(y * (img.naturalHeight / img.height));
+            alert(`Point added for analysis at coordinates: (${xReal}, ${yReal})`);
+            fetch('/add_rectangle' , {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    img_name: "{{ name }}",
+                    img_original_path: "{{ original_image_path }}",
+                    img_annotated_path: "{{ annotated_image_path }}",
+                    x: Math.round(xReal),
+                    y: Math.round(yReal)
+            })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let image_box = document.querySelector('.image-box img');
+                    image_box.src = image_box.src + '?t=' + new Date().getTime();
+                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
+                    const analysisPanel = document.getElementById('analysis-panel');
+                    /*
+                    let newPoint = document.createElement('p');
+                    let hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'points[]';
+                    hiddenInput.value = `(${xReal}, ${yReal})`;
+                    newPoint.className = 'point-coord';
+                    newPoint.innerText = `(${xReal}, ${yReal})`;
+                    document.querySelector('span.points-list').appendChild(newPoint);
+                    document.querySelector('span.points-list').appendChild(hiddenInput);
+                    */
+                    if (analysisPanel) analysisPanel.hidden = false;
+
+                    let accordion_section = document.querySelector('.accordion-section').cloneNode(true);
+                    let accordion_header = accordion_section.querySelector('.accordion-header');
+                    let accordion_content = accordion_section.querySelector('.accordion-content');
+                    let obj_wrapper = accordion_content.querySelector('.obj-wrapper');
+                    let left_obj_info = obj_wrapper.querySelector('.left-obj-info');
+                    let right_obj_info = obj_wrapper.querySelector('.right-obj-info');
+                    let img = left_obj_info.querySelector('img');
+                    let hiddenInputCrop = left_obj_info.querySelector('input');
+                    alert(data.image_path);
+                    img.src = data.image_path; img.alt = `Object ${data.image_id}`;
+                    hiddenInputCrop.name = `objects[${data.num_objects - 1}][crop_path]`;
+                    hiddenInputCrop.value = data.tmpName;
+
+                    accordion_header.innerHTML = `Object ${data.num_objects} — Class 0 (Confidence : 100%) <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object ${data.num_objects}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${data.image_id}' , '${data.num_objects}');">`;
+                    accordion_header.setAttribute('onclick', `toggleAccordion('obj-data${data.image_id}')`);
+                    accordion_section.id = `obj${data.image_id}`;
+                    accordion_content.id = `obj-data${data.image_id}`;
+                    right_obj_info.querySelector('input[name$="[class_id]"]').name = `objects[${data.num_objects - 1}][class_id]`;
+                    right_obj_info.querySelector('input[name$="[score]"]').name = `objects[${data.num_objects - 1}][score]`;
+                    right_obj_info.querySelector('input[name$="[score]"]').value = 1.0;
+                    right_obj_info.querySelector('input[name$="[bbox]"]').name = `objects[${data.num_objects - 1}][bbox]`;
+                    right_obj_info.querySelector('input[name$="[bbox]"]').value = data.bbox;
+                    let metadataContainer = right_obj_info.querySelector('.metadata-container');
+                    metadataContainer.id = `meta-${data.num_objects - 1}`;
+                    metadataContainer.innerHTML = `
+                        <div class="meta-field">
+                            <input type="text" name="objects[${data.num_objects - 1}][type]" value="type" readonly>
+                            <select name="objects[${data.num_objects - 1}][value]" class="object_type" onchange="handleNewType(this)" required>
+                                {% for cls in class_name %}
+                                    <option value="{{cls}}">{{cls}}</option>
+                                {% endfor %}
+                                    <option value="__new__">+ Add new type</option>
+                            </select>
+                        </div>
+                    `;
+                    let addMetaButton = right_obj_info.querySelector('button[onclick^="addMetadataField"]');
+                    addMetaButton.setAttribute('onclick', `addMetadataField('${data.num_objects - 1}')`);
+                    document.querySelector('.accordion-item').appendChild(accordion_section);
+                    document.querySelector('input[name="max_object_detected"]').value = data.num_objects;
+                } else {
+                    alert('Failed to add point for analysis: ' + data.error);
+                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
+                }
+            });
         }
     </script>
 </html>

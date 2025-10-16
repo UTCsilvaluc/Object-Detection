@@ -7,7 +7,7 @@ from models.pretrained_models import sam_model
 import cv2
 import numpy as np
 from segment_anything import SamAutomaticMaskGenerator
-from models.pretrained_models import defautlSamParameters
+from models.pretrained_models import defautlSamParameters , sam_predictor
 import os
 import json
 app = Flask(__name__)
@@ -20,6 +20,158 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 def index():
     return render_template('index.html')
 
+@app.route('/add_rectangle', methods=['POST'])
+@app.route('/add_rectangle', methods=['POST'])
+def add_rectangle():
+    data = request.get_json() or {}
+    img_name = data.get("img_name", "")
+    img_annotated_path = build_img_temp_path(data.get("img_annotated_path", ""))
+    json_path = build_json_temp_path(f"{img_name}.json")
+    
+    if not os.path.exists(img_annotated_path):
+        return {"error": f"Image not found: {img_annotated_path}"}, 404
+    if not os.path.exists(json_path):
+        return {"error": f"JSON not found: {json_path}"}, 404
+
+    x, y = int(data.get("x", 0)), int(data.get("y", 0))
+    img = cv2.imread(img_annotated_path)
+    if img is None:
+        return {"error": "Failed to read image"}, 500
+
+    # --- SAM Prediction ---
+    sam_predictor.set_image(img)
+    input_point = np.array([[x, y]])
+    input_label = np.array([1])
+
+    masks, scores, logits = sam_predictor.predict(
+        point_coords=input_point,
+        point_labels=input_label,
+        multimask_output=False
+    )
+
+    # --- If no mask generated ---
+    if masks is None or masks.shape[0] == 0:
+        print("No mask generated — fallback to bounding box only.")
+        bbox = [x - 100, y - 100, x + 100, y + 100]
+        cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+        obj_img = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
+        contour_points = []
+    else:
+        mask = masks[0].astype(np.uint8) * 255
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        obj_img = cv2.bitwise_and(img, img, mask=mask)
+        if len(contours) > 0:
+            cv2.drawContours(img, contours, -1, (0, 255, 0), 2)
+
+            # Extracting bounding box from mask
+            ys, xs = np.where(mask > 0) #Raw ys and columns xs where mask is not zero : couple (y,x) of pixels.
+            #Allows to get the bounding box with min and max of raw and columns.
+            if len(xs) > 0 and len(ys) > 0:
+                x_min, x_max = int(xs.min()), int(xs.max())
+                y_min, y_max = int(ys.min()), int(ys.max())
+                bbox = [x_min, y_min, x_max, y_max]
+                obj_img = obj_img[y_min:y_max, x_min:x_max]
+            else:
+                bbox = [x - 100, y - 100, x + 100, y + 100]
+
+            # Convert contour to list of points. 
+            contour_points = [[int(px), int(py)] for px, py in contours[0].squeeze().tolist()] #squeeze to remove single-dimensional entries from the shape of an array.
+        else:
+            # If no contours found, fallback to bounding box only
+            bbox = [x - 100, y - 100, x + 100, y + 100]
+            contour_points = []
+            cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+
+    cv2.imwrite(img_annotated_path, img)
+    try:
+        with open(json_path, 'r', encoding='utf-8') as json_file:
+            result_data = json.load(json_file)
+    except Exception as e:
+        return {"error": f"Failed to read JSON: {e}"}, 500
+
+    new_id = (result_data["objects"][-1]["id"] + 1) if result_data.get("objects") else 1
+    _ , temp_object_name = save_temp_img(obj_img , new_id)
+    path = build_img_temp_path(temp_object_name)
+    new_object = {
+        "class_id": 0,
+        "id": new_id,
+        "score": float(scores[0]) if masks is not None and scores is not None else 1.0,
+        "bbox": bbox,
+        "contour": contour_points,
+        "obj_crop_path": path,
+    }
+
+    result_data["objects"].append(new_object)
+    result_data["num_objects"] = len(result_data["objects"])
+
+    save_json(result_data, build_json_temp_path(), img_name)
+    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": path , "bbox": bbox , "tmpName": temp_object_name}, 200
+
+
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    image = request.files['image']
+    if not image:
+        return "No image uploaded", 400
+
+    img_path = build_img_temp_path(image.filename)
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(build_img_temp_path() , exist_ok=True)
+    image.save(img_path)
+
+    # Récupération des métadonnées via helper
+    metadata = get_form_metadata(request)
+    img_name = metadata.get("name", "unnamed")
+    # Chargement image + YOLO
+    img = cv2.imread(img_path)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    model_name = "yolo"
+    model = ModelFactory.get_model(model_name)
+    raw_results , img , img_result  = model.run(img_path)
+    result_data = model.process_results(raw_results , img , img_result)
+
+    # Traitement des résultats YOLO
+    model = "YOLOv8"
+    if result_data["num_objects"] == 0:
+        print("No objects detected with YOLO, switching to SAM...")
+        model = ModelFactory.get_model("sam")
+        raw_results , img , img_result  = model.run(img_path)
+        result_data = model.process_results(raw_results , img , img_result)
+        model = "SAM"
+
+    _ , annotated_rel_path = save_temp_img(img_result, "annotated")
+    _ , original_rel_path = save_temp_img(img, "original")
+
+    json_dir = build_json_temp_path()
+    os.makedirs(json_dir, exist_ok=True)
+    os.remove(img_path)
+
+    JSON_data = {
+        "image_name": img_name,
+        "description": metadata.get("desc"),
+        "date": metadata.get("date"),
+        "location": metadata.get("location"),
+        "latitude": metadata.get("latitude"),
+        "longitude": metadata.get("longitude"),
+        "source": metadata.get("source"),
+        "num_objects": result_data["num_objects"],
+        "objects": result_data.get("objects", [])
+    }
+    save_json(JSON_data, json_dir, img_name)
+    class_name = get_all_classes()
+    metadata_keys = get_all_metadata_keys()
+    return render_template(
+        "result.html",
+        result=result_data,
+        **metadata,  # injection directe des métadonnées dans le template
+        **defautlSamParameters(), 
+        model=model,
+        annotated_image_path=annotated_rel_path,
+        original_image_path=original_rel_path,
+        class_name=class_name,
+        metadata_keys=metadata_keys
+    )
 @app.route('/re_run_analysis', methods=['POST'])
 def re_run_analysis():
     img_name = request.form.get("img_name", "")
@@ -82,69 +234,6 @@ def re_run_analysis():
         name=img_name,
         **img_data,
         **sam_parameters,
-        model=model,
-        annotated_image_path=annotated_rel_path,
-        original_image_path=original_rel_path,
-        class_name=class_name,
-        metadata_keys=metadata_keys
-    )
-@app.route('/upload', methods=['POST'])
-def upload():
-    image = request.files['image']
-    if not image:
-        return "No image uploaded", 400
-
-    img_path = build_img_temp_path(image.filename)
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(build_img_temp_path() , exist_ok=True)
-    image.save(img_path)
-
-    # Récupération des métadonnées via helper
-    metadata = get_form_metadata(request)
-    img_name = metadata.get("name", "unnamed")
-    # Chargement image + YOLO
-    img = cv2.imread(img_path)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    model_name = "yolo"
-    model = ModelFactory.get_model(model_name)
-    raw_results , img , img_result  = model.run(img_path)
-    result_data = model.process_results(raw_results , img , img_result)
-
-    # Traitement des résultats YOLO
-    model = "YOLOv8"
-    if result_data["num_objects"] == 0:
-        print("No objects detected with YOLO, switching to SAM...")
-        model = ModelFactory.get_model("sam")
-        raw_results , img , img_result  = model.run(img_path)
-        result_data = model.process_results(raw_results , img , img_result)
-        model = "SAM"
-
-    _ , annotated_rel_path = save_temp_img(img_result, "annotated")
-    _ , original_rel_path = save_temp_img(img, "original")
-
-    json_dir = build_json_temp_path()
-    os.makedirs(json_dir, exist_ok=True)
-    os.remove(img_path)
-
-    JSON_data = {
-        "image_name": img_name,
-        "description": metadata.get("desc"),
-        "date": metadata.get("date"),
-        "location": metadata.get("location"),
-        "latitude": metadata.get("latitude"),
-        "longitude": metadata.get("longitude"),
-        "source": metadata.get("source"),
-        "num_objects": result_data["num_objects"],
-        "objects": result_data.get("objects", [])
-    }
-    save_json(JSON_data, json_dir, img_name)
-    class_name = get_all_classes()
-    metadata_keys = get_all_metadata_keys()
-    return render_template(
-        "result.html",
-        result=result_data,
-        **metadata,  # injection directe des métadonnées dans le template
-        **defautlSamParameters(), 
         model=model,
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,

@@ -1,6 +1,6 @@
 import torch
 from ultralytics import YOLO
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator , SamPredictor
 import os   
 import numpy as np
 import cv2
@@ -35,6 +35,7 @@ mask_generator = SamAutomaticMaskGenerator(
     sam_model,
     **defautlSamParameters()
 )
+sam_predictor = SamPredictor(sam_model)
 base_save_dir = "img/ModelGen"
 os.makedirs(base_save_dir, exist_ok=True)
 sam_dir = os.path.join(base_save_dir, "SAM")
