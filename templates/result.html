@@ -28,25 +28,25 @@
                             </p>
                             <div class="setting">
                                 <label for="points_per_side">Detection density</label>
-                                <input id="points_per_side" type="number" min="8" max="64" step="8" value="{{ points_per_side }}">
+                                <input id="points_per_side" name="points_per_side" type="number" min="8" max="64" step="8" value="{{ points_per_side }}">
                                 <small>Higher values = more precise but slower</small>
                             </div>
 
                             <div class="setting">
                                 <label for="pred_iou_thresh">Detection confidence</label>
-                                <input id="pred_iou_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ pred_iou_thresh }}">
+                                <input id="pred_iou_thresh" name="pred_iou_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ pred_iou_thresh }}">
                                 <small>Lower this if the AI misses some objects</small>
                             </div>
 
                             <div class="setting">
                                 <label for="stability_score_thresh">Stability filter</label>
-                                <input id="stability_score_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ stability_score_thresh }}">
+                                <input id="stability_score_thresh" name="stability_score_thresh" type="range" min="0.5" max="0.95" step="0.05" value="{{ stability_score_thresh }}">
                                 <small>Filters out uncertain regions</small>
                             </div>
 
                             <div class="setting">
                                 <label for="min_mask_region_area">Minimum object size</label>
-                                <input id="min_mask_region_area" type="number" min="1000" max="50000" step="1000" value="{{ min_mask_region_area }}">
+                                <input id="min_mask_region_area" name="min_mask_region_area" type="number" min="1000" max="50000" step="1000" value="{{ min_mask_region_area }}">
                                 <small>Smaller values = detect tiny objects</small>
                             </div>  
                             <div class="setting">
@@ -107,8 +107,11 @@
                             <div class="accordion-section" id="obj{{ obj.id }}">
                                 <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">
                                     Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
-                                    <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
-                                </div>
+                                    <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
+                                        <input type="checkbox" name="merge_{{ obj.id }}" id="merge_{{ obj.id }}" title="Select this object to merge it with another one" onclick="event.stopPropagation();">
+                                        <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
+                                    </div>
+                                    </div>
                                 <div class="accordion-content" id="obj-data{{ obj.id }}">
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">

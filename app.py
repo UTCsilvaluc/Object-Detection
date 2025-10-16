@@ -21,13 +21,12 @@ def index():
     return render_template('index.html')
 
 @app.route('/add_rectangle', methods=['POST'])
-@app.route('/add_rectangle', methods=['POST'])
 def add_rectangle():
     data = request.get_json() or {}
     img_name = data.get("img_name", "")
     img_annotated_path = build_img_temp_path(data.get("img_annotated_path", ""))
     json_path = build_json_temp_path(f"{img_name}.json")
-    
+
     if not os.path.exists(img_annotated_path):
         return {"error": f"Image not found: {img_annotated_path}"}, 404
     if not os.path.exists(json_path):
@@ -107,8 +106,6 @@ def add_rectangle():
     save_json(result_data, build_json_temp_path(), img_name)
     return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": path , "bbox": bbox , "tmpName": temp_object_name}, 200
 
-
-
 @app.route('/upload', methods=['POST'])
 def upload():
     image = request.files['image']
@@ -186,7 +183,7 @@ def re_run_analysis():
     sam_parameters["pred_iou_thresh"] = float(request.form.get("pred_iou_thresh", 0.9))
     sam_parameters["stability_score_thresh"] = float(request.form.get("stability_score_thresh", 0.9))
     sam_parameters["min_mask_region_area"] = int(request.form.get("min_mask_region_area", 10000))
-
+    print(f"Re-running analysis with SAM parameters: {sam_parameters}")
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
     model = ModelFactory.get_model("sam")
