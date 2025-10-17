@@ -6,6 +6,7 @@ import shutil
 import json
 from utils.database import *
 import regex
+import numpy as np
 
 def build_json_temp_path(extension=None):
     """
@@ -326,3 +327,13 @@ def return_regex_by_name(name: str , enum_values: str = None) -> str:
         "string": r'^.*$',                                          
     }
     return patterns.get(name, r'^.*$')
+
+def clean_numpy(obj):
+    if isinstance(obj, np.generic):  # ex: np.int64, np.float32
+        return obj.item()
+    elif isinstance(obj, list):
+        return [clean_numpy(x) for x in obj]
+    elif isinstance(obj, dict):
+        return {k: clean_numpy(v) for k, v in obj.items()}
+    else:
+        return obj

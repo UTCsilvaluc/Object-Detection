@@ -55,3 +55,4 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
     # Build final list of masks
     final_masks = [{"segmentation": m.astype(np.uint8)} for m in merged]
     return final_masks
+

@@ -108,7 +108,7 @@
                                 <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">
                                     Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
                                     <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
-                                        <input type="checkbox" name="merge_{{ obj.id }}" id="merge_{{ obj.id }}" title="Select this object to merge it with another one" onclick="event.stopPropagation();">
+                                        <input type="checkbox" name="merge_{{ obj.id }}" id="merge_{{ obj.id }}" title="Select this object to merge it with another one">
                                         <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
                                     </div>
                                     </div>
@@ -170,6 +170,7 @@
                                     <button type="button" value="Create this new metadata" onclick="createNewMetadataKey(this)">Create this new metadata key</button>
                                 </div>
                             </div>
+                            <button type="button" class="back-button" onclick="mergeObjects(this)">Merge Selected Objects</button>
                             <button type="submit">Register all metadata</button>
                         </div>
                 </form>
@@ -593,8 +594,13 @@
                     img.src = data.image_path; img.alt = `Object ${data.image_id}`;
                     hiddenInputCrop.name = `objects[${data.num_objects - 1}][crop_path]`;
                     hiddenInputCrop.value = data.tmpName;
-
-                    accordion_header.innerHTML = `Object ${data.num_objects} — Class 0 (Confidence : 100%) <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object ${data.num_objects}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${data.image_id}' , '${data.num_objects}');">`;
+                    accordion_header.innerHTML = `
+                        Object ${data.num_objects} — Class ${data.class_id} (Confidence : 100%)
+                        <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
+                            <input type="checkbox" name="merge_${data.image_id}" id="merge_${data.image_id}" title="Select this object to merge it with another one">
+                            <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object ${data.num_objects}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${data.image_id}' , '${data.num_objects}');">
+                        </div>
+                    `;
                     accordion_header.setAttribute('onclick', `toggleAccordion('obj-data${data.image_id}')`);
                     accordion_section.id = `obj${data.image_id}`;
                     accordion_content.id = `obj-data${data.image_id}`;
@@ -624,6 +630,49 @@
                     alert('Failed to add point for analysis: ' + data.error);
                     document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
                 }
+            });
+        }
+        function mergeObjects(button) {
+            selectedObjects = [];
+            document.querySelectorAll('input[type="checkbox"][name^="merge_"]').forEach(checkbox => {
+                if (checkbox.checked) {
+                    const objId = checkbox.name.split('_')[1];
+                    selectedObjects.push(objId);
+                }
+            });
+            if (selectedObjects.length < 2) {
+                alert("Please select at least two objects to merge.");
+                return;
+            }
+            if (!confirm(`Are you sure you want to merge the selected objects: ${selectedObjects.join(', ')}?`)) return;
+            fetch('/merge_objects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    obj_ids: selectedObjects,
+                    img_name: "{{ name }}",
+                    img_original_path: "{{ original_image_path }}",
+                    img_annotated_path: "{{ annotated_image_path }}"
+            })
+            }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let image_box = document.querySelector('.image-box img');
+                    image_box.src = image_box.src + '?t=' + new Date().getTime();
+                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
+                    selectedObjects.forEach(objId => {
+                        const objElement = document.getElementById(`obj${objId}`);
+                        if (objElement) objElement.remove();
+                    });
+                    // The idea will be to create the merge object and delete the others.
+                     // to avoid eslint warning
+                } else {
+                    alert('Failed to merge objects: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while trying to merge objects.');
             });
         }
     </script>
