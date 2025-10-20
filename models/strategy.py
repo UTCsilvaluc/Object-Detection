@@ -4,7 +4,6 @@ from .pretrained_models import yolo_model , mask_generator , segment_sam
 from .process_detection import process_yolo_results , process_SAM
 import cv2
 import numpy as np
-from .helpers import handle_dimensions
 class BaseModelStrategy(ABC):
     @abstractmethod
     def run(self, image_path, mask_generator=None):
@@ -15,7 +14,7 @@ class BaseModelStrategy(ABC):
         """
         pass
     @abstractmethod
-    def process_results(self, raw_results, original_image, annotated_image):
+    def process_results(self, raw_results, original_image, annotated_image=None):
         """
         Process raw results into a structured format.
         :param raw_results: The raw results from the segmentation or detection model.
@@ -61,8 +60,8 @@ class SAMStrategy(BaseModelStrategy):
         mg = mask_generator if mask_generator else self.mask_generator
         masks , img , img_result = segment_sam(image_path=image_path , mask_generator=mg)
         return masks , img , img_result
-    def process_results(self, masks , img , img_result):
-        return process_SAM(masks , img , img_result)
+    def process_results(self, masks , img):
+        return process_SAM(masks , img)
     def merge_objects(self, image, *objects):
         H, W = image.shape[:2]
         merged_mask = np.zeros((H, W), dtype=np.uint8)
@@ -85,6 +84,7 @@ class SAMStrategy(BaseModelStrategy):
             # Fusion logique du masque
             merged_mask = np.logical_or(merged_mask, obj_mask).astype(np.uint8)
 
+
         # Extraction des coordonnées de la zone fusionnée
         ys, xs = np.where(merged_mask > 0)
         if len(xs) == 0 or len(ys) == 0:
@@ -93,12 +93,28 @@ class SAMStrategy(BaseModelStrategy):
             x_min, x_max = xs.min(), xs.max()
             y_min, y_max = ys.min(), ys.max()
             bbox = [float(x_min), float(y_min), float(x_max), float(y_max)]
-
         # Extraction du contour final
         contours, _ = cv2.findContours(merged_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        multiple_contours = False
+        if (len(contours) > 1):
+            #Dilate the mask to connect nearby contours
+            kernel = np.ones((3, 3), np.uint8)
+            merged_mask = cv2.dilate(merged_mask.astype(np.uint8), kernel, iterations=2)
+            merged_mask = cv2.morphologyEx(merged_mask, cv2.MORPH_CLOSE, kernel)
+            contours, _ = cv2.findContours(merged_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if (len(contours) > 1):
+                contours = [cnt.reshape(-1, 2).astype(int).tolist() for cnt in contours]
+                return {"mask": merged_mask,
+                        "bbox": bbox,
+                        "contours": contours  
+                        }
+        else:
+            contours = contours if contours else []
+        
+        if len(contours ) == 0:
+            return None
         cnt = max(contours, key=cv2.contourArea)
-        contour_points = cnt.reshape(-1, 2).astype(int).tolist()
-
+        contour_points = cnt.reshape(-1, 2).astype(int).tolist() 
         return {
             "mask": merged_mask,
             "bbox": bbox,

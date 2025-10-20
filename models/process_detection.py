@@ -30,7 +30,7 @@ def process_yolo_results(results, img, img_result):
 
         objects.append({
             "class_id": int(cls_id),
-            "id": int(idx) + 1,  
+            "id": int(idx),
             "score": float(score),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
             "obj_crop_path": obj_crop_path,   # chemin relatif pour template # chemin absolu pour sauvegarde
@@ -42,7 +42,7 @@ def process_yolo_results(results, img, img_result):
         "objects": objects
     }
 
-def process_SAM(masks , img , img_result):
+def process_SAM(masks , img):
     """
     Handle SAM results:
     - Returns the number of detected objects
@@ -75,7 +75,7 @@ def process_SAM(masks , img , img_result):
             contour_points = []
         objects.append({
             "class_id": int(idx),
-            "id": int(idx) + 1,
+            "id": int(idx),
             "score": float(mask.get("score", 1.0)),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
             "contour": contour_points,

@@ -5,6 +5,7 @@ import cv2
 import shutil
 import json
 from utils.database import *
+from ultralytics.utils.plotting import colors
 import regex
 import numpy as np
 
@@ -82,9 +83,21 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     if not os.path.exists(temp_path):
         raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")
     if os.path.exists(dest_path):
-        os.remove(dest_path)
+        raise FileExistsError(f"Destination file {dest_path} already exists.")
+    print(f"Moving file from {temp_path} to {dest_path}.")
     shutil.move(temp_path, dest_path)
     return dest_path
+
+def load_json(json_path):
+    """
+    Load JSON data from a file.
+    :json_path: path to the JSON file
+    Returns the loaded JSON data as a dictionary.
+    """
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"JSON file {json_path} does not exist.")
+    with open(json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def save_json(data, json_dir, filename) -> None:
     """
@@ -337,3 +350,27 @@ def clean_numpy(obj):
         return {k: clean_numpy(v) for k, v in obj.items()}
     else:
         return obj
+
+def get_next_id_available(objects):
+    for i in range(len(objects) + 1):
+        if all(obj.get("id", 0) != i for obj in objects):
+            return i
+    return max(obj.get("id", 0) for obj in objects) + 1
+
+def draw_annotations(image, objects):
+    for obj in objects:
+        color = colors(int(obj.get("class_id", 0)), True)
+        color_bgr = (int(color[2]), int(color[1]), int(color[0]))  
+        if "contour" in obj and obj["contour"]:
+            contour = np.array(obj["contour"]).reshape((-1, 1, 2)).astype(np.int32)
+            cv2.drawContours(image, [contour], -1, color_bgr, 2)
+        elif "contours" in obj and obj["contours"]:
+            for cnt in obj["contours"]:
+                contour = np.array(cnt).reshape((-1, 1, 2)).astype(np.int32)
+                cv2.drawContours(image, [contour], -1, color_bgr, 2)
+        else:
+            x1, y1, x2, y2 = map(int, obj.get("bbox", [0, 0, 0, 0]))
+            cv2.rectangle(image, (x1, y1), (x2, y2), color_bgr, 2)
+            cv2.putText(image, f"{obj['class_id']}:{obj['score']:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_bgr, 2)
+    return image

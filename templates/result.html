@@ -101,32 +101,60 @@
                     <input type="hidden" name="model" value="{{ model }}">
                     <input type="hidden" name="type" id="hiddenType" value="{{ class_name[0] }}">
                     <div class="accordion">
-                        
                         <div class="accordion-item">
+<div class="accordion-section template" id="obj-template" style="display:none;">
+<div class="accordion-header">Template</div>
+    <div class="accordion-content">
+        <div class="obj-wrapper">
+            <div class="left-obj-info">
+                <p><strong>BBox:</strong> [0, 0, 0, 0]</p>
+                <img src="" alt="Object template">
+                <input disabled type="hidden" name="objects[0][crop_path]" value="">
+            </div>
+            <div class="right-obj-info">
+                <input disabled type="hidden" name="objects[0][class_id]" value="0">
+                <input disabled type="hidden" name="objects[0][score]" value="1.0">
+                <input disabled type="hidden" name="objects[0][bbox]" value="[0,0,0,0]">
+                <div class="metadata-container" id="meta-template">
+                    <div class="meta-field">
+                        <input disabled type="text" name="objects[0][type]" value="type" readonly>
+                        <select disabled name="objects[0][value]" class="object_type" onchange="handleNewType(this)" required>
+                            {% for cls in class_name %}
+                                <option value="{{cls}}">{{cls}}</option>
+                            {% endfor %}
+                            <option value="__new__">+ Add new type</option>
+                        </select>
+                    </div>
+                </div>
+                <button disabled type="button" onclick="addMetadataField('0')">+ Add metadata</button>
+            </div>
+        </div>
+    </div>
+</div>
                             {% for obj in result.objects %}
                             <div class="accordion-section" id="obj{{ obj.id }}">
                                 <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">
-                                    Object {{ loop.index }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
+                                    Object ID {{ obj.id }} — Class {{ obj.class_id }} (Confidence : {{ "%.2f"|format(obj.score*100) }}%)
                                     <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
                                         <input type="checkbox" name="merge_{{ obj.id }}" id="merge_{{ obj.id }}" title="Select this object to merge it with another one">
-                                        <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}' , '{{ result.num_objects }}');">
+                                        <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}');">
                                     </div>
                                     </div>
                                 <div class="accordion-content" id="obj-data{{ obj.id }}">
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ loop.index }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][crop_path]" value="{{ obj.obj_crop_path }}">
+                                            <img src="{{ url_for('temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ obj.id }}">
+                                            <input type="hidden" name="objects[{{ obj.id }}][crop_path]" value="{{ obj.obj_crop_path }}">
                                         </div>
                                         <div class="right-obj-info">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][class_id]" value="{{ obj.class_id }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][score]" value="{{ obj.score }}">
-                                            <input type="hidden" name="objects[{{ loop.index0 }}][bbox]" value="{{ obj.bbox }}">
-                                            <div class="metadata-container" id="meta-{{ loop.index0 }}">
+                                            <input type="hidden" name="objects[{{ obj.id }}][class_id]" value="{{ obj.class_id }}">
+                                            <input type="hidden" name="objects[{{ obj.id }}][score]" value="{{ obj.score }}">
+                                            <input type="hidden" name="objects[{{ obj.id }}][bbox]" value="{{ obj.bbox }}">
+                                            <div class="metadata-container" id="meta-{{ obj.id }}">
                                                 <div class="meta-field">
-                                                    <input type="text" name="objects[{{ loop.index0 }}][type]" value="type" readonly>
-                                                    <select name="objects[{{ loop.index0 }}][value]" class="object_type" onchange="handleNewType(this)" required>
+                                                    <input type="text" name="objects[{{ obj.id }}][type]" value="type" readonly>
+                                                    <select name="objects[{{ obj.id }}][value]" class="object_type" onchange="handleNewType(this)" required>
                                                         {% for cls in class_name %}
                                                             <option value="{{cls}}">{{cls}}</option>
                                                         {% endfor %}
@@ -134,7 +162,7 @@
                                                     </select>
                                                 </div>
                                             </div>
-                                            <button type="button" onclick="addMetadataField('{{ loop.index0 }}')">+ Add metadata</button>
+                                            <button type="button" onclick="addMetadataField('{{ obj.id }}')">+ Add metadata</button>
                                         </div>
                                     </div>
                                 </div>
@@ -178,9 +206,14 @@
     </div>
 </body>
 <script>
+        const $ = (sel) => document.querySelector(sel); // Do not return Jquery but native DOM element !!
+        const $$ = (sel) => document.querySelectorAll(sel);
+
         let isSubmitting = false;
+        let isAnalyzing = false;
         let metadataUsed = [[]] // pour suivre les métadonnées utilisées pour chaque objet par index
         let clientMetadataKeys = {{ metadata_keys | tojson }};
+        let clientClassNames = {{ class_name | tojson }};
         function returnRegexByName(name, enum_values = null) {
             if (enum_values !== "null" && enum_values.trim() !== "") {
                 const enumPattern = enum_values
@@ -221,7 +254,32 @@
             return types[name] || types["text"];
         };
 
-        document.querySelector('form').addEventListener('submit', function(event) {
+        async function apiPost(url , body){
+            try {
+                const res = await fetch(url , {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'An error occurred');
+                }
+                return data;
+            } catch (error) {
+                console.error("API POST error:", error);
+                alert("An error occurred: " + error.message);
+                return null;
+            }
+        }
+        function refreshImage(imgElement = $('.image-box img')) {
+            const currentSrc = imgElement.src;
+            imgElement.src = currentSrc.split('?')[0] + '?t=' + new Date().getTime();
+        }
+        function refreshCount(numObjects){
+            $('#num-objects').innerText = $('#num-objects').innerText.replace(/\d+/, numObjects);
+        }
+        $('form').addEventListener('submit', function(event) {
             if (isSubmitting) {
                 event.preventDefault();
                 return;
@@ -236,16 +294,16 @@
             const content = document.getElementById(id);
             content.style.display = (content.style.display === "block") ? "none" : "block";
         }
-        function addMetadataField(objIndex) {
-            objIndex = parseInt(objIndex);
-            const container = document.getElementById(`meta-${objIndex}`);
+        function addMetadataField(objID) {
+            objID = parseInt(objID);
+            const container = document.getElementById(`meta-${objID}`);
             const metaIndex = container.children.length - 1; // numéro de la métadonnée
             let div = document.createElement('div');
             div.className = 'meta-field';
             mapClientMetadataKeys = []
             clientMetadataKeys.forEach(meta => {
-                if (!metadataUsed[objIndex]) metadataUsed[objIndex] = [];
-                if (!metadataUsed[objIndex].includes(meta.key) && meta.key !== "type") {
+                if (!metadataUsed[objID]) metadataUsed[objID] = [];
+                if (!metadataUsed[objID].includes(meta.key) && meta.key !== "type") {
                     mapClientMetadataKeys.push(meta);
                 }
             });
@@ -254,7 +312,7 @@
                 return;
             }
             div.innerHTML = `
-                <select name="objects[${objIndex}][metadata][${metaIndex}][key]" class="object_type" onchange="changeKey(this , 'objects[${objIndex}][metadata][${metaIndex}][value]')" required>
+                <select name="objects[${objID}][metadata][${metaIndex}][key]" class="object_type" onchange="changeKey(this , 'objects[${objID}][metadata][${metaIndex}][value]')" required>
                     ${mapClientMetadataKeys.map(meta => `
                         <option value="${meta.key}"
                         data-desc="${meta.description}"
@@ -265,56 +323,37 @@
                         >${meta.key}</option>
                     `).join('')}
                 </select>
-                <input type="text" name="objects[${objIndex}][metadata][${metaIndex}][value]" placeholder="Valeur" onchange="changeValue(this)" required>
+                <input type="text" name="objects[${objID}][metadata][${metaIndex}][value]" placeholder="Valeur" onchange="changeValue(this)" required>
                 <img src="{{ url_for('static', filename='img/svg/cross.png') }}" alt="" class="remove-icon" onclick="removeMetadataField(this)" data-index="${metaIndex}">
             `;
             container.appendChild(div);
-            const elemKey = document.querySelector(`select[name="objects[${objIndex}][metadata][${metaIndex}][key]"]`);
+            const elemKey = $(`select[name="objects[${objID}][metadata][${metaIndex}][key]"]`);
             const desc = elemKey.options[0].getAttribute("data-desc");
             const metric = elemKey.options[0].getAttribute("data-metric");
             const regex = returnRegexByName( elemKey.options[0].getAttribute("data-type") , elemKey.options[0].getAttribute("data-enum"));
-            let inputValue = document.querySelector(`input[name="objects[${objIndex}][metadata][${metaIndex}][value]"]`);
+            let inputValue = $(`input[name="objects[${objID}][metadata][${metaIndex}][value]"]`);
             inputValue.placeholder = desc ? desc : "Value";
             inputValue.pattern = regex ? regex : "";
             inputValue.type = returnInputTypeByName( elemKey.options[0].getAttribute("data-type") );
             title = "Description: " + (desc ? desc : "Value") + (metric != "null" ? " | Metric: " + metric : "") + (regex ? " | Format: " + regex : "");
             inputValue.title = title;
-            metadataUsed[objIndex].push(elemKey.value);
+            metadataUsed[objID].push(elemKey.value);
         }
-        function removeObject(objID , num_objects) {
+        async function removeObject(objID) {
             if (!confirm('Are you sure you want to delete this object?')) return;
-            fetch('/remove_object', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    id: objID,
-                    img_name: "{{ name }}",
-                    img_original_path: "{{ original_image_path }}",
-                    img_annotated_path: "{{ annotated_image_path }}",
-                    num_objects: num_objects
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const objElement = document.getElementById(`obj${objID}`);
-                    if (objElement) objElement.remove();
-                    let image_box = document.querySelector('.image-box img');
-                    image_box.src = image_box.src + '?t=' + new Date().getTime();
-                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
-                } else {
-                    alert('Failed to delete the object.');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while trying to delete the object.');
-            });
-        }
+            const data = await apiPost('/remove_object', { id: objID , img_name: "{{ name }}", img_original_path: "{{ original_image_path }}", img_annotated_path: "{{ annotated_image_path }}" });
 
-        function handleNewType(selectedItem){
+            if (!data) return;
+            if (data.success) {
+                const objElement = $(`#obj${objID}`);
+                if (objElement) objElement.remove();
+                refreshImage();
+                refreshCount(data.num_objects);
+            } else {
+                alert('Failed to delete the object.');
+            }
+        }
+        async function handleNewType(selectedItem){
             if (selectedItem.value === "__new__") {
                 const typeName = prompt("Enter the new type name or nothing to cancel the action:")
                 if (!typeName) {
@@ -322,35 +361,30 @@
                     return;
                 }
                 const typeDesc = prompt("Enter a description for this type:");
-                fetch("/add_class" , {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json"},
-                    body: JSON.stringify({name: typeName , description: typeDesc})
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success){
-                        document.querySelectorAll(".object_type").forEach(sel => {
-                            const newOption = document.createElement("option");
-                            newOption.value = typeName;
-                            newOption.textContent = typeName;
-                            sel.insertBefore(newOption, sel.querySelector('option[value="__new__"]'));
-                        })
+                if (!typeDesc) {
+                    selectedItem.selectedIndex = 0;
+                    return;
+                }
+                const data = await apiPost('/add_class', { name: typeName, description: typeDesc });
+                if (!data) return;
+                if (data.success) {
+                    $$(".object_type").forEach(sel => {
                         const newOption = document.createElement("option");
                         newOption.value = typeName;
                         newOption.textContent = typeName;
-                        let selecteurImage = document.getElementById("imgType");
-                        selecteurImage.insertBefore(newOption , selecteurImage.querySelector('option[value="__new__"]'));
-                        selectedItem.value = typeName;
-                    } else {
-                        alert("Failed to add new type: " + data.error);
-                        selectElem.selectedIndex = 0;
-                    }
-                })
-                .catch(err => {
-                    alert("Error while adding a new type.");
+                        sel.insertBefore(newOption, sel.querySelector('option[value="__new__"]'));
+                    })
+                    const newOption = document.createElement("option");
+                    newOption.value = typeName;
+                    newOption.textContent = typeName;
+                    let selecteurImage = document.getElementById("imgType");
+                    selecteurImage.insertBefore(newOption , selecteurImage.querySelector('option[value="__new__"]'));
+                    selectedItem.value = typeName;
+                    clientClassNames.push(typeName);
+                } else {
+                    alert("Failed to add new type: " + data.error);
                     selectElem.selectedIndex = 0;
-                });
+                }
             }
         }
         function changeType(selectedItem){
@@ -360,34 +394,34 @@
             hidden.value = selecteur.value;
         }
         function createNewMetadata(button){
-            document.querySelector('.hid-maker').classList.toggle('visible');
+            $(`.hid-maker`).classList.toggle('visible');
             if (button.innerHTML.includes('-')) {
                 button.innerHTML = button.innerHTML.replace('-', '+');
-                document.querySelector('input[name="new_metadata_key"]').required = true;
-                document.querySelector('input[name="new_metadata_desc"]').required = true;
+                $(`input[name="new_metadata_key"]`).required = true;
+                $(`input[name="new_metadata_desc"]`).required = true;
             } else {
                 button.innerHTML = button.innerHTML.replace('+', '-');
-                document.querySelector('input[name="new_metadata_key"]').value = "";
-                document.querySelector('input[name="new_metadata_key"]').required = false;
-                document.querySelector('input[name="new_metadata_desc"]').value = "";
-                document.querySelector('input[name="new_metadata_desc"]').required = false;
-                document.querySelector('input[name="new_metadata_metric"]').value = "";
-                document.querySelector('input[name="new_metadata_metric"]').hidden = true;
-                document.querySelector('input[name="new_metadata_metric"]').required = false;
-                document.querySelector('select[name="new_metadata_type"]').value = "short";
-                document.querySelector('input[name="metric_required"]').checked = false;
-                document.getElementById("enum_values").style.display = "none";
-                document.querySelector('input[name="enum_values"]').value = "";
+                $(`input[name="new_metadata_key"]`).value = "";
+                $(`input[name="new_metadata_key"]`).required = false;
+                $(`input[name="new_metadata_desc"]`).value = "";
+                $(`input[name="new_metadata_desc"]`).required = false;
+                $(`input[name="new_metadata_metric"]`).value = "";
+                $(`input[name="new_metadata_metric"]`).hidden = true;
+                $(`input[name="new_metadata_metric"]`).required = false;
+                $(`select[name="new_metadata_type"]`).value = "short";
+                $(`input[name="metric_required"]`).checked = false;
+                $(`#enum_values`).style.display = "none";
+                $(`input[name="enum_values"]`).value = "";
             }
         }
         function handleNewMetadataType(selectedItem){
             if (selectedItem.value === "enum"){
-                document.getElementById("enum_values").style.display = "block";
+                $(`#enum_values`).style.display = "block";
             } else {
-                document.getElementById("enum_values").style.display = "none";
+                $(`#enum_values`).style.display = "none";
             }
         }
-        function createNewMetadataKey(button){
+        async function createNewMetadataKey(button){
             const makerDiv = button.closest('.maker_metadata');
             const key = makerDiv.querySelector('input[name="new_metadata_key"]').value.trim();
             const desc = makerDiv.querySelector('input[name="new_metadata_desc"]').value.trim();
@@ -399,56 +433,41 @@
                 alert("Please fill in all required fields.");
                 return;
             }
-            fetch("/add_metadata_key", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    key: key,
-                    description: desc,
-                    metric: metric,
-                    type: type,
-                    metric_required: metric_required,
-                    enum_values: enum_values
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Metadata key created successfully.");
-                    document.querySelectorAll(".meta-field select[name$='[key]']").forEach(input => {
-                        console.log(input);
-                        const newOption = document.createElement("option");
-                        newOption.value = key;
-                        newOption.textContent = key;
-                        newOption.setAttribute("data-desc", desc);
-                        newOption.setAttribute("data-type", type);
-                        newOption.setAttribute("data-metric", metric);
-                        newOption.setAttribute("data-enum", enum_values);
-                        input.insertBefore(newOption, input.querySelector('option[value="type"]'));
-                    });
-                    document.getElementById("enum_values").style.display = "none";
-                    document.querySelector('.hid-maker').classList.remove('visible');
-                    document.querySelector('button[onclick="createNewMetadata(this)"]').innerHTML = document.querySelector('button[onclick="createNewMetadata(this)"]').innerHTML.replace('-', '+');
-                    clientMetadataKeys.push({
-                        key: key,
-                        "description": desc,
-                        "type": type,
-                        "metric": metric,
-                        "format_pattern": data.regex, // ou génère le regex côté client si nécessaire
-                        "enum_values": enum_values
-                    });
-                    makerDiv.querySelector('input[name="new_metadata_key"]').value = "";
-                    makerDiv.querySelector('input[name="new_metadata_desc"]').value = "";
-                    makerDiv.querySelector('input[name="new_metadata_metric"]').value = "";
-                    makerDiv.querySelector('select[name="new_metadata_type"]').value = "short";
-                    makerDiv.querySelector('input[name="metric_required"]').checked = false;
-                    makerDiv.querySelector('input[name="new_metadata_metric"]').hidden = true;
-                    makerDiv.querySelector('input[name="new_metadata_metric"]').required = false;
-                    makerDiv.querySelector('input[name="enum_values"]').value = "";
-                } else {
-                    alert("Failed to create metadata key: " + data.error);
-                }
+            const data = await apiPost('/add_metadata_key', { key: key, description: desc, metric: metric, type: type, metric_required: metric_required, enum_values: enum_values });
+            if (!data.success) {
+                alert("Failed to create metadata key: " + data.error);
+                return;
+            }
+            $$(".meta-field select[name$='[key]']").forEach(input => {
+                console.log(input);
+                const newOption = document.createElement("option");
+                newOption.value = key;
+                newOption.textContent = key;
+                newOption.setAttribute("data-desc", desc);
+                newOption.setAttribute("data-type", type);
+                newOption.setAttribute("data-metric", metric);
+                newOption.setAttribute("data-enum", enum_values);
+                input.insertBefore(newOption, input.querySelector('option[value="type"]'));
             });
+            $(`#enum_values`).style.display = "none";
+            $(`.hid-maker`).classList.remove('visible');
+            $(`button[onclick="createNewMetadata(this)"]`).innerHTML = $(`button[onclick="createNewMetadata(this)"]`).innerHTML.replace('-', '+');
+            clientMetadataKeys.push({
+                key: key,
+                "description": desc,
+                "type": type,
+                "metric": metric,
+                "format_pattern": data.regex, // ou génère le regex côté client si nécessaire
+                "enum_values": enum_values
+            });
+            makerDiv.querySelector('input[name="new_metadata_key"]').value = "";
+            makerDiv.querySelector('input[name="new_metadata_desc"]').value = "";
+            makerDiv.querySelector('input[name="new_metadata_metric"]').value = "";
+            makerDiv.querySelector('select[name="new_metadata_type"]').value = "short";
+            makerDiv.querySelector('input[name="metric_required"]').checked = false;
+            makerDiv.querySelector('input[name="new_metadata_metric"]').hidden = true;
+            makerDiv.querySelector('input[name="new_metadata_metric"]').required = false;
+            makerDiv.querySelector('input[name="enum_values"]').value = "";
         }
         function changeKey(selectElem , inputElem){
             const selectedOption = selectElem.options[selectElem.selectedIndex];
@@ -457,7 +476,7 @@
             const metric = selectedOption.getAttribute("data-metric");
             const enumValues = selectedOption.getAttribute("data-enum");
             const regex = returnRegexByName(type, enumValues);
-            let inputValue = document.querySelector(`input[name="${inputElem}"]`);
+            let inputValue = $(`input[name="${inputElem}"]`);
             inputValue.placeholder = desc ? desc : "Value";
             inputValue.value = "";
             inputValue.pattern = regex ? regex : "";  
@@ -504,176 +523,159 @@
             }
         }
         async function runAnalysis(button) {
+            isAnalyzing = true;
             button.disabled = true;
             button.innerText = "Running analysis...";
             const points_per_side = document.getElementById("points_per_side").value;
             const pred_iou_thresh = document.getElementById("pred_iou_thresh").value;
             const stability_score_thresh = document.getElementById("stability_score_thresh").value;
             const min_mask_region_area = document.getElementById("min_mask_region_area").value;
-            try {
-                const response = await fetch("/re_run_analysis", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    img_name: "{{ name }}",
-                    points_per_side: points_per_side,
-                    pred_iou_thresh: pred_iou_thresh,
-                    stability_score_thresh: stability_score_thresh,
-                    min_mask_region_area: min_mask_region_area,
-                    img_name: "{{ name }}",
-                    img_original_path: "{{ original_image_path }}",
-                    img_annotated_path: "{{ annotated_image_path }}"
-                })
+            const data = await apiPost('/re_run_analysis', {
+                img_name: "{{ name }}",
+                points_per_side: points_per_side,
+                pred_iou_thresh: pred_iou_thresh,
+                stability_score_thresh: stability_score_thresh,
+                min_mask_region_area: min_mask_region_area,
+                img_name: "{{ name }}",
+                img_original_path: "{{ original_image_path }}",
+                img_annotated_path: "{{ annotated_image_path }}"
             });
-                const html = await response.text();
-                if (!response.ok) {
-                    alert("Failed to re-analyze the image. Please try again.");
-                    button.disabled = false;
-                    button.innerText = "Run new analysis";
-                    return;
-                }
-                document.open();
-                document.write(html);
-                document.close();
-            } catch (error) {
-                alert("An error occurred while trying to re-analyze the image. Please try again.");
+            if (!data) {
                 button.disabled = false;
                 button.innerText = "Run new analysis";
+                isAnalyzing = false;
                 return;
-            } finally {
+            }
+            if (data.success) {
+                document.open();
+                document.write(data.html);
+                document.close();
+            } else {
+                alert("Failed to re-analyze the image: " + data.error);
                 button.disabled = false;
                 button.innerText = "Run new analysis";
             }
+            isAnalyzing = false;
         }
-        function addPointToAnalyse(img) {
+
+        function addOrUpdateObjectSection(data) {
+            refreshImage();
+            refreshCount(data.num_objects);
+
+            // Cloning and updating the accordion section
+            let accordion_section = document.querySelector(`.accordion-section.template`).cloneNode(true);
+            accordion_section.style.display = "block";
+            accordion_section.classList.remove("template");
+            accordion_section.querySelectorAll('[disabled]').forEach(el => el.disabled = false);
+            let accordion_header = accordion_section.querySelector(`.accordion-header`);
+            let accordion_content = accordion_section.querySelector(`.accordion-content`);
+            let obj_wrapper = accordion_content.querySelector(`.obj-wrapper`);
+            let left_obj_info = obj_wrapper.querySelector(`.left-obj-info`);
+            let right_obj_info = obj_wrapper.querySelector(`.right-obj-info`);
+            let img = left_obj_info.querySelector(`img`);
+            let hiddenInputCrop = left_obj_info.querySelector(`input`);
+
+            // --- Dynamic return data ---
+            img.src = data.image_path || data.pathObj;
+            img.alt = `Object ${data.image_id || data.new_object_id}`;
+
+            const id = data.image_id ?? data.new_object_id;
+            const class_id = data.class_id || data.new_object_id;
+            const tmpName = data.tmpName || data.nameNewObj;
+            accordion_section.id = 'obj' + id;
+            hiddenInputCrop.name = `objects[${id}][crop_path]`;
+            hiddenInputCrop.value = tmpName;
+
+            accordion_header.innerHTML = `
+                Object ID ${id} — Class ${class_id} (Confidence : 100%)
+                <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
+                    <input type="checkbox" name="merge_${id}" id="merge_${id}" title="Select this object to merge it with another one">
+                    <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object ${id}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${id}');">
+                </div>
+            `;
+
+            accordion_header.setAttribute('onclick', `toggleAccordion('obj-data${id}')`);
+            accordion_section.id = `obj${id}`;
+            accordion_content.id = `obj-data${id}`;
+
+            // --- Update dynamic fields ---
+            right_obj_info.querySelector('input[name$="[class_id]"]').name = `objects[${id}][class_id]`;
+            right_obj_info.querySelector('input[name$="[class_id]"]').value = class_id;
+
+            right_obj_info.querySelector('input[name$="[score]"]').name = `objects[${id}][score]`;
+            right_obj_info.querySelector('input[name$="[score]"]').value = 1.0;
+
+            right_obj_info.querySelector('input[name$="[bbox]"]').name = `objects[${id}][bbox]`;
+            right_obj_info.querySelector('input[name$="[bbox]"]').value = data.bbox;
+
+            let metadataContainer = right_obj_info.querySelector('.metadata-container');
+            metadataContainer.id = `meta-${id}`;
+            metadataContainer.innerHTML = `
+                <div class="meta-field">
+                    <input type="text" name="objects[${id}][type]" value="type" readonly>
+                    <select name="objects[${id}][value]" class="object_type" onchange="handleNewType(this)" required>
+                        ${clientClassNames.map(cls => `
+                            <option value="${cls}">${cls}</option>
+                        `).join('')}
+                            <option value="__new__">+ Add new type</option>
+                    </select>
+                </div>
+            `;
+            let addMetaButton = right_obj_info.querySelector('button[onclick^="addMetadataField"]');
+            addMetaButton.setAttribute('onclick', `addMetadataField('${id}')`);
+
+            $('.accordion-item').appendChild(accordion_section);
+            $('input[name="max_object_detected"]').value =
+                parseInt($('input[name="max_object_detected"]').value) + 1;
+        }
+        async function addPointToAnalyse(img) {
+            if (isAnalyzing) {
+                alert("Analysis is already in progress. Please wait.");
+                return;
+            }
+            isAnalyzing = true;
             const rect = img.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = event.clientY - rect.top;
             const xReal = Math.round(x * (img.naturalWidth / img.width));
             const yReal = Math.round(y * (img.naturalHeight / img.height));
             alert(`Point added for analysis at coordinates: (${xReal}, ${yReal})`);
-            fetch('/add_rectangle' , {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    img_name: "{{ name }}",
-                    img_original_path: "{{ original_image_path }}",
-                    img_annotated_path: "{{ annotated_image_path }}",
-                    x: Math.round(xReal),
-                    y: Math.round(yReal)
-            })
-            }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    let image_box = document.querySelector('.image-box img');
-                    image_box.src = image_box.src + '?t=' + new Date().getTime();
-                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
-                    const analysisPanel = document.getElementById('analysis-panel');
-                    /*
-                    let newPoint = document.createElement('p');
-                    let hiddenInput = document.createElement('input');
-                    hiddenInput.type = 'hidden';
-                    hiddenInput.name = 'points[]';
-                    hiddenInput.value = `(${xReal}, ${yReal})`;
-                    newPoint.className = 'point-coord';
-                    newPoint.innerText = `(${xReal}, ${yReal})`;
-                    document.querySelector('span.points-list').appendChild(newPoint);
-                    document.querySelector('span.points-list').appendChild(hiddenInput);
-                    */
-                    if (analysisPanel) analysisPanel.hidden = false;
-
-                    let accordion_section = document.querySelector('.accordion-section').cloneNode(true);
-                    let accordion_header = accordion_section.querySelector('.accordion-header');
-                    let accordion_content = accordion_section.querySelector('.accordion-content');
-                    let obj_wrapper = accordion_content.querySelector('.obj-wrapper');
-                    let left_obj_info = obj_wrapper.querySelector('.left-obj-info');
-                    let right_obj_info = obj_wrapper.querySelector('.right-obj-info');
-                    let img = left_obj_info.querySelector('img');
-                    let hiddenInputCrop = left_obj_info.querySelector('input');
-                    alert(data.image_path);
-                    img.src = data.image_path; img.alt = `Object ${data.image_id}`;
-                    hiddenInputCrop.name = `objects[${data.num_objects - 1}][crop_path]`;
-                    hiddenInputCrop.value = data.tmpName;
-                    accordion_header.innerHTML = `
-                        Object ${data.num_objects} — Class ${data.class_id} (Confidence : 100%)
-                        <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
-                            <input type="checkbox" name="merge_${data.image_id}" id="merge_${data.image_id}" title="Select this object to merge it with another one">
-                            <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object ${data.num_objects}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${data.image_id}' , '${data.num_objects}');">
-                        </div>
-                    `;
-                    accordion_header.setAttribute('onclick', `toggleAccordion('obj-data${data.image_id}')`);
-                    accordion_section.id = `obj${data.image_id}`;
-                    accordion_content.id = `obj-data${data.image_id}`;
-                    right_obj_info.querySelector('input[name$="[class_id]"]').name = `objects[${data.num_objects - 1}][class_id]`;
-                    right_obj_info.querySelector('input[name$="[score]"]').name = `objects[${data.num_objects - 1}][score]`;
-                    right_obj_info.querySelector('input[name$="[score]"]').value = 1.0;
-                    right_obj_info.querySelector('input[name$="[bbox]"]').name = `objects[${data.num_objects - 1}][bbox]`;
-                    right_obj_info.querySelector('input[name$="[bbox]"]').value = data.bbox;
-                    let metadataContainer = right_obj_info.querySelector('.metadata-container');
-                    metadataContainer.id = `meta-${data.num_objects - 1}`;
-                    metadataContainer.innerHTML = `
-                        <div class="meta-field">
-                            <input type="text" name="objects[${data.num_objects - 1}][type]" value="type" readonly>
-                            <select name="objects[${data.num_objects - 1}][value]" class="object_type" onchange="handleNewType(this)" required>
-                                {% for cls in class_name %}
-                                    <option value="{{cls}}">{{cls}}</option>
-                                {% endfor %}
-                                    <option value="__new__">+ Add new type</option>
-                            </select>
-                        </div>
-                    `;
-                    let addMetaButton = right_obj_info.querySelector('button[onclick^="addMetadataField"]');
-                    addMetaButton.setAttribute('onclick', `addMetadataField('${data.num_objects - 1}')`);
-                    document.querySelector('.accordion-item').appendChild(accordion_section);
-                    document.querySelector('input[name="max_object_detected"]').value = data.num_objects;
-                } else {
-                    alert('Failed to add point for analysis: ' + data.error);
-                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
-                }
+            const data = await apiPost('/analyse_point', {
+                img_name: "{{ name }}",
+                x: xReal,
+                y: yReal,
+                img_original_path: "{{ original_image_path }}",
+                img_annotated_path: "{{ annotated_image_path }}"
             });
+            if (data.success) {
+                alert("Object detected and added successfully.");
+                addOrUpdateObjectSection(data);
+            } else {
+                alert('Failed to add point: ' + data.error);
+            }
+            isAnalyzing = false;
         }
-        function mergeObjects(button) {
-            selectedObjects = [];
-            document.querySelectorAll('input[type="checkbox"][name^="merge_"]').forEach(checkbox => {
-                if (checkbox.checked) {
-                    const objId = checkbox.name.split('_')[1];
-                    selectedObjects.push(objId);
-                }
-            });
+        async function mergeObjects(button) {
+            const selectedObjects = Array.from($$('input[type="checkbox"][name^="merge_"]:checked'))
+                .map(cb => cb.name.split('_')[1]);
+
             if (selectedObjects.length < 2) {
                 alert("Please select at least two objects to merge.");
                 return;
             }
             if (!confirm(`Are you sure you want to merge the selected objects: ${selectedObjects.join(', ')}?`)) return;
-            fetch('/merge_objects', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    obj_ids: selectedObjects,
-                    img_name: "{{ name }}",
-                    img_original_path: "{{ original_image_path }}",
-                    img_annotated_path: "{{ annotated_image_path }}"
-            })
-            }).then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    let image_box = document.querySelector('.image-box img');
-                    image_box.src = image_box.src + '?t=' + new Date().getTime();
-                    document.getElementById('num-objects').innerText = document.getElementById('num-objects').innerText.replace(/\d+/, data.num_objects);
-                    selectedObjects.forEach(objId => {
-                        const objElement = document.getElementById(`obj${objId}`);
-                        if (objElement) objElement.remove();
-                    });
-                    // The idea will be to create the merge object and delete the others.
-                     // to avoid eslint warning
-                } else {
-                    alert('Failed to merge objects: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while trying to merge objects.');
+            const data = await apiPost('/merge_objects', {
+                obj_ids: selectedObjects,
+                img_name: "{{ name }}",
+                img_original_path: "{{ original_image_path }}",
+                img_annotated_path: "{{ annotated_image_path }}"
             });
+            if (data.success) {
+                selectedObjects.forEach(id => document.getElementById(`obj${id}`)?.remove());
+                addOrUpdateObjectSection(data);
+            } else {
+                alert('Failed to merge objects: ' + data.error);
+            }
         }
     </script>
 </html>
