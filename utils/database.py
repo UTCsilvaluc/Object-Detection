@@ -286,6 +286,26 @@ def check_if_class_exist(name):
     finally:
         close_db_connection(conn)
 
+def check_if_title_exist(title):
+    """
+    Check if an image title with the given title exists in the Image table.
+    :param title: str
+    :return: bool ; True if exists, False otherwise
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM Image WHERE title = %s;", (title,))
+        exists = cur.fetchone() is not None
+        return exists
+    except Exception as e:
+        print(f"Error checking title existence: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
 def check_if_metadata_key_exist(key):
     """
     Check if a metadata key with the given key exists in the MetadataDefinition table.
@@ -532,6 +552,27 @@ def get_all_metadata_keys():
         return keys
     except Exception as e:
         print(f"Error fetching metadata keys: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_image_title():
+    """
+    Get all image titles from the Image table.
+    :return: list of strings or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = "SELECT title FROM Image;"
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        titles = [row[0] for row in rows]
+        return titles
+    except Exception as e:
+        print(f"Error fetching image titles: {e}")
         return []
     finally:
         close_db_connection(conn)

@@ -137,13 +137,19 @@ def get_form_metadata(request):
     :request: Flask request object containing form data
     Returns a dictionary with metadata fields. 
     """
+    longitude = empty_to_none(request.form.get("img_longitude"))
+    latitude = empty_to_none(request.form.get("img_latitude"))
+    if longitude is not None:
+        longitude = longitude.replace(',', '.')
+    if latitude is not None:
+        latitude = latitude.replace(',', '.')
     return {
         "name": empty_to_none(request.form.get("img_name")),
         "desc": empty_to_none(request.form.get("img_desc")),
         "date": empty_to_none(request.form.get("img_date")),
         "location": empty_to_none(request.form.get("img_location")),
-        "latitude": empty_to_none(request.form.get("img_latitude")),
-        "longitude": empty_to_none(request.form.get("img_longitude")),
+        "latitude": latitude,
+        "longitude": longitude,
         "source": empty_to_none(request.form.get("img_source")),
         "type": empty_to_none(request.form.get("type"))
     }
@@ -351,6 +357,15 @@ def return_regex_by_name(name: str , enum_values: str = None) -> str:
         "string": r'^.*$',                                          
     }
     return patterns.get(name, r'^.*$')
+
+def control_coordinate_format(value: str) -> bool:
+    """
+    Validate if the provided value matches the coordinate format.
+    :value: string representation of the coordinate
+    Returns True if the value matches the coordinate regex pattern, otherwise False.
+    """
+    reg = regex.compile(r"^-?\d{1,3}(?:[.,]\d+)?$")
+    return bool(reg.match(value))
 
 def clean_numpy(obj):
     if isinstance(obj, np.generic):  # ex: np.int64, np.float32

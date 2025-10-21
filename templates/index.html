@@ -15,7 +15,7 @@
             <input type="file" id="image" name="image" accept="image/*" required>
 
             <label for="img_name">Image Name (画像名)</label>
-            <input type="text" id="img_name" name="img_name" placeholder="Enter image name / 画像名を入力" required>
+            <input type="text" id="img_name" name="img_name" placeholder="Enter image name / 画像名を入力" onchange="checkTitleAvailability(this)" required>
 
             <label for="img_desc">Description (説明)</label>
             <input type="text" id="img_desc" name="img_desc" placeholder="Enter description / 説明を入力">
@@ -42,6 +42,17 @@
         </form>
     </div>
     <script>
+        const titles = {{ titles|tojson }};
+        function checkTitleAvailability(){
+            const titleInput = document.getElementById("img_name");
+            const title = titleInput.value.trim();
+            if (titles.includes(title)){
+                alert("The image name already exists. Please choose a different name. 画像名は既に存在します。別の名前を選んでください。");
+                titleInput.focus();
+                return false;
+            }
+            return true;
+        }
         function checkIfCoordinateMatch(){
             const reg = RegExp("^-?\\d{1,3}(?:[.,]\\d+)?$");
             const lat = document.getElementById("img_latitude").value;
@@ -54,7 +65,19 @@
             }
             return true;
         }
-        document.querySelector("form").onsubmit = checkIfCoordinateMatch;
+        function validateForm(event) {
+            if (!checkTitleAvailability() || !checkIfCoordinateMatch()) {
+                event.preventDefault();
+                return false;
+            }
+            return true;
+        }
+        document.getElementById("image").addEventListener("change", e => {
+            const file = e.target.files[0];
+            if (file) document.body.insertAdjacentHTML("beforeend", `<img src="${URL.createObjectURL(file)}" style="max-width:200px;">`);
+        });
+
+        document.querySelector("form").addEventListener("submit", validateForm);
     </script>
 </body>
 </html>

@@ -7,14 +7,16 @@ from utils.database import (
     get_image_by_id,
     get_versions_by_image_id,
     get_objects_by_image_version,
-    get_metadata_by_object_id
+    get_metadata_by_object_id,
+    get_all_image_title,
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
 
 @main_routes_bp.route('/')
 def index():
-    return render_template('index.html')
+    titles = get_all_image_title()
+    return render_template('index.html', titles=titles)
 
 @main_routes_bp.route('/gallery')
 def gallery():

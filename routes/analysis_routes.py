@@ -13,7 +13,8 @@ from utils.helper import (
     draw_annotations,
     get_next_id_available,
     get_form_metadata,
-    fileStorage_to_image
+    fileStorage_to_image,
+    control_coordinate_format
 )
 
 from .main_routes import clear_temp
@@ -26,7 +27,8 @@ from models.pretrained_models import (
 )
 from utils.database import (
     get_all_classes,
-    get_all_metadata_keys
+    get_all_metadata_keys,
+    check_if_title_exist
 )
 
 analysis_bp = Blueprint("analysis", __name__)
@@ -184,8 +186,9 @@ def upload():
     file = request.files['image']
     if not file:
         return "No file uploaded", 400
-    
     filename = file.filename
+    if check_if_title_exist(filename):
+        return f"The image name '{filename}' already exists. Please choose a different name. 画像名 '{filename}' は既に存在します。別の名前を選んでください。", 400
     img_cv = fileStorage_to_image(file)
     if img_cv is None:
         return "Invalid image file", 400
@@ -218,7 +221,10 @@ def upload():
 
     json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
-
+    if (metadata.get("latitude") and not control_coordinate_format(metadata.get("latitude"))) or \
+       (metadata.get("longitude") and not control_coordinate_format(metadata.get("longitude"))):
+        os.remove(img_path)
+        return "Invalid coordinate format for latitude or longitude. 緯度または経度の座標形式が無効です。", 400
     JSON_data = {
         "image_name": img_name,
         "description": metadata.get("desc"),
