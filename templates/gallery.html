@@ -9,7 +9,7 @@
 <body>
     <div class="gallery-container">
         {% for image in images %}
-        <div class="gallery-item" onclick="window.location.href='{{ url_for('view_image', image_id=image.image_id) }}'">
+        <div class="gallery-item" onclick="window.location.href='{{ url_for('main_routes.view_image', image_id=image.image_id) }}'">
             <img src="{{ url_for('static', filename='img/Images/' + image.file_path) }}" alt="{{ image.title }}">
             <div class="info">
                 <h3>Title : {{ image.title }}</h3>
