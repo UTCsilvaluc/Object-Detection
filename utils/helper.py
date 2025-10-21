@@ -11,15 +11,19 @@ from PIL import Image
 import regex
 import numpy as np
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
+ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
+
 def build_json_temp_path(extension=None):
     """
     Build and normalize the path for temporary JSON storage. 
     :extension: (optional) The filename (e.g., 'data.json'). 
     If not provided, returns the directory path.
     """
+    json_dir = os.path.join(ROOT_DIR, "static", "temp", "json")
     if extension is None:
-        return os.path.join("static", "temp", "json")
-    return os.path.join("static", "temp", "json", extension)
+        return json_dir
+    return os.path.join(json_dir, extension)
 
 def build_img_temp_path(extension=None):
     """
@@ -27,9 +31,10 @@ def build_img_temp_path(extension=None):
     :extension: (optional) The filename (e.g., 'data.jpg').
     If not provided, returns the directory path.
     """
+    img_dir = os.path.join(ROOT_DIR, "static", "temp", "img")
     if extension is None:
-        return os.path.join("static", "temp", "img")
-    return os.path.join("static", "temp", "img", extension)
+        return img_dir
+    return os.path.join(img_dir, extension)
 
 def save_temp_img(img_array, obj_index: int):
     """
@@ -69,7 +74,7 @@ def normalize_path(path):
     if path is None:
         return None
     if not os.path.isabs(path):
-        return os.path.join(os.getcwd(), build_img_temp_path(path))
+        return os.path.join(ROOT_DIR, build_img_temp_path(path))
     return path
 
 def save_image_permanently(temp_path, dest_dir, new_name):
@@ -80,6 +85,8 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     :new_name: new name for the image file (e.g., 'image1.jpg')
     Returns the absolute path of the moved image.
     """
+    temp_path = os.path.join(ROOT_DIR, temp_path) if not os.path.isabs(temp_path) else temp_path
+    dest_dir = os.path.join(ROOT_DIR, dest_dir) if not os.path.isabs(dest_dir) else dest_dir
     os.makedirs(dest_dir, exist_ok=True)
     dest_path = os.path.join(dest_dir, new_name)
     if not os.path.exists(temp_path):
@@ -151,6 +158,7 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     :annotated_image_path: Temp path of annotated image, please have it in static folder
     :original_image_path: Temp path of original image please have it in static folder
     """
+    upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     img_path = save_image_permanently(
         original_image_path, upload_folder, f"{img_name}_original.jpg"
     )
@@ -220,6 +228,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     :upload_folder: directory where cropped object images should be saved permanently
     Returns a dictionary with data of all processed objects.
     """
+    upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     objects_data = {}
     for i in range(max_objects):
         class_id = request.form.get(f"objects[{i}][class_id]")
