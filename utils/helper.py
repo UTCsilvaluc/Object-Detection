@@ -6,6 +6,8 @@ import shutil
 import json
 from utils.database import *
 from ultralytics.utils.plotting import colors
+import io
+from PIL import Image
 import regex
 import numpy as np
 
@@ -374,3 +376,20 @@ def draw_annotations(image, objects):
             cv2.putText(image, f"{obj['class_id']}:{obj['score']:.2f}", (x1, y1 - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_bgr, 2)
     return image
+
+def fileStorage_to_image(file_storage):
+    """
+    Convert a Flask FileStorage object to an OpenCV image.
+    :param file_storage: Flask FileStorage object
+    :return: OpenCV image (numpy array) or None if conversion fails
+    """
+    img_bytes = file_storage.read()
+    img_bytes = io.BytesIO(img_bytes)
+    try:
+        img = Image.open(img_bytes).convert("RGB")
+    except Exception as e:
+        return None
+    img_array = np.array(img)
+    #PIL -> OpenCV
+    img = cv2.cvtColor(img_array , cv2.COLOR_RGB2BGR)
+    return img

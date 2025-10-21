@@ -62,6 +62,7 @@
             </div>
             <div class="image-box">
                 <img src="{{ url_for('temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result" onclick="addPointToAnalyse(this , event);">
+                <img src="{{ url_for('temp_img', filename=original_image_path) }}" alt="Original Image" class="original-image" onclick="addPointToAnalyse(this , event);" >
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ name }}</p>

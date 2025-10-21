@@ -10,6 +10,8 @@ from segment_anything import SamAutomaticMaskGenerator
 from models.pretrained_models import defautlSamParameters , sam_predictor
 import os
 import json
+from PIL import Image
+import io
 app = Flask(__name__)
 
 UPLOAD_FOLDER = "static/img/Images" #Flask travaille automatiquement avec le dossier static
@@ -97,44 +99,49 @@ def analyse_point():
     result_data["num_objects"] = len(result_data["objects"])
     result_data = result_data
     new_annotated_img = draw_annotations(img, result_data["objects"])
-    cv2.imwrite(img_annotated_path, cv2.cvtColor(new_annotated_img, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(img_annotated_path, new_annotated_img)
     save_json(result_data, build_json_temp_path(), img_name)
     return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": path , "bbox": bbox , "tmpName": temp_object_name}, 200
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    image = request.files['image']
-    if not image:
-        return "No image uploaded", 400
-    img_path = build_img_temp_path(image.filename)
+    file = request.files['image']
+    if not file:
+        return "No file uploaded", 400
+    
+    filename = file.filename
+    img_cv = fileStorage_to_image(file)
+    if img_cv is None:
+        return "Invalid image file", 400
+    img_path = build_img_temp_path(filename)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(build_img_temp_path() , exist_ok=True)
-    image.save(img_path)
+    success = cv2.imwrite(img_path, img_cv)
+    if not success:
+        return "Failed to save image", 500
 
     # Récupération des métadonnées via helper
     metadata = get_form_metadata(request)
     img_name = metadata.get("name", "unnamed")
     # Chargement image + YOLO
-    img = cv2.imread(img_path)
     model_name = "yolo"
     model = ModelFactory.get_model(model_name)
-    raw_results , img , img_result  = model.run(img_path)
-    result_data = model.process_results(raw_results , img , img_result)
+    raw_results , _ , img_result  = model.run(img_path)
+    result_data = model.process_results(raw_results , img_cv , img_result)
 
     # Traitement des résultats YOLO
     model = "YOLOv8"
     if result_data["num_objects"] == 0:
         print("No objects detected with YOLO, switching to SAM...")
         model = ModelFactory.get_model("sam")
-        raw_results , img , img_result  = model.run(img_path)
-        result_data = model.process_results(raw_results , img)
+        raw_results , _ , img_result  = model.run(img_path)
+        result_data = model.process_results(raw_results , img_cv)
         model = "SAM"
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
-    _ , original_rel_path = save_temp_img(img, "original")
+    _ , original_rel_path = save_temp_img(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), "original")
 
     json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
-    os.remove(img_path)
 
     JSON_data = {
         "image_name": img_name,
@@ -150,6 +157,7 @@ def upload():
     save_json(JSON_data, json_dir, img_name)
     class_name = get_all_classes()
     metadata_keys = get_all_metadata_keys()
+    os.remove(img_path)
     return render_template(
         "result.html",
         result=result_data,
@@ -370,7 +378,7 @@ def merge_objects():
     save_json(result_data, build_json_temp_path(), img_name)
     #Réannotation de l'image
     image = draw_annotations(image, result_data["objects"])
-    cv2.imwrite(img_annotated_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(img_annotated_path, image)
     return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":str(path) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"]))}, 200
 @app.route('/remove_object', methods=['POST'])
 def remove_object():
@@ -404,13 +412,12 @@ def remove_object():
     if os.path.exists(img_annotated_path):
         os.remove(img_annotated_path)
 
-    cv2.imwrite(img_annotated_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(img_annotated_path, image)
 
     return {"success": True, "num_objects": len(objects)}, 200
 
 @app.route('/clear_temp', methods=['POST'])
 def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None):
-    return
     data = request.get_json() if json_name is None else {}
     json_name = data.get("img_name", "") if not json_name else json_name
     json_dir = build_json_temp_path(f"{json_name}.json")
