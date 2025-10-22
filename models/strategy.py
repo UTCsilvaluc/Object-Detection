@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 import os
+from .helpers import segment_object_with_sam
 from .pretrained_models import yolo_model , mask_generator , segment_sam
 from .process_detection import process_yolo_results , process_SAM
+from utils.helper import save_temp_img , build_img_temp_path
 import cv2
 import numpy as np
 class BaseModelStrategy(ABC):
@@ -31,6 +33,16 @@ class BaseModelStrategy(ABC):
         :return: mask , bbox , contours of the merged object.
         """
         pass
+    @abstractmethod
+    def generate_embedding(self, image_crop_path):
+        """
+        Generate embedding for a given image crop.
+        :param image_crop_path: Path to the image crop.
+        :return: Embedding vector.
+        """
+        from .object_embedding import generate_embedding_from_crop
+        embedding = generate_embedding_from_crop(image_crop_path)
+        return embedding    
 
 class YOLOStrategy(BaseModelStrategy):
     def __init__(self , save_dir="img/ModelGen/YOLO"):
@@ -46,10 +58,22 @@ class YOLOStrategy(BaseModelStrategy):
         cv2.imwrite(save_path, cv2.cvtColor(img_result, cv2.COLOR_RGB2BGR))
         return results , img , img_result 
     def process_results(self, results, img , img_result):
-        return process_yolo_results(results, img , img_result)
+        return process_yolo_results(self, results, img , img_result)
     def merge_objects(self, image , *objects):
         # Implémentation de la fusion des objets détectés
         pass
+    def generate_embedding(self, img_rgb , bbox , predictor):
+        """
+        YOLO embedding generation using SAM for precise segmentation.
+        Otherwise, backgrounds or other objects may interfere with the embedding.
+        """
+        crop_object , mask = segment_object_with_sam(img_rgb, bbox, predictor)
+        _ , crop_path = save_temp_img(crop_object, "temp_embedding")
+        from .object_embedding import generate_embedding_from_crop
+        embedding = generate_embedding_from_crop(build_img_temp_path(crop_path))
+        os.remove(build_img_temp_path(crop_path))  # Nettoyer le crop temporaire
+        return embedding
+
 
 class SAMStrategy(BaseModelStrategy):
     def __init__(self , save_dir="img/ModelGen/SAM"  , mask_generator=mask_generator):
@@ -61,7 +85,7 @@ class SAMStrategy(BaseModelStrategy):
         masks , img , img_result = segment_sam(image_path=image_path , mask_generator=mg)
         return masks , img , img_result
     def process_results(self, masks , img):
-        return process_SAM(masks , img)
+        return process_SAM(self, masks , img)
     def merge_objects(self, image, *objects):
         H, W = image.shape[:2]
         merged_mask = np.zeros((H, W), dtype=np.uint8)

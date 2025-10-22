@@ -14,7 +14,8 @@ from utils.helper import (
     get_next_id_available,
     get_form_metadata,
     fileStorage_to_image,
-    control_coordinate_format
+    control_coordinate_format,
+    get_similar_objects
 )
 
 from .main_routes import clear_temp
@@ -28,7 +29,7 @@ from models.pretrained_models import (
 from utils.database import (
     get_all_classes,
     get_all_metadata_keys,
-    check_if_title_exist
+    check_if_title_exist,
 )
 
 analysis_bp = Blueprint("analysis", __name__)
@@ -155,6 +156,9 @@ def re_run_analysis():
 
     json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
+    objects = result_data.get("objects", [])
+    get_similar_objects(objects , top_k=5)
+    result_data["objects"] = objects
     JSON_data = {
         "image_name": img_name,
         "desc": img_data.get("description"),
@@ -225,6 +229,9 @@ def upload():
        (metadata.get("longitude") and not control_coordinate_format(metadata.get("longitude"))):
         os.remove(img_path)
         return "Invalid coordinate format for latitude or longitude. 緯度または経度の座標形式が無効です。", 400
+    # Getting similar objects of detected objects :
+    objects = result_data.get("objects", [])
+    get_similar_objects(objects , top_k=5)
     JSON_data = {
         "image_name": img_name,
         "description": metadata.get("desc"),
@@ -234,9 +241,11 @@ def upload():
         "longitude": metadata.get("longitude"),
         "source": metadata.get("source"),
         "num_objects": result_data["num_objects"],
-        "objects": result_data.get("objects", [])
+        "objects": objects
     }
     save_json(JSON_data, json_dir, img_name)
+    if (result_data.get("objects")):
+        result_data["objects"] = objects
     class_name = get_all_classes()
     metadata_keys = get_all_metadata_keys()
     os.remove(img_path)

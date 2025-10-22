@@ -1,7 +1,13 @@
 import cv2
 import numpy as np  
-from utils.helper import save_temp_img
-def process_yolo_results(results, img, img_result):
+from utils.helper import save_temp_img , build_img_temp_path
+from .object_embedding import generate_embedding_from_crop
+from models.pretrained_models import sam_predictor
+import numpy as np
+import cv2
+import os
+
+def process_yolo_results(self,results, img, img_result):
     """
     Traite les résultats YOLO :
     - Retourne le nombre d'objets détectés
@@ -22,18 +28,20 @@ def process_yolo_results(results, img, img_result):
     objects = []
     for idx, (box, cls_id, score) in enumerate(zip(boxes, cls_ids, scores)):
         x_min, y_min, x_max, y_max = map(int, box)
+        x_min, y_min, x_max, y_max = map(int, box)
         obj_crop = img_rgb[y_min:y_max, x_min:x_max]
 
         # Encoder crop en base64
         # dans process_yolo_results, même principe
         _ , obj_crop_path = save_temp_img(obj_crop, idx)
-
+        embedding_vector = self.generate_embedding(img_rgb , box , sam_predictor).tolist()
         objects.append({
             "class_id": int(cls_id),
             "id": int(idx),
             "score": float(score),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
             "obj_crop_path": obj_crop_path,   # chemin relatif pour template # chemin absolu pour sauvegarde
+            "embedding": embedding_vector
         })
 
 
@@ -42,7 +50,7 @@ def process_yolo_results(results, img, img_result):
         "objects": objects
     }
 
-def process_SAM(masks , img):
+def process_SAM(self,masks , img):
     """
     Handle SAM results:
     - Returns the number of detected objects
@@ -68,6 +76,7 @@ def process_SAM(masks , img):
         else:
             obj_crop = obj_img
         _ , obj_crop_path = save_temp_img(obj_crop, idx)
+        embedding_vector = self.generate_embedding(build_img_temp_path(obj_crop_path)).tolist()
         contours , _ = cv2.findContours(segment , cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             contour_points = [[int(x) , int(y)] for x , y in contours[0].squeeze().tolist()]
@@ -79,7 +88,8 @@ def process_SAM(masks , img):
             "score": float(mask.get("score", 1.0)),
             "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
             "contour": contour_points,
-            "obj_crop_path": obj_crop_path
+            "obj_crop_path": obj_crop_path,
+            "embedding": embedding_vector
         })
 
     return {

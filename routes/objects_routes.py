@@ -87,7 +87,6 @@ def remove_object():
     result_data = load_json(json_file_path)
     if result_data is None:
         return {"error": f"Failed to load JSON file: {json_file_path}"}, 404
-    # Supprimer l'objet correspondant
     objects = result_data.get("objects", [])
     obj_to_delete = next((obj for obj in objects if obj.get("id") == id), None)
     if obj_to_delete:
@@ -98,13 +97,9 @@ def remove_object():
     else:
         return {"error": "Object not found in JSON"}, 404
 
-    # Sauvegarde du JSON mis à jour
     save_json(result_data, build_json_temp_path(), img_name)
-    # Réannotation de l'image
     image = cv2.imread(img_original_path)
     image = draw_annotations(image, objects)
-    # Remplacer l'ancienne image annotée
-    print(f"Suppression de l'ancien fichier annoté: {img_annotated_path}")
     if os.path.exists(img_annotated_path):
         os.remove(img_annotated_path)
 

@@ -74,6 +74,7 @@
         }
         document.getElementById("image").addEventListener("change", e => {
             const file = e.target.files[0];
+            document.querySelectorAll("body > img").forEach(img => img.remove());
             if (file) document.body.insertAdjacentHTML("beforeend", `<img src="${URL.createObjectURL(file)}" style="max-width:200px;">`);
         });
 

@@ -13,7 +13,7 @@
             <div class="top-left">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px;">
                     <h1>AI Image Analysis</h1>
-                    <button id="new-analysis-btn" type="button" class="primary-btn" onclick="document.getElementById('analysis-panel').classList.toggle('visible')">Try a new AI Analysis</button>
+                    <button id="new-analysis-btn" type="button" class="primary-btn" onclick="document.getElementById('analysis-panel').classList.toggle('visible') ; isSubmitting=true">Try a new AI Analysis</button>
                 </div>
                 <div>
                     <div id="analysis-panel" class="analysis-panel" hidden>
@@ -87,7 +87,7 @@
         <!-- RIGHT PANEL -->
         <div class="right-panel">
             <h2>Detected Objects</h2>
-                <form action="{{url_for('save.save_metadata')}}" method="post">
+                <form action="{{url_for('save.save_metadata')}}" id="data_form" method="post">
                     <input type="hidden" name="img_name" value="{{ name }}">
                     <input type="hidden" name="img_desc" value="{{ desc }}">
                     <input type="hidden" name="img_date" value="{{ date }}">
@@ -166,6 +166,34 @@
                                             <button type="button" onclick="addMetadataField('{{ obj.id }}')">+ Add metadata</button>
                                         </div>
                                     </div>
+                                    {% if obj.similar_objects and obj.similar_objects|length > 0 %}
+                                    <div class="similar-container">
+                                        <button type="button" onclick="showSimilar(this)">Show similar objects</button>
+                                        {% for sim_obj in obj.similar_objects %}
+                                        <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">
+                                        
+                                                <div class="left-similar">
+                                                    <p><strong>Object ID:</strong> {{ sim_obj.object_id }} </p>
+                                                    <p><strong>Similarity Score:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
+                                                    <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}" alt="Similar Object {{ sim_obj.object_id }}">
+                                                </div>
+                                                <div class="right-similar">
+                                                    <div class="obj-meta">
+                                                        <h3>Metadatas of the similar object : </h1>
+                                                        {% if sim_obj.metadata | length > 0 %}
+                                                            {% for elem in sim_obj.metadata %}
+                                                                <p><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
+                                                            {% endfor %}
+                                                        {% else %}
+                                                            <p>No metadata available for this object.</p>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                        
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </div>
                             {% endfor %}
@@ -280,7 +308,7 @@
         function refreshCount(numObjects){
             $('#num-objects').innerText = $('#num-objects').innerText.replace(/\d+/, numObjects);
         }
-        $('form').addEventListener('submit', function(event) {
+        $('#data_form').addEventListener('submit', function(event) {
             if (isSubmitting) {
                 event.preventDefault();
                 return;
@@ -676,6 +704,15 @@
                 addOrUpdateObjectSection(data);
             } else {
                 alert('Failed to merge objects: ' + data.error);
+            }
+        }
+        function showSimilar(button){
+            button.innerText = button.innerText === "Show similar objects" ? "Hide similar objects" : "Show similar objects";
+            const objWrapper = button.nextElementSibling; 
+            if (objWrapper && button.innerText === "Hide similar objects") {
+                objWrapper.style.display = "flex";
+            } else {
+                objWrapper.style.display = "none";
             }
         }
     </script>

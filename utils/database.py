@@ -98,10 +98,12 @@ def insert_annoted_image(image_id, file_path, model=None):
     finally:
         close_db_connection(conn)
 
-def insert_metadata(object_id: int , image_id: int , key: str , value: str):
+def insert_metadata(object_id: int , version_number: int , image_id: int , key: str , value: str):
     """
     Insert a new metadata record into the Metadata table.
+    (object_id , version_number , image_id) are foreign keys referencing ObjectInstance table.
     :param object_id: int
+    :param version_number: int
     :param image_id: int
     :param key: str , must exist in MetadataDefinition table
     :param value: str
@@ -113,10 +115,10 @@ def insert_metadata(object_id: int , image_id: int , key: str , value: str):
     try:
         cur = conn.cursor()
         insert_query = """
-        INSERT INTO Metadata (object_id, image_id, key, value)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO Metadata (object_id, version_number, image_id, key, value)
+        VALUES (%s, %s, %s, %s, %s)
         """
-        cur.execute(insert_query, (object_id, image_id, key, value))
+        cur.execute(insert_query, (object_id, version_number, image_id, key, value))
         conn.commit()
         cur.close()
         return True
@@ -573,6 +575,83 @@ def get_all_image_title():
         return titles
     except Exception as e:
         print(f"Error fetching image titles: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_instance_object_by_object_id(object_id: int):
+    """
+    Get all object instances for a specific object ID.
+    :param object_id: int ; must be a valid object_id in the ObjectInstance table
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
+        FROM ObjectInstance OBJ
+        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id 
+        WHERE OBJ.object_id = %s;
+        """
+        cur.execute(query, (object_id,))
+        rows = cur.fetchall()
+        instances = []
+        for row in rows:
+            instances.append({
+                "image_id": row[0],
+                "version_number": row[1],
+                "coords_x": row[2],
+                "coords_y": row[3],
+                "width": row[4],
+                "height": row[5],
+                "confidence_score": row[6],
+                "cropped_file_path": row[7],
+                "class": row[8],
+                "metadata_key": row[9],
+                "metadata_value": row[10],
+            })
+        cur.close()
+        return instances
+    except Exception as e:
+        print(f"Error fetching object instances by object ID: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def find_similar_objects(embedding: list, top_k: int = 5):
+    """
+    Find similar objects based on the provided embedding using cosine similarity.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+
+        # Convert the embedding list to PostgreSQL vector format
+        vector_str = "[" + ",".join(map(str, embedding)) + "]"
+
+        query = """
+        SELECT object_id, name, embedding <-> %s::vector AS distance
+        FROM Object
+        WHERE embedding IS NOT NULL
+        ORDER BY distance ASC
+        LIMIT %s;
+        """
+
+        cur.execute(query, (vector_str, top_k))
+        rows = cur.fetchall()
+        similar_objects = [
+            {"object_id": row[0], "name": row[1], "distance": row[2]}
+            for row in rows
+        ]
+        cur.close()
+        return similar_objects
+    except Exception as e:
+        print(f"Error finding similar objects: {e}")
         return []
     finally:
         close_db_connection(conn)

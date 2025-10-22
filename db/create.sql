@@ -92,14 +92,14 @@ CREATE TABLE MetadataDefinition(
 
 CREATE TABLE Metadata (
     object_id INT NOT NULL,
+    version_number INT NOT NULL,
     image_id INT NOT NULL,
     key TEXT NOT NULL,
     value TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (object_id) REFERENCES Object(object_id) ON DELETE CASCADE,
-    FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
+    FOREIGN KEY (object_id, version_number, image_id) REFERENCES ObjectInstance(object_id, version_number, image_id) ON DELETE CASCADE,
     FOREIGN KEY (key) REFERENCES MetadataDefinition(key) ON DELETE CASCADE,
-    PRIMARY KEY (object_id, image_id, key)
+    PRIMARY KEY (object_id, version_number, image_id, key)
 );
 
 INSERT INTO Class (name, description) VALUES

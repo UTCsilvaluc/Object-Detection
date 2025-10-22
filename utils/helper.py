@@ -93,7 +93,6 @@ def save_image_permanently(temp_path, dest_dir, new_name):
         raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")
     if os.path.exists(dest_path):
         raise FileExistsError(f"Destination file {dest_path} already exists.")
-    print(f"Moving file from {temp_path} to {dest_path}.")
     shutil.move(temp_path, dest_path)
     return dest_path
 
@@ -154,7 +153,7 @@ def get_form_metadata(request):
         "type": empty_to_none(request.form.get("type"))
     }
 
-def handle_save_images(metadata , img_name , model , upload_folder , annotated_image_path , original_image_path):
+def handle_save_images(metadata , img_name , model , upload_folder , annotated_image_path , original_image_path , json_data = None):
     """
     Handle saving original and annotated images permanently and inserting their records into the database.
     :metadata: dictionary containing image metadata
@@ -201,7 +200,7 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     version_number = insert_annoted_image(image_id, version_file_name_in_db, model=model)
     return image_id , version_number 
 
-def handle_metadata(request , obj_index , object_id , image_id):
+def handle_metadata(request , obj_index , object_id , version_number , image_id):
     """
     Handle metadata for a detected object from the form in the request.
     Return metadata for a specific object.
@@ -218,12 +217,12 @@ def handle_metadata(request , obj_index , object_id , image_id):
         meta_value = request.form.get(f"objects[{obj_index}][metadata][{meta_index}][value]")
         if meta_key is None or meta_value is None:
             break
-        insert_metadata(object_id, image_id, meta_key, meta_value)
+        insert_metadata(object_id, version_number , image_id, meta_key, meta_value)
         metadata[meta_key] = meta_value
         meta_index += 1
     return metadata
 
-def handle_detected_objects(request, img_name, image_id, version_number, max_objects , upload_folder):
+def handle_detected_objects(request, img_name, image_id, version_number, max_objects , upload_folder , json_data = None):
     """
     Handle detected objects from the form in the request and insert them into the database.
     :request: Flask request object containing form data
@@ -236,15 +235,17 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     """
     upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     objects_data = {}
+    objects = json_data.get("objects", []) if json_data else []
     for i in range(max_objects):
         class_id = request.form.get(f"objects[{i}][class_id]")
         if class_id is None:
             continue
-
         score = request.form.get(f"objects[{i}][score]")
         bbox = request.form.get(f"objects[{i}][bbox]")
         coords_x, coords_y, width, height = parse_bbox(bbox)
         score = float(score) if score is not None else None
+        current_object_json = next((obj for obj in objects if obj.get("id") == i), {})
+        embedding = current_object_json.get("embedding", None)
         instance_value = request.form.get(f"objects[{i}][value]")
 
         # Sauvegarde du crop
@@ -257,6 +258,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
             name=f"{img_name}_obj{i}",
             description=f"Detected object {i} in image {img_name}",
             type=class_id,
+            embedding=embedding
         )
 
         create_instance_object(
@@ -273,7 +275,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         )
 
         # Métadonnées spécifiques à l'objet
-        obj_metadata = handle_metadata(request, i, object_id, image_id)
+        obj_metadata = handle_metadata(request, i, object_id, version_number, image_id)
 
         objects_data[f"object_{i}"] = {
             "class_id": class_id,
@@ -417,3 +419,63 @@ def fileStorage_to_image(file_storage):
     #PIL -> OpenCV
     img = cv2.cvtColor(img_array , cv2.COLOR_RGB2BGR)
     return img
+
+def get_similar_objects(objects, top_k=5):
+    """
+    :param objects: List of objects with embeddings. From JSON . Format : [{"object_id": int , "embedding": [float, float, ...]}]
+    :param top_k: Maximum number of similar objects to retrieve for each object.
+    :return: Updates the objects list by adding a 'similar_objects' key to each object, containing a list of similar objects with their distances.
+    The list is sorted by distance in ascending order. The first obj similar object is the most similar one : obj["similar_objects"][0]
+    """
+    similarity_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
+
+    for idx, obj in enumerate(objects):
+        similar_object_details = []
+        similar_objects = find_similar_objects(obj["embedding"], top_k)
+
+        if not similar_objects:
+            objects[idx]['similar_objects'] = []
+            continue
+
+        for threshold in similarity_thresholds:
+            found = False
+
+            for sim_obj in similar_objects:
+                if sim_obj["distance"] >= threshold:
+                    continue  
+
+                instance = get_instance_object_by_object_id(sim_obj['object_id'])
+                data_sim_obj = {
+                    "object_id": sim_obj['object_id'],
+                    "distance": sim_obj['distance'],
+                    "class": None,
+                    "cropped_file_path": None,
+                    "metadata": []
+                }
+
+                # --- Cas 1 : get_instance return a dict ---
+                if isinstance(instance, dict):
+                    data_sim_obj["class"] = instance.get("class")
+                    data_sim_obj["cropped_file_path"] = instance.get("cropped_file_path")
+                    if "metadata" in instance:
+                        data_sim_obj["metadata"] = instance["metadata"]
+
+                # --- Cas 2 : get_instance return a list of items ---
+                elif isinstance(instance, list):
+                    for item in instance:
+                        if "class" in item:
+                            data_sim_obj["class"] = item["class"]
+                        if "cropped_file_path" in item:
+                            data_sim_obj["cropped_file_path"] = item["cropped_file_path"]
+                        if "metadata_key" in item and "metadata_value" in item and item["metadata_key"] and item["metadata_value"]:
+                            data_sim_obj["metadata"].append({ "key": item["metadata_key"], "value": item["metadata_value"] })
+                if data_sim_obj["class"] and data_sim_obj["cropped_file_path"]:
+                    similar_object_details.append(data_sim_obj)
+                    found = True
+
+            if found:
+                break
+
+        objects[idx]['similar_objects'] = similar_object_details
+
+    return objects
