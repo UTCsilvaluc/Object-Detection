@@ -33,7 +33,6 @@ class BaseModelStrategy(ABC):
         :return: mask , bbox , contours of the merged object.
         """
         pass
-    @abstractmethod
     def generate_embedding(self, image_crop_path):
         """
         Generate embedding for a given image crop.

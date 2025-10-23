@@ -169,29 +169,29 @@
                                     {% if obj.similar_objects and obj.similar_objects|length > 0 %}
                                     <div class="similar-container">
                                         <button type="button" onclick="showSimilar(this)">Show similar objects</button>
-                                        {% for sim_obj in obj.similar_objects %}
-                                        <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">
-                                        
-                                                <div class="left-similar">
-                                                    <p><strong>Object ID:</strong> {{ sim_obj.object_id }} </p>
-                                                    <p><strong>Similarity Score:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
-                                                    <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}" alt="Similar Object {{ sim_obj.object_id }}">
-                                                </div>
-                                                <div class="right-similar">
-                                                    <div class="obj-meta">
-                                                        <h3>Metadatas of the similar object : </h1>
-                                                        {% if sim_obj.metadata | length > 0 %}
-                                                            {% for elem in sim_obj.metadata %}
-                                                                <p><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
-                                                            {% endfor %}
-                                                        {% else %}
-                                                            <p>No metadata available for this object.</p>
-                                                        {% endif %}
+                                        <div class="similar-objects" style="display: none;">
+                                            {% for sim_obj in obj.similar_objects %}
+                                                <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">
+                                                    <div class="left-similar">
+                                                        <p><strong>Object ID:</strong> {{ sim_obj.object_id }} </p>
+                                                        <p><strong>Similarity Score:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
+                                                        <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}" alt="Similar Object {{ sim_obj.object_id }}">
+                                                    </div>
+                                                    <div class="right-similar">
+                                                        <div class="obj-meta">
+                                                            <h3>Metadatas of the similar object : </h3>
+                                                            {% if sim_obj.metadata | length > 0 %}
+                                                                {% for elem in sim_obj.metadata %}
+                                                                    <p><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
+                                                                {% endfor %}
+                                                            {% else %}
+                                                                <p>No metadata available for this object.</p>
+                                                            {% endif %}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                        
+                                            {% endfor %}
                                         </div>
-                                        {% endfor %}
                                     </div>
                                     {% endif %}
                                 </div>
@@ -709,8 +709,9 @@
         function showSimilar(button){
             button.innerText = button.innerText === "Show similar objects" ? "Hide similar objects" : "Show similar objects";
             const objWrapper = button.nextElementSibling; 
+            console.log("hid-similar:", objWrapper);
             if (objWrapper && button.innerText === "Hide similar objects") {
-                objWrapper.style.display = "flex";
+                objWrapper.style.display = "block";
             } else {
                 objWrapper.style.display = "none";
             }
