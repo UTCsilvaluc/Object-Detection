@@ -233,6 +233,12 @@ h1 {
     border-radius: 8px;
     margin-top: 5px;
 }
+.obj-wrapper-similar input[type="checkbox"]:checked + label,
+.obj-wrapper-similar label.selected {
+    background-color: rgba(52, 152, 219, 0.2);
+    border-radius: 5px;
+    padding: 3px;
+}
 
 .span_type{
     display: flex;

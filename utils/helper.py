@@ -240,6 +240,9 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         class_id = request.form.get(f"objects[{i}][class_id]")
         if class_id is None:
             continue
+        similar_object = request.form.get(f"objects[{i}][default_object]")
+        if not similar_object or similar_object == "":
+            similar_object = None
         score = request.form.get(f"objects[{i}][score]")
         bbox = request.form.get(f"objects[{i}][bbox]")
         coords_x, coords_y, width, height = parse_bbox(bbox)
@@ -254,12 +257,18 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         object_file_name = os.path.basename(object_path)
 
         # Insertion en base
-        object_id = create_object(
-            name=f"{img_name}_obj{i}",
-            description=f"Detected object {i} in image {img_name}",
-            type=class_id,
-            embedding=embedding
-        )
+        print(f"Processing object {i} with similar_object: {similar_object}")
+        if similar_object:
+            object_id = int(similar_object)
+            print(f"Using existing object ID {object_id} for object {i}")
+        else:
+            object_id = create_object(
+                name=f"{img_name}_obj{i}",
+                description=f"Detected object {i} in image {img_name}",
+                type=class_id,
+                embedding=embedding
+            )
+            print(f"Created new object ID {object_id} for object {i}")
 
         create_instance_object(
             object_id=object_id,

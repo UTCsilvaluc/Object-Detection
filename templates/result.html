@@ -152,6 +152,7 @@
                                             <input type="hidden" name="objects[{{ obj.id }}][class_id]" value="{{ obj.class_id }}">
                                             <input type="hidden" name="objects[{{ obj.id }}][score]" value="{{ obj.score }}">
                                             <input type="hidden" name="objects[{{ obj.id }}][bbox]" value="{{ obj.bbox }}">
+                                            <input type="hidden" name="objects[{{ obj.id }}][default_object]" value="">
                                             <div class="metadata-container" id="meta-{{ obj.id }}">
                                                 <div class="meta-field">
                                                     <input type="text" name="objects[{{ obj.id }}][type]" value="type" readonly>
@@ -182,8 +183,12 @@
                                                             <h3>Metadatas of the similar object : </h3>
                                                             {% if sim_obj.metadata | length > 0 %}
                                                                 {% for elem in sim_obj.metadata %}
-                                                                    <p><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
+                                                                    <p class="metadata_similar" data-key="{{ elem.key }}" data-value="{{ elem.value }}"><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
                                                                 {% endfor %}
+                                                                <span style="display: flex; flex-direction: row; gap: 5px; align-items: center; justify-content: center;"><p title="Allows to be the same object in database"><strong> Same object as object {{ obj.id }} ? </strong></p>
+                                                                    <input type="checkbox" role="radio" name="selected_similar_{{ obj.id }}" value="{{ sim_obj.object_id }}" onchange="defaultObjectSelection(this , '{{ obj.id }}' , '{{ sim_obj.object_id }}')">
+                                                                </span>
+                                                                <button type="button" class="edit-button" onclick="importMetadata(this , '{{ obj.id }}')">Import metadata of this object.</button>
                                                             {% else %}
                                                                 <p>No metadata available for this object.</p>
                                                             {% endif %}
@@ -244,7 +249,7 @@
         let clientMetadataKeys = {{ metadata_keys | tojson }};
         let clientClassNames = {{ class_name | tojson }};
         function returnRegexByName(name, enum_values = null) {
-            if (enum_values !== "null" && enum_values.trim() !== "") {
+            if (enum_values && enum_values !== "null" && enum_values.trim() !== "") {
                 const enumPattern = enum_values
                     .split(";")
                     .map(v => v.trim())
@@ -282,7 +287,6 @@
             };
             return types[name] || types["text"];
         };
-
         async function apiPost(url , body){
             try {
                 const res = await fetch(url , {
@@ -323,51 +327,86 @@
             const content = document.getElementById(id);
             content.style.display = (content.style.display === "block") ? "none" : "block";
         }
-        function addMetadataField(objID) {
+        function addMetadataField(objID, key = null, value = null) {
             objID = parseInt(objID);
             const container = document.getElementById(`meta-${objID}`);
-            const metaIndex = container.children.length - 1; // numéro de la métadonnée
+            const metaIndex = container.children.length - 1; 
             let div = document.createElement('div');
             div.className = 'meta-field';
-            mapClientMetadataKeys = []
+
+            let mapClientMetadataKeys = [];
             clientMetadataKeys.forEach(meta => {
                 if (!metadataUsed[objID]) metadataUsed[objID] = [];
                 if (!metadataUsed[objID].includes(meta.key) && meta.key !== "type") {
                     mapClientMetadataKeys.push(meta);
                 }
             });
+
+            if (key && !mapClientMetadataKeys.some(m => m.key === key)) {
+                const forcedMeta = clientMetadataKeys.find(m => m.key === key);
+                if (forcedMeta) mapClientMetadataKeys.unshift(forcedMeta);
+            }
+
             if (mapClientMetadataKeys.length === 0) {
                 alert("No more metadata keys available to add. Please create a new metadata key.");
                 return;
             }
+
             div.innerHTML = `
-                <select name="objects[${objID}][metadata][${metaIndex}][key]" class="object_type" onchange="changeKey(this , 'objects[${objID}][metadata][${metaIndex}][value]')" required>
+                <select name="objects[${objID}][metadata][${metaIndex}][key]" 
+                        class="object_type" 
+                        onchange="changeKey(this , 'objects[${objID}][metadata][${metaIndex}][value]')" 
+                        required>
                     ${mapClientMetadataKeys.map(meta => `
                         <option value="${meta.key}"
-                        data-desc="${meta.description}"
-                        data-type="${meta.type}"
-                        data-metric="${meta.metric}"
-                        data-regex="${meta.format_pattern}"
-                        data-enum="${meta.enum_values}"
-                        >${meta.key}</option>
+                                data-desc="${meta.description}"
+                                data-type="${meta.type}"
+                                data-metric="${meta.metric}"
+                                data-regex="${meta.format_pattern}"
+                                data-enum="${meta.enum_values}"
+                                ${meta.key === key ? 'selected' : ''}>
+                                ${meta.key}
+                        </option>
                     `).join('')}
                 </select>
-                <input type="text" name="objects[${objID}][metadata][${metaIndex}][value]" placeholder="Valeur" onchange="changeValue(this)" required>
-                <img src="{{ url_for('static', filename='img/svg/cross.png') }}" alt="" class="remove-icon" onclick="removeMetadataField(this)" data-index="${metaIndex}">
+                <input type="text" 
+                    name="objects[${objID}][metadata][${metaIndex}][value]" 
+                    placeholder="Value" 
+                    onchange="changeValue(this)" 
+                    required>
+                <img src="{{ url_for('static', filename='img/svg/cross.png') }}" 
+                    alt="" 
+                    class="remove-icon" 
+                    onclick="removeMetadataField(this)" 
+                    data-index="${metaIndex}">
             `;
+
             container.appendChild(div);
-            const elemKey = $(`select[name="objects[${objID}][metadata][${metaIndex}][key]"]`);
-            const desc = elemKey.options[0].getAttribute("data-desc");
-            const metric = elemKey.options[0].getAttribute("data-metric");
-            const regex = returnRegexByName( elemKey.options[0].getAttribute("data-type") , elemKey.options[0].getAttribute("data-enum"));
-            let inputValue = $(`input[name="objects[${objID}][metadata][${metaIndex}][value]"]`);
+
+            const elemKey = div.querySelector('select');
+            const selectedOption = elemKey.options[elemKey.selectedIndex];
+            const desc = selectedOption.getAttribute("data-desc");
+            const type = selectedOption.getAttribute("data-type");
+            const metric = selectedOption.getAttribute("data-metric");
+            const enumVals = selectedOption.getAttribute("data-enum");
+            const regex = returnRegexByName(type, enumVals);
+
+            const inputValue = div.querySelector('input');
             inputValue.placeholder = desc ? desc : "Value";
             inputValue.pattern = regex ? regex : "";
-            inputValue.type = returnInputTypeByName( elemKey.options[0].getAttribute("data-type") );
-            title = "Description: " + (desc ? desc : "Value") + (metric != "null" ? " | Metric: " + metric : "") + (regex ? " | Format: " + regex : "");
-            inputValue.title = title;
+            inputValue.type = returnInputTypeByName(type);
+            inputValue.title = 
+                "Description: " + (desc ? desc : "Value") + 
+                (metric != "null" ? " | Metric: " + metric : "") + 
+                (regex ? " | Format: " + regex : "");
+            if (value){
+                inputValue.value = value;
+            }
+            elemKey.setAttribute("data-old-value", elemKey.value);
             metadataUsed[objID].push(elemKey.value);
+            removeSelectOptionFromAll(container, elemKey.value, elemKey);
         }
+
         async function removeObject(objID) {
             if (!confirm('Are you sure you want to delete this object?')) return;
             const data = await apiPost('/objects/remove_object', { id: objID , img_name: "{{ name }}", img_original_path: "{{ original_image_path }}", img_annotated_path: "{{ annotated_image_path }}" });
@@ -498,8 +537,39 @@
             makerDiv.querySelector('input[name="new_metadata_metric"]').required = false;
             makerDiv.querySelector('input[name="enum_values"]').value = "";
         }
+        function removeSelectOptionFromAll(metadataContainer , valueToDelete , exceptSelect = null){
+            metadataContainer.querySelectorAll('.meta-field select').forEach(select => {
+                if (select !== exceptSelect) {
+                    const foundIndex = Array.from(select.options).findIndex(option => option.value === valueToDelete);
+                    if (foundIndex > -1) {
+                        select.remove(foundIndex);
+                    }
+                }
+            });
+        }
+        function addSelectOptionFromAll(metadataContainer , valueToAdd , exceptSelect){
+            dataOptions = clientMetadataKeys.find(meta => meta.key === valueToAdd);
+            metadataContainer.querySelectorAll('.meta-field select').forEach(select => {
+                if (select !== exceptSelect) {
+                    let option = document.createElement("option");
+                    option.value = valueToAdd;
+                    option.textContent = valueToAdd;
+                    option.setAttribute("data-desc", dataOptions.description);
+                    option.setAttribute("data-type", dataOptions.type);
+                    option.setAttribute("data-metric", dataOptions.metric);
+                    option.setAttribute("data-enum", dataOptions.enum_values);
+                    option.setAttribute("data-regex", returnRegexByName(dataOptions.type , dataOptions.enum_values));
+                    option.addEventListener('onchange', function() {
+                        changeKey(select , `objects[${metadataContainer.id.split('-')[1]}][metadata][${Array.from(metadataContainer.children).indexOf(select.closest('.meta-field'))}][value]`);
+                    });
+                    select.add(option);
+                }
+            });
+        }
         function changeKey(selectElem , inputElem){
             const selectedOption = selectElem.options[selectElem.selectedIndex];
+            let metadataContainer = selectElem.closest('.metadata-container');
+            const oldKey = selectElem.getAttribute("data-old-value");
             const type = selectedOption.getAttribute("data-type");
             const desc = selectedOption.getAttribute("data-desc");
             const metric = selectedOption.getAttribute("data-metric");
@@ -514,6 +584,21 @@
             inputValue.title = title;
             if (type === "bool") {
                 inputValue.value = "false";
+            }
+            selectElem.setAttribute("data-old-value", selectElem.value);
+            let objIndex = metadataContainer.id.split('-')[1];
+            let key = selectElem.value;
+            if (!metadataUsed[objIndex]) metadataUsed[objIndex] = [];
+            if (metadataUsed[objIndex].includes(oldKey)) {
+                let index = metadataUsed[objIndex].indexOf(oldKey);
+                if (index > -1) { 
+                    metadataUsed[objIndex].splice(index, 1); 
+                }
+                addSelectOptionFromAll(metadataContainer , oldKey , selectElem);
+            }
+            if (!metadataUsed[objIndex].includes(key)) {
+                metadataUsed[objIndex].push(key);
+                removeSelectOptionFromAll(metadataContainer , selectElem.value , selectElem);
             }
         }
         function changeValue(inputElem) {
@@ -716,5 +801,73 @@
                 objWrapper.style.display = "none";
             }
         }
-    </script>
+
+        function importMetadata(button, targetObjID){
+            targetObjID = String(targetObjID);
+
+            const similarMetaContainer = button.closest('.obj-meta');
+            if (!similarMetaContainer) return;
+            const metadataElems = similarMetaContainer.querySelectorAll('p.metadata_similar');
+ 
+            const accordionSection = button.closest('.accordion-section');
+            if (!accordionSection) return;
+
+            //CSS allows to escape special characters in IDs ; but not supported in all browsers yet : fallback to normal ID selector if not supported
+            const targetMetaContainer =
+                accordionSection.querySelector(`#meta-${CSS && CSS.escape ? CSS.escape(targetObjID) : targetObjID}`) ||
+                accordionSection.querySelector('.metadata-container');
+            if (targetMetaContainer.children.length > 1) {
+                const confirm = window.confirm("Do you want do remove old metadata fields before importing the new ones ?");
+                if (confirm) {
+                    targetMetaContainer.querySelectorAll('.meta-field').forEach((elem, index) => {
+                        if (index === 0) return; 
+                        elem.remove();
+                    });
+                    metadataUsed[targetObjID] = [];
+                }
+            }
+            if (!targetMetaContainer) return;
+            // If metadataUsed[targetObjID] is not defined yet, initialize it
+            if (!metadataUsed[targetObjID]) metadataUsed[targetObjID] = [];
+            const selects = Array.from(targetMetaContainer.querySelectorAll('.meta-field select'));
+            metadataElems.forEach(metaElem => {
+                const key = metaElem.getAttribute('data-key');
+                const value = metaElem.getAttribute('data-value') ?? '';
+                if (!key) return;
+
+                const existingField = selects.find(sel => sel.value === key);
+
+                if (existingField) {
+                    const input = existingField.closest('.meta-field')?.querySelector('input');
+                    if (input) {
+                        input.value = value;
+                        changeValue(input);
+                    }
+                    if (!metadataUsed[targetObjID].includes(key)) {
+                        metadataUsed[targetObjID].push(key);
+                    }
+                    return; 
+                }
+                const metaDef = (clientMetadataKeys || []).find(m => m.key === key);
+                if (!metaDef) {
+                    return;
+                }
+                addMetadataField(targetObjID , key , value); 
+            });
+        }
+        function defaultObjectSelection(checkboxElem , sourceObjID , similarObjID){
+            sourceObjID = String(sourceObjID);
+            similarObjID = String(similarObjID);
+            document.querySelectorAll(`input[type="checkbox"][name="selected_similar_${sourceObjID}"]`).forEach(cb => {
+                if (cb !== checkboxElem) {
+                    cb.checked = false;
+                }
+            });
+            if (checkboxElem.checked){
+                document.querySelector(`input[name="objects[${sourceObjID}][default_object]"]`).value = similarObjID;
+            } else {
+                document.querySelector(`input[name="objects[${sourceObjID}][default_object]"]`).value = "";
+            }
+        }
+</script>
 </html>
