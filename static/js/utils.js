@@ -1,0 +1,183 @@
+// static/js/utils.js
+
+export const $ = (sel) => document.querySelector(sel);
+export const $$ = (sel) => document.querySelectorAll(sel);
+
+window.$ = $;
+window.$$ = $$;
+
+let trashIcon = window.AppConfig.trashIcon;
+
+export function toggleAccordion(id) {
+    const content = document.getElementById(id);
+    if (!content) return;
+    content.style.display = (content.style.display === "block") ? "none" : "block";
+}
+window.toggleAccordion = toggleAccordion;
+
+export function refreshImage(img = $('.image-box img')) {
+    if (!img) return;
+    img.src = img.src.split('?')[0] + '?t=' + new Date().getTime();
+}
+window.refreshImage = refreshImage;
+export function refreshCount(numObjects) {
+    const counter = $('#num-objects');
+    if (!counter) return;
+    counter.innerText = counter.innerText.replace(/\d+/, numObjects);
+}
+window.refreshCount = refreshCount;
+export function resetMetaForm(){
+    let button = $(`button[onclick="createNewMetadata(this)"]`);
+    button.innerHTML = button.innerHTML.replace('-', '+');
+    $(`input[name="new_metadata_key"]`).value = "";
+    $(`input[name="new_metadata_key"]`).required = false;
+    $(`input[name="new_metadata_desc"]`).value = "";
+    $(`input[name="new_metadata_desc"]`).required = false;
+    $(`input[name="new_metadata_metric"]`).value = "";
+    $(`input[name="new_metadata_metric"]`).hidden = true;
+    $(`input[name="new_metadata_metric"]`).required = false;
+    $(`select[name="new_metadata_type"]`).value = "short";
+    $(`input[name="metric_required"]`).checked = false;
+    $(`#enum_values`).style.display = "none";
+    $(`input[name="enum_values"]`).value = "";
+}
+window.resetMetaForm = resetMetaForm;
+export function addOrUpdateObjectSection(data) {
+    refreshImage();
+    refreshCount(data.num_objects);
+
+    // Cloning and updating the accordion section
+    let accordion_section = document.querySelector(`.accordion-section.template`).cloneNode(true);
+    accordion_section.style.display = "block";
+    accordion_section.classList.remove("template");
+    accordion_section.querySelectorAll('[disabled]').forEach(el => el.disabled = false);
+    let accordion_header = accordion_section.querySelector(`.accordion-header`);
+    let accordion_content = accordion_section.querySelector(`.accordion-content`);
+    let obj_wrapper = accordion_content.querySelector(`.obj-wrapper`);
+    let left_obj_info = obj_wrapper.querySelector(`.left-obj-info`);
+    let right_obj_info = obj_wrapper.querySelector(`.right-obj-info`);
+    let img = left_obj_info.querySelector(`img`);
+    let hiddenInputCrop = left_obj_info.querySelector(`input`);
+
+    // --- Dynamic return data ---
+    img.src = data.image_path || data.pathObj;
+    img.alt = `Object ${data.image_id || data.new_object_id}`;
+
+    const id = data.image_id ?? data.new_object_id;
+    const class_id = data.class_id || data.new_object_id;
+    const tmpName = data.tmpName || data.nameNewObj;
+    accordion_section.id = 'obj' + id;
+    hiddenInputCrop.name = `objects[${id}][crop_path]`;
+    hiddenInputCrop.value = tmpName;
+
+    writeAccordionHeader(accordion_header, id, class_id);
+    accordion_section.id = `obj${id}`;
+    accordion_content.id = `obj-data${id}`;
+
+    // --- Update dynamic fields ---
+    right_obj_info.querySelector('input[name$="[class_id]"]').name = `objects[${id}][class_id]`;
+    right_obj_info.querySelector('input[name$="[class_id]"]').value = class_id;
+
+    right_obj_info.querySelector('input[name$="[score]"]').name = `objects[${id}][score]`;
+    right_obj_info.querySelector('input[name$="[score]"]').value = 1.0;
+
+    right_obj_info.querySelector('input[name$="[bbox]"]').name = `objects[${id}][bbox]`;
+    right_obj_info.querySelector('input[name$="[bbox]"]').value = data.bbox;
+
+    let metadataContainer = right_obj_info.querySelector('.metadata-container');
+    writeClassMetaField(metadataContainer , id , AppState.classNames);
+    let addMetaButton = right_obj_info.querySelector('button[onclick^="addMetadataField"]');
+    addMetaButton.setAttribute('onclick', `addMetadataField('${id}')`);
+
+    $('.accordion-item').appendChild(accordion_section);
+    $('input[name="max_object_detected"]').value =
+        parseInt($('input[name="max_object_detected"]').value) + 1;
+}
+window.addOrUpdateObjectSection = addOrUpdateObjectSection;
+export function writeClassMetaField(metadataContainer , id , classNames){
+    metadataContainer.id = `meta-${id}`;
+    metadataContainer.innerHTML = `
+        <div class="meta-field">
+            <input type="text" name="objects[${id}][type]" value="type" readonly>
+            <select name="objects[${id}][value]" class="object_type" onchange="handleNewType(this)" required>
+                ${classNames.map(cls => `
+                    <option value="${cls}">${cls}</option>
+                `).join('')}
+                    <option value="__new__">+ Add new type</option>
+            </select>
+        </div>
+    `;
+}
+window.writeClassMetaField = writeClassMetaField;
+export function writeAccordionHeader(accordion_header, id, class_id) {
+    accordion_header.innerHTML = `
+        Object ID ${id} — Class ${class_id} (Confidence : 100%)
+        <div class="handle-container" style="display: flex; flex-direction: row; float: right; gap: 10px;">
+            <input type="checkbox" name="merge_${id}" id="merge_${id}" title="Select this object to merge it with another one">
+            <img src="${trashIcon}" alt="Object ${id}" class="trash-icon" onclick="event.stopPropagation(); removeObject('${id}');">
+        </div>
+    `;
+    accordion_header.setAttribute('onclick', `toggleAccordion('obj-data${id}')`);
+}
+window.writeAccordionHeader = writeAccordionHeader;
+export function removeSelectOptionFromAll(metadataContainer , valueToDelete , exceptSelect = null){
+    metadataContainer.querySelectorAll('.meta-field select').forEach(select => {
+        if (select !== exceptSelect) {
+            const foundIndex = Array.from(select.options).findIndex(option => option.value === valueToDelete);
+            if (foundIndex > -1) {
+                select.remove(foundIndex);
+            }
+        }
+    });
+}
+window.removeSelectOptionFromAll = removeSelectOptionFromAll;
+export function createOptionElement(meta){
+    let option = document.createElement("option");
+    option.value = meta.key;
+    option.textContent = meta.key;
+    option.setAttribute("data-desc", meta.description);
+    option.setAttribute("data-type", meta.type);
+    option.setAttribute("data-metric", meta.metric);
+    option.setAttribute("data-enum", meta.enum_values);
+    option.setAttribute("data-regex", returnRegexByName(meta.type , meta.enum_values));
+    return option;
+}
+window.createOptionElement = createOptionElement;
+export function addSelectOptionFromAll(metadataContainer , valueToAdd , exceptSelect = null){
+    let dataOptions = AppState.metadataKeys.find(meta => meta.key === valueToAdd);
+    metadataContainer.querySelectorAll('.meta-field select').forEach(select => {
+        if (!(exceptSelect) || select !== exceptSelect) {
+            select.add(createOptionElement(dataOptions));
+            select.addEventListener('change', function() {
+                changeKey(this , `objects[${metadataContainer.id.split('-')[1]}][metadata][${Array.from(metadataContainer.children).indexOf(this.parentElement)}][value]`);
+            });
+        }
+    });
+}
+window.addSelectOptionFromAll = addSelectOptionFromAll;
+export function showSimilar(button){
+    button.innerText = button.innerText === "Show similar objects" ? "Hide similar objects" : "Show similar objects";
+    const objWrapper = button.nextElementSibling; 
+    console.log("hid-similar:", objWrapper);
+    if (objWrapper && button.innerText === "Hide similar objects") {
+        objWrapper.style.display = "block";
+    } else {
+        objWrapper.style.display = "none";
+    }
+}
+window.showSimilar = showSimilar;
+export function defaultObjectSelection(checkboxElem , sourceObjID , similarObjID){
+    sourceObjID = String(sourceObjID);
+    similarObjID = String(similarObjID);
+    document.querySelectorAll(`input[type="checkbox"][name="selected_similar_${sourceObjID}"]`).forEach(cb => {
+        if (cb !== checkboxElem) {
+            cb.checked = false;
+        }
+    });
+    if (checkboxElem.checked){
+        document.querySelector(`input[name="objects[${sourceObjID}][default_object]"]`).value = similarObjID;
+    } else {
+        document.querySelector(`input[name="objects[${sourceObjID}][default_object]"]`).value = "";
+    }
+}
+window.defaultObjectSelection = defaultObjectSelection;
