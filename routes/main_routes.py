@@ -9,6 +9,7 @@ from utils.database import (
     get_objects_by_image_version,
     get_metadata_by_object_id,
     get_all_image_title,
+    get_all_classes
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -65,3 +66,8 @@ def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None
 def temp_img(filename):
     return send_from_directory(build_img_temp_path(), filename)
 
+@main_routes_bp.route('/map')
+def map_view():
+    images = get_all_images()
+    classes = get_all_classes()
+    return render_template('map.html', images=images, classes=classes)

@@ -1,0 +1,108 @@
+.popup-content {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.3;
+}
+.popup-content h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #333;
+}
+.popup-content img {
+    width: 150px;
+    border-radius: 6px;
+    margin-top: 5px;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+
+.popup-content button {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.popup-content button:hover {
+    background-color: #0056b3;
+}
+
+.filter{
+    position: absolute;
+    z-index: 1000;
+    top: 10px;
+    right: 10px;
+    background-color: aliceblue;
+    text-align: center; 
+}
+
+.filter h2{
+    margin: 5px;
+    font-size: 16px;
+    text-align: center;
+}
+
+.filter button{
+    margin: 5px auto;       
+    display: inline-block;  
+    padding: 6px 12px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.filter button:hover {
+    background-color: #1e7e34;
+}
+.filter .filter-class.visible{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+    padding: 5px;
+    opacity: 1;
+}
+
+.filter .class-list{
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px; 
+    background: rgba(255,255,255,0.7);
+    box-sizing: border-box;
+    border-radius: 5px;
+    padding: 3px 6px;
+    cursor: pointer;
+    width: 100%; 
+}
+.filter .class-item{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255,255,255,0.6);
+}
+.filter .showFilter-text{
+    margin: 5px;
+    font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+}
+.filter .class-item input[type="checkbox"]{
+    margin: 0;
+    transform: scale(1.05);
+    cursor: pointer;
+}
+.filter input[type="checkbox"] {
+    text-align: left;
+    margin-right: 5px;
+    cursor: pointer;
+}

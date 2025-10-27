@@ -493,8 +493,9 @@ def get_all_images():
                 "location_name": row[5],
                 "latitude": row[6],
                 "longitude": row[7],
-                "source_type": row[8],
-                "type": row[9],
+                "upload_date": row[8],
+                "source_type": row[9],
+                "type": row[10],
             })
         cur.close()
         return images
