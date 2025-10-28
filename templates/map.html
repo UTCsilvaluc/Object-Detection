@@ -21,72 +21,72 @@
                     </label>
                     {% endfor %}
                 </div>
+                <h3 class="showFilter-text" onclick="toggleFilter('date-filter')">Select Date Range ↓</h3>
+                <div class="filter-class" id="date-filter" hidden>
+                    <label>
+                        <span class="class-label">Start Date:</span>
+                        <input type="date" id="start-date" name="start-date">
+                    </label>
+                    <label>
+                        <span class="class-label">End Date:</span>
+                        <input type="date" id="end-date" name="end-date">
+                    </label>
+                </div>
                 <br><br>
+                <button type="button" onclick="clearFilters()">Clear Filters</button>
                 <button type="button" onclick="applyFilters()">Apply Filters</button>
             </form>
         </div>
     </div>
-    
+
+    <div class="visualization-controls">
+        <h2>Visualization Options</h2>
+        <div class="vis-options">
+            <label>
+                <input type="checkbox" id="toggle-cluster" checked>
+                <span>Enable Clustering</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggle-heatmap">
+                <span>Show Heatmap</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggle-timeline">
+                <span>Show Timeline</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggle-links">
+                <span>Show Object Links</span>
+            </label>
+        </div>
+
+        <hr>
+
+        <div class="vis-imports">
+            <h3>Data Import</h3>
+            <button id="import-geojson">Import GeoJSON</button>
+            <button id="import-other">Import Dataset</button>
+        </div>
+    </div>
     <script>
-        let images = {{ images|tojson }};
-        const URL_for_images = "{{ url_for('static', filename='img/Images/') }}";
-        const URL_for_view_image = "{{ url_for('main_routes.view_image', image_id=0) }}";
-        // Ask for user's location 
-        navigator.geolocation.getCurrentPosition(function(position) {
-            var userLat = position.coords.latitude;
-            var userLon = position.coords.longitude;
+        window.appConfig = {
+            images: {{ images|tojson }},
+            classes: {{ classes|tojson }},
+            metadata_keys: {{ metadata_keys|tojson }},
+            icons: {{ icons|tojson }},
+            points : {{ points|tojson }},
+            URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
+            URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
+            crossIcon: "{{ url_for('static', filename='img/svg/cross.png') }}",
+            trashIcon: "{{ url_for('static', filename='img/svg/trash.png') }}",
+            icons_path: "{{ url_for('static', filename='img/svg/') }}"
+        };
 
-            if (!userLat || !userLon) {
-                userLat = 51.505; // Default latitude
-                userLon = -0.09; // Default longitude
-            }
-            var map = L.map('map', { dragging: true }).setView([userLat, userLon], 13);
-
-            // Set up the OpenStreetMap layer
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
-
-            // Add a marker at the user's location
-            L.marker([userLat, userLon]).addTo(map)
-                .bindPopup('You are here!')
-                .openPopup();
-            addPointsToMap(map , images);
-        });
-
-        function addPointsToMap(map , filteredImages){
-            // Logic of filtering images allowing to show only those required.
-            filteredImages.forEach(function(image) {
-                if (image.latitude && image.longitude) {
-                    const icon = L.icon({
-                        iconUrl: URL_for_images + image.file_path,
-                        iconSize: [80, 80],
-                        iconAnchor: [22, 94],
-                        popupAnchor: [-3, -76]
-                    });
-                    L.marker([image.latitude, image.longitude], { icon: icon })
-                        .addTo(map)
-                        .bindPopup(`
-                            <div class="popup-content">
-                                <img src="${URL_for_images + image.file_path}" width="100">
-                                <br>
-                                <h3>${image.title || 'Untitled'}</h3>
-                                <p><strong>Description:</strong> ${image.description || 'No description available'}</p>
-                                <p><strong>Capture Date:</strong> ${image.capture_date || 'Unknown'}</p>
-                                <p><strong>Location:</strong> ${image.location_name || 'Unknown'}</p>
-                                <p><strong>Coordinates:</strong> (${image.latitude.toFixed(5)}, ${image.longitude.toFixed(5)})</p>
-                                <p><strong>Source:</strong> ${image.source_type || 'Unknown'}</p>
-                                <button onclick="window.open(URL_for_view_image.replace('0', ${image.image_id}))">View Details</button>
-                            </div>
-                        `);
-                }
-            }); 
-        }
-        function toggleFilter(filterId) {
-            const filterDiv = document.getElementById(filterId);
-            if (filterDiv){
-                filterDiv.classList.toggle('visible');
-            }
-        }
+        const AppState = {
+            metadataKeys : window.appConfig.metadata_keys,
+            classNames : window.appConfig.classes,
+            metadataUsed : []
+        };
     </script>
+    <script type="module" src="{{url_for('static' , filename='js/map.js')}}"></script>
 </body> 

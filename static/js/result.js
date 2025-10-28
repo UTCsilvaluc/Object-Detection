@@ -1,4 +1,4 @@
-import { $ , $$ , toggleAccordion , refreshImage , refreshCount , resetMetaForm , addOrUpdateObjectSection , writeClassMetaField , writeAccordionHeader , removeSelectOptionFromAll , createOptionElement , showSimilar , defaultObjectSelection } from './utils.js';
+import { $ , $$ , toggleAccordion , refreshImage , refreshCount , resetMetaForm , addOrUpdateObjectSection , writeClassMetaField , writeAccordionHeader , removeSelectOptionFromAll , createOptionElement , showSimilar , defaultObjectSelection, setTrashIcon } from './utils.js';
 import { apiPost } from './api.js';
 import { returnRegexByName , returnInputTypeByName , writeMetaDataField , addMetadataField , handleNewType , createNewMetadata , handleNewMetadataType , createNewMetadataKey , importMetadata , removeMetadataField , changeKey , changeValue , changeType } from './metadata.js';
 import { removeObject , mergeObjects , addPointToAnalyse , runAnalysis } from './objects.js';
@@ -10,7 +10,9 @@ const AppState = {
     metadataKeys : window.AppConfig.metadata_keys,
     classNames : window.AppConfig.class_names
 };
-
+import { setCrossIcon } from './metadata.js';
+setCrossIcon(window.AppConfig.crossIcon);
+setTrashIcon(window.AppConfig.trashIcon);
 window.AppState = AppState;
 
 $('#data_form').addEventListener('submit', function(event) {

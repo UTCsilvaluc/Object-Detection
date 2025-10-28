@@ -10,7 +10,9 @@ DROP TABLE IF EXISTS Image CASCADE;
 DROP TABLE IF EXISTS Class CASCADE;
 DROP TABLE IF EXISTS MetadataDefinition CASCADE;
 DROP TYPE IF EXISTS metaType;
-
+DROP TABLE IF EXISTS Icon CASCADE;
+DROP TABLE IF EXISTS MetaDataPoint CASCADE;
+DROP TABLE IF EXISTS Point CASCADE;
 -- ==============================================
 -- 2. Tables
 -- ==============================================
@@ -101,6 +103,47 @@ CREATE TABLE Metadata (
     FOREIGN KEY (key) REFERENCES MetadataDefinition(key) ON DELETE CASCADE,
     PRIMARY KEY (object_id, version_number, image_id, key)
 );
+
+CREATE TABLE Icon(
+    key TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    svg_path TEXT NOT NULL
+);
+CREATE TABLE Point (
+    point_id SERIAL PRIMARY KEY,
+    name TEXT,
+    description TEXT,
+    location_name TEXT,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    icon_key TEXT REFERENCES Icon(key) ON DELETE SET NULL,
+    color_hex VARCHAR(7),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE MetaDataPoint (
+    point_id INT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (point_id) REFERENCES Point(point_id) ON DELETE CASCADE,
+    FOREIGN KEY (key) REFERENCES MetadataDefinition(key) ON DELETE CASCADE,
+    PRIMARY KEY (point_id, key)
+);
+
+INSERT INTO Icon (key, label, svg_path) VALUES
+('bike', 'Bike', 'bike.svg'),
+('break', 'Break', 'break.svg'),
+('bus', 'Bus', 'bus.svg'),
+('coffin', 'Coffin', 'coffin.svg'),
+('house', 'House', 'house.svg'),
+('information', 'Information', 'information.svg'),
+('rest', 'Rest', 'rest.svg'),
+('restaurant', 'Restaurant', 'restaurant.svg'),
+('temple', 'Temple', 'temple.svg'),
+('toilets', 'Toilets', 'toilets.svg'),
+('train', 'Train', 'train.svg');
+-- ==============================================
 
 INSERT INTO Class (name, description) VALUES
 ('Person', 'Human individual detected in the image'),

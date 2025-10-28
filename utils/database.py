@@ -128,6 +128,66 @@ def insert_metadata(object_id: int , version_number: int , image_id: int , key: 
     finally:
         close_db_connection(conn)
 
+def insert_point(name: str , description: str = None , location_name: str = None , latitude: float = None , longitude: float = None , icon_key: str = None , color_hex: str = "#000000"):
+    """
+    Insert a new point record into the Point table.
+    :param name: str
+    :param description: str
+    :param location_name: str
+    :param latitude: float
+    :param longitude: float
+    :param icon_key: str , must exist in Icon table
+    :param color_hex: str , hex color code
+    :return: point_id (int) or False on failure
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO Point (name, description, location_name, latitude, longitude, icon_key, color_hex)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING point_id;
+        """
+        cur.execute(insert_query, (name, description, location_name, latitude, longitude, icon_key, color_hex))
+        point_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        return point_id
+    except Exception as e:
+        print(f"Error inserting point: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def insert_metadata_point(point_id: int , key: str , value: str):
+    """
+    Insert a new metadata record into the MetaDataPoint table.
+    :param point_id: int
+    :param key: str , must exist in MetadataDefinition table
+    :param value: str
+    :return: bool
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO MetaDataPoint (point_id, key, value)
+        VALUES (%s, %s, %s)
+        """
+        cur.execute(insert_query, (point_id, key, value))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error inserting metadata for point: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
 def create_object(name: str , description: str = None , type: str = None , embedding: list = None):
     """
     Create a new object record in the Object table.
@@ -576,6 +636,98 @@ def get_all_image_title():
         return titles
     except Exception as e:
         print(f"Error fetching image titles: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_icons():
+    """
+    Get all icons from the Icon table.
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = "SELECT key, label, svg_path FROM Icon;"
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        icons = []
+        for row in rows:
+            icons.append({
+                "key": row[0],
+                "label": row[1],
+                "svg_path": row[2]
+            })
+        cur.close()
+        return icons
+    except Exception as e:
+        print(f"Error fetching icons: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_points():
+    """
+    Get all points from the Point table.
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        select_query = "SELECT point_id, name, description, location_name, latitude, longitude, icon_key, color_hex , ICON.svg_path FROM Point LEFT JOIN Icon ON Point.icon_key = Icon.key;"
+        cur.execute(select_query)
+        rows = cur.fetchall()
+        points = []
+        for row in rows:
+            points.append({
+                "point_id": row[0],
+                "name": row[1],
+                "description": row[2],
+                "location_name": row[3],
+                "latitude": row[4],
+                "longitude": row[5],
+                "icon_key": row[6],
+                "color_hex": row[7],
+                "icon_svg_path": row[8]
+            })
+        cur.close()
+        return points
+    except Exception as e:
+        print(f"Error fetching points: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_metadata_by_point_id(point_id: int):
+    """
+    Get all metadata for a specific point.
+    :param point_id: int ; must be a valid point_id in the MetaDataPoint table
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT key, value FROM MetaDataPoint WHERE point_id = %s;
+        """
+        cur.execute(query, (point_id,))
+        rows = cur.fetchall()
+        metadata = []
+        for row in rows:
+            metadata.append({
+                "key": row[0],
+                "value": row[1]
+            })
+        cur.close()
+        return metadata
+    except Exception as e:
+        print(f"Error fetching metadata by point ID: {e}")
         return []
     finally:
         close_db_connection(conn)

@@ -11,6 +11,11 @@ from utils.helper import (
     load_json,
     build_json_temp_path
 )
+from utils.database import (
+    insert_point,
+    insert_metadata_point,
+    get_all_metadata_keys 
+)
 
 save_bp = Blueprint("save", __name__)
 
@@ -37,3 +42,30 @@ def save_metadata():
     #save_json(json_data, build_json_temp_path(), img_name)
 
     return redirect(url_for("main_routes.gallery"))
+
+@save_bp.route('/save_point', methods=['POST'])
+def save_point():
+    data = request.get_json()
+    if not data:
+        return {"success": False, "status": "error", "message": "No data provided"}, 400
+    point = data.get("point")
+    if not point:
+        return {"success": False, "status": "error", "message": "No point data provided"}, 400
+    name = point.get("name")
+    description = point.get("description")
+    loc = point.get("location")
+    lat = point.get("latitude")
+    lng = point.get("longitude")
+    icon_url = point.get("iconURL")
+    svg_key = point.get("svgKey")
+    color = point.get("color" , "#000000")
+    metadata = point.get("metadata" , {})
+    print("Received point data:", point)
+    point_id = insert_point(name, description , loc , lat, lng, svg_key, color)
+    print("Inserted point ID:", point_id)
+    if not point_id:
+        return {"success": False, "status": "error", "message": "Failed to insert point"}, 500
+    for key, value in metadata.items():
+        insert_metadata_point(point_id, key, value)
+    print("Inserted metadata for point ID:", point_id)
+    return {"success": True, "message": "Point saved successfully", "status": "success"}, 200

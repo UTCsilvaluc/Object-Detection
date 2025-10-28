@@ -1,4 +1,12 @@
-const crossIcon = window.AppConfig.crossIcon;
+let crossIcon = null;
+function setCrossIcon(icon) {
+    crossIcon = icon;
+}
+export { setCrossIcon };
+
+if (!window.AppState) {
+    window.AppState = {};
+}
 
 function returnRegexByName(name, enum_values = null) {
     if (enum_values && enum_values !== "null" && enum_values.trim() !== "") {
@@ -85,7 +93,6 @@ function writeMetaDataField(metaField, objID , metaIndex , key=null , value=null
             onclick="removeMetadataField(this)" 
             data-index="${metaIndex}">
     `;
-
 }
 window.writeMetaDataField = writeMetaDataField;
 function addMetadataField(objID, key = null, value = null) {
@@ -275,6 +282,7 @@ function importMetadata(button, targetObjID){
 }
 window.importMetadata = importMetadata;
 function removeMetadataField(img){
+    event.stopPropagation();
     if (!confirm('Are you sure you want to delete this metadata field?')) return;
     const parent = img.closest('.meta-field');
     const container = parent.parentNode;
@@ -299,9 +307,13 @@ function removeMetadataField(img){
     addSelectOptionFromAll(container , removedValue);
 }    
 window.removeMetadataField = removeMetadataField;
+/**
+ * This function is called when the metadata key select element is changed. Available for /upload and /map pages.
+ * @param {*} selectElem 
+ */
 function changeKey(selectElem){
     const selectedOption = selectElem.options[selectElem.selectedIndex];
-    let metadataContainer = selectElem.closest('.metadata-container');
+    let metadataContainer = selectElem.closest('.metadata-container') || selectElem.closest('.metadata-section');
     const oldKey = selectElem.getAttribute("data-old-value");
     const type = selectedOption.getAttribute("data-type");
     const desc = selectedOption.getAttribute("data-desc");

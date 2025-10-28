@@ -5,8 +5,15 @@ export const $$ = (sel) => document.querySelectorAll(sel);
 
 window.$ = $;
 window.$$ = $$;
+let trashIcon = null;
+function setTrashIcon(icon) {
+    trashIcon = icon;
+}
+export { setTrashIcon };
 
-let trashIcon = window.AppConfig.trashIcon;
+if (!window.AppState) {
+    window.AppState = {};
+}
 
 export function toggleAccordion(id) {
     const content = document.getElementById(id);

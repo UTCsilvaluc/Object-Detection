@@ -9,7 +9,11 @@ from utils.database import (
     get_objects_by_image_version,
     get_metadata_by_object_id,
     get_all_image_title,
-    get_all_classes
+    get_all_classes,
+    get_all_metadata_keys,
+    get_all_icons,
+    get_all_points,
+    get_metadata_by_point_id
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -70,4 +74,9 @@ def temp_img(filename):
 def map_view():
     images = get_all_images()
     classes = get_all_classes()
-    return render_template('map.html', images=images, classes=classes)
+    metadata_keys = get_all_metadata_keys()
+    icons = get_all_icons()
+    points = get_all_points()
+    for point in points:
+        point['metadata'] = get_metadata_by_point_id(point['point_id'])
+    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, points=points)
