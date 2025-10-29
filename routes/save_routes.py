@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, current_app
+from flask import Blueprint, request, redirect, url_for, current_app , render_template
 import os
 
 from utils.helper import (
@@ -27,8 +27,7 @@ def save_metadata():
     num_objects = int(request.form.get("num_objects", 0))
     max_objects_detected = int(request.form.get("max_object_detected", num_objects))
     json_data = load_json(build_json_temp_path(f"{img_name}.json"))
-
-    image_id, version_number = handle_save_images(
+    image_id, version_number , img_path = handle_save_images(
         metadata,
         img_name,
         model,
@@ -39,8 +38,22 @@ def save_metadata():
     objects_data = handle_detected_objects(request, img_name, image_id, version_number, max_objects_detected , current_app.config["UPLOAD_FOLDER"] , json_data=json_data)
 
     json_data = build_json(metadata, img_name, num_objects, objects_data)
-    #save_json(json_data, build_json_temp_path(), img_name)
-
+    
+    #save_json(json_data, build_json_temp_path(), img_name)        
+    if (metadata.get("csrf_token")):
+        image = {
+            "image_id": image_id,
+            "title": img_name,
+            "file_path": img_path,
+            "description": metadata.get("desc", ""),
+            "type": metadata.get("type", ""),
+            "capture_date": metadata.get("capture_date", ""),
+            "location_name": metadata.get("location", ""),
+            "latitude": float(metadata.get("latitude")) if metadata.get("latitude") else None,
+            "longitude": float(metadata.get("longitude")) if metadata.get("longitude") else None,
+            "source_type": metadata.get("source", ""),
+        }
+        return render_template('success.html', token=metadata.get("csrf_token") , image=image)
     return redirect(url_for("main_routes.gallery"))
 
 @save_bp.route('/save_point', methods=['POST'])

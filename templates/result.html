@@ -21,6 +21,7 @@
                             <input type="hidden" name="img_name" id="img_name" value="{{ name }}">
                             <input type="hidden" name="img_original_path" id="img_original_path" value="{{ original_image_path }}">
                             <input type="hidden" name="img_annotated_path" id="img_annotated_path" value="{{ annotated_image_path }}">
+                            <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token }}">
                             <h2>Customize the Analysis</h2>
                             <p class="help-text">
                                 Adjust how the AI looks for objects in the image.
@@ -101,6 +102,7 @@
                     <input type="hidden" name="max_object_detected" value="{{ result.num_objects }}">
                     <input type="hidden" name="model" value="{{ model }}">
                     <input type="hidden" name="type" id="hiddenType" value="{{ class_name[0] }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="accordion">
                         <div class="accordion-item">
 <div class="accordion-section template" id="obj-template" style="display:none;">

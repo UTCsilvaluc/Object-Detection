@@ -121,6 +121,7 @@ def re_run_analysis():
     img_name = request.form.get("img_name", "")
     img_annotated_path = request.form.get("img_annotated_path", "")
     img_original_path = request.form.get("img_original_path", "")
+    csrf_token = request.form.get("csrf_token", "")
     img_original_path = build_img_temp_path(img_original_path)
     img_annotated_path = build_img_temp_path(img_annotated_path)
     if not os.path.exists(img_original_path):
@@ -183,7 +184,8 @@ def re_run_analysis():
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,
         class_name=class_name,
-        metadata_keys=metadata_keys
+        metadata_keys=metadata_keys,
+        csrf_token=csrf_token
     )
 @analysis_bp.route('/upload', methods=['POST'])
 def upload():
@@ -258,5 +260,5 @@ def upload():
         annotated_image_path=annotated_rel_path,
         original_image_path=original_rel_path,
         class_name=class_name,
-        metadata_keys=metadata_keys
+        metadata_keys=metadata_keys,
     )

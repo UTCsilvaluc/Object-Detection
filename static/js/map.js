@@ -4,7 +4,7 @@
 import { enableClustering, disableClustering, showHeatmap, hideHeatmap, showTimeline, hideTimeline, showObjectLinks, hideObjectLinks } from './data_visualization.js';
 import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
-import { apiPost } from './api.js';
+import { apiPost , uploadAIImage} from './api.js';
 import { createPopupHTML , createPopupPoint , createPopupAddPoint } from './popup.js';
 // Main variables and map initialization
 
@@ -352,6 +352,22 @@ document.getElementById('import-geojson').addEventListener('click', () => {
 
 document.getElementById('import-other').addEventListener('click', () => {
     alert("Feature to import custom datasets coming soon!");
+});
+
+window.addEventListener("storage", async (event) => {
+    if (event.key === 'upload_done') {
+        const data = JSON.parse(event.newValue);
+        const pending = localStorage.getItem('upload_pending');
+        if (pending && pending.token === data.token) {
+            const image = data.image;
+            localStorage.removeItem('upload_pending');
+            localStorage.removeItem('upload_done');
+            images.push(image);
+            filteredImages.push(image);
+            applyFilters();
+            alert("AI Image uploaded and added to the map successfully.");
+        }
+    }
 });
 
 /**

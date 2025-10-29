@@ -19,3 +19,19 @@ export async function apiPost(url , body){
     }
 }
 window.apiPost = apiPost;
+
+export function uploadAIImage(lat, lng) {
+    const token = crypto.randomUUID();
+    if (localStorage) { 
+        localStorage.setItem('upload_pending', JSON.stringify({
+            token: token,
+            latitude: lat,
+            longitude: lng
+        }));
+        const url = `/?token=${token}&latitude=${lat}&longitude=${lng}`;
+        window.open(url, '_blank');
+    } else {
+        alert("Your browser does not support localStorage. Cannot proceed with AI image upload.");
+    }
+}   
+window.uploadAIImage = uploadAIImage;

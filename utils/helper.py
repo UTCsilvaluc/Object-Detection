@@ -138,6 +138,7 @@ def get_form_metadata(request):
     """
     longitude = empty_to_none(request.form.get("img_longitude"))
     latitude = empty_to_none(request.form.get("img_latitude"))
+    token = empty_to_none(request.form.get("csrf_token"))
     if longitude is not None:
         longitude = longitude.replace(',', '.')
     if latitude is not None:
@@ -150,7 +151,8 @@ def get_form_metadata(request):
         "latitude": latitude,
         "longitude": longitude,
         "source": empty_to_none(request.form.get("img_source")),
-        "type": empty_to_none(request.form.get("type"))
+        "type": empty_to_none(request.form.get("type")),
+        "csrf_token": token
     }
 
 def handle_save_images(metadata , img_name , model , upload_folder , annotated_image_path , original_image_path , json_data = None):
@@ -198,7 +200,7 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     )
     version_file_name_in_db = f"{img_name}_annotated.jpg"
     version_number = insert_annoted_image(image_id, version_file_name_in_db, model=model)
-    return image_id , version_number 
+    return image_id , version_number , file_name_in_db
 
 def handle_metadata(request , obj_index , object_id , version_number , image_id):
     """
