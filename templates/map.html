@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Map</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
+    <link rel="stylesheet" href="{{url_for('static' , filename='timeline.css')}}">
     <link rel="stylesheet" href="{{url_for('static' , filename='leaflet/leaflet.css')}}">
     <script src="{{url_for('static' , filename='leaflet/leaflet.js')}}"></script>
 </head>
@@ -47,6 +48,7 @@
                 </div>
             </div>
         </div>
+        <div class="sidebar" id="sidebar-timeline"></div>
     </div>
     <div class="visualization-controls">
         <h2>Visualization Options</h2>
@@ -68,8 +70,8 @@
                 <span>Show Object Links</span>
             </label>
             <label>
-                <input type="checkbox" id="toggle-paths">
-                <span>Show paths...</span>
+                <input type="checkbox" id="toggle-filters" checked>
+                <span>Show Filters</span>
             </label>
         </div>
 
@@ -101,5 +103,7 @@
             metadataUsed : []
         };
     </script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{{url_for('static' , filename='js/timeline.js')}}"></script>
     <script type="module" src="{{url_for('static' , filename='js/map.js')}}"></script>
 </body> 

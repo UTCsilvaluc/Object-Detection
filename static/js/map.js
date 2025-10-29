@@ -8,6 +8,8 @@ import { apiPost , uploadAIImage} from './api.js';
 import { createPopupHTML , createPopupPoint , createPopupAddPoint } from './popup.js';
 // Main variables and map initialization
 
+const $ = window.jQuery;
+
 const URL_for_images = window.appConfig.URL_for_images;
 const URL_for_view_image = window.appConfig.URL_for_view_image;
 const URL_for_icons = window.appConfig.icons_path;
@@ -68,6 +70,7 @@ function initMap(position) {
     enableClustering(map, clusters, markers, filteredImages);
     enableMapStorageListener(map);
     enablePointAdding(map);
+    buildTimelineFromFilteredImages(filteredImages , URL_for_images);
 }
 
 function handleLocationError(error) {
@@ -138,11 +141,11 @@ function applyFilters() {
             iconAnchor: [22, 94],
             popupAnchor: [-3, -76]
         });
-        console.log(sidebar);
         L.marker([img.latitude, img.longitude], { icon })
             .bindPopup(createPopupHTML(img , URL_for_images , URL_for_view_image))
             .addTo(markers);
     });
+    buildTimelineFromFilteredImages(filteredImages , URL_for_images);
 }   
 window.applyFilters = applyFilters;
 function clearFilters() {
@@ -403,8 +406,12 @@ document.getElementById('toggle-cluster').addEventListener('change', (e) => {
 });
 
 document.getElementById('toggle-timeline').addEventListener('change', (e) => {
-    if (e.target.checked) showTimeline();
-    else hideTimeline();
+    if (e.target.checked) {
+        document.getElementById('sidebar-timeline').classList.add('visible');
+        document.getElementById('sidebar-timeline').style.width = '50%';
+    } else {
+        document.getElementById('sidebar-timeline').classList.remove('visible');
+    }
 });
 
 document.getElementById('toggle-links').addEventListener('change', (e) => {
@@ -433,7 +440,25 @@ document.querySelectorAll('.image-thumbnail').forEach(div => {
     });
 });
 
+document.getElementById("sidebar-timeline").addEventListener("scroll", (e) => {
+    const activeItem = document.querySelector(".timeline-item--active");
+    if (activeItem) {
+        const lat = parseFloat(activeItem.getAttribute("data-latitude"));
+        const lon = parseFloat(activeItem.getAttribute("data-longitude"));
+        if (!isNaN(lat) && !isNaN(lon)) {
+            map.setView([lat, lon], map.getZoom());
+        }
+    }
+});
 
+document.getElementById('toggle-filters').addEventListener('change', (e) => {
+    const filterDiv = document.querySelector('.filter');
+    if (e.target.checked) {
+        filterDiv.classList.add('visible');
+    } else {
+        filterDiv.classList.remove('visible');
+    }
+});
 
 /**
  * Cluster points based on proximity.
