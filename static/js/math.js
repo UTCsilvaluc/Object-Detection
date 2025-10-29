@@ -6,7 +6,7 @@
  * @param {number} tolerance - Distance threshold for clustering.
  * @returns {Array} - Array of clusters, each cluster is an array of points.
  */
-export function clusterPoints(points, tolerance = 0.01) {
+export function clusterPoints(points, tolerance = 0.01 , zoomLevel=10) {
     const clusters = [];
     const visited = new Set();
     
@@ -17,7 +17,7 @@ export function clusterPoints(points, tolerance = 0.01) {
         points.forEach((otherPoint, otherIndex) => {
             if (index !== otherIndex && !visited.has(otherIndex)) {
                 const distance = dist(point.latitude - otherPoint.latitude, point.longitude - otherPoint.longitude);
-                if (distance < tolerance) {
+                if (distance < getTolerance(zoomLevel)) {
                     cluster.push(otherPoint);
                     visited.add(otherIndex);
                 }
@@ -29,6 +29,10 @@ export function clusterPoints(points, tolerance = 0.01) {
     return clusters;
 }
 
+function getTolerance(zoom)
+{
+    return 0.5 / Math.pow(1.5, zoom - 5);
+}
 export function dist(latDiff, lonDiff) {
     return Math.sqrt(latDiff * latDiff + lonDiff * lonDiff);
 }

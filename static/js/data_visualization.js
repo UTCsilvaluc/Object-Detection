@@ -1,28 +1,58 @@
 import { clusterPoints, centerCluster } from './math.js';
-
+import { createPopupHTML } from './popup.js';
+window.expandedMarkers = [];
+window.hiddenClusters = [];
 export function enableClustering(map, clusters, markers, filteredImages) {
-    const findCluster = clusterPoints(filteredImages);
+    const zoomLevel = map.getZoom();
+    const findCluster = clusterPoints(filteredImages, 0.5, zoomLevel);
     findCluster.forEach(cluster => {
-        L.circleMarker(
-            [centerCluster(cluster).latitude, centerCluster(cluster).longitude],
-            { radius: 10 + (cluster.length - 1) * 2, color: 'blue', fillOpacity: 0.5 }
+        const center = centerCluster(cluster);
+        const clusterMarker = L.circleMarker(
+            [center.latitude, center.longitude],
+            { radius: 10 + (cluster.length - 1) * 4, color: 'blue', fillOpacity: 0.5 }
         )
         .bindPopup(`Cluster of ${cluster.length} images`)
         .addTo(clusters);
+        clusterMarker.on('click', () => {
+            if (cluster.length <= 1) return;
+            expandCluster(cluster, map , center , markers);
+        });
     });
 }
 
-export function disableClustering() {
-    alert("Clustering disabled (feature coming soon)!");
-}
+function expandCluster(cluster, map, center , markers) {
+    map.setView([center.latitude, center.longitude], map.getZoom() + 2);
+    window.expandedMarkers.forEach(marker => {
+        map.removeLayer(marker);
+    });
+    window.expandedMarkers = [];
+    window.hiddenClusters = [];
 
-export function showHeatmap() {
-    alert("Heatmap shown (feature coming soon)!");
-}
-
-export function hideHeatmap() {
-    alert("Heatmap hidden (feature coming soon)!");
-}
+    markers.eachLayer(marker => {
+        const pos = marker.getLatLng();
+        if (cluster.some(point => point.latitude === pos.lat && point.longitude === pos.lng)) {
+            window.hiddenClusters.push(marker);
+            map.removeLayer(marker);
+        }
+    });
+    const count = cluster.length;
+    const R = 0.001 * Math.max(1, count / 5); // Radius based on number of points
+    cluster.forEach((point, index) => {
+        const angle = (index / count) * 2 * Math.PI;
+        const latOffset = R * Math.cos(angle);
+        const lonOffset = R * Math.sin(angle);
+        const icon = L.icon({
+            iconUrl: window.appConfig.URL_for_images + point.file_path,
+            iconSize: [80, 80],
+            iconAnchor: [22, 94],
+            popupAnchor: [-3, -76]
+        });
+        const marker = L.marker([point.latitude + latOffset, point.longitude + lonOffset], { icon })
+            .bindPopup(createPopupHTML(point , window.appConfig.URL_for_images , window.appConfig.URL_for_view_image))
+            .addTo(map);
+        window.expandedMarkers.push(marker);
+    });
+}   
 
 export function showTimeline() {
     alert("Timeline shown (feature coming soon)!");

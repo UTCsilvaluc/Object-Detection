@@ -1,7 +1,7 @@
 // static/js/map.js
 
 // Imports 
-import { enableClustering, disableClustering, showHeatmap, hideHeatmap, showTimeline, hideTimeline, showObjectLinks, hideObjectLinks } from './data_visualization.js';
+import { enableClustering, showTimeline, hideTimeline, showObjectLinks, hideObjectLinks } from './data_visualization.js';
 import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage} from './api.js';
@@ -21,6 +21,7 @@ const trashIcon = window.appConfig.trashIcon;
 setCrossIcon(crossIcon);
 setTrashIcon(trashIcon);
 
+let map = null;
 let pointsLayer = L.layerGroup();
 let markers = L.layerGroup();
 let clusters = L.layerGroup();
@@ -41,7 +42,7 @@ function initMap(position) {
     var userLat = position.coords.latitude || 34.33; 
     var userLon = position.coords.longitude || 134.05; 
 
-    const map = L.map('map', { dragging: true }).setView([userLat, userLon], 13);
+    map = L.map('map', { dragging: true }).setView([userLat, userLon], 13);
 
     // Set up the OpenStreetMap layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -63,7 +64,9 @@ function initMap(position) {
     // Add points to the map based on filtered images
     applyFilters();
     addPoints(pointsLayer, points);
+    enableZoomClustering(map);
     enableClustering(map, clusters, markers, filteredImages);
+    enableMapStorageListener(map);
     enablePointAdding(map);
 }
 
@@ -103,8 +106,31 @@ function toggleFilter(filterId) {
 }
 window.toggleFilter = toggleFilter;
 function applyFilters() {
+    const sidebar = document.getElementById('sidebar-images');
     markers.clearLayers();
+    const thumbs = sidebar.querySelector('.image-thumbnails');
+    if (thumbs) {
+            thumbs.innerHTML = '';
+        }
     filteredImages.forEach(img => {
+        let thumbDiv = document.createElement('div');
+        thumbDiv.className = 'image-thumbnail';
+        thumbDiv.setAttribute('data-longitude', img.longitude);
+        thumbDiv.setAttribute('data-latitude', img.latitude);
+        thumbDiv.innerHTML = `
+            <img src="${URL_for_images + img.file_path}" alt="${img.title}">
+            <div class="data-image">
+                <span class="image-title"><strong>Title:</strong> ${img.title}</span>
+                <span class="image-class"><strong>Description:</strong> ${img.description}</span>
+                <span class="image-date"><strong>Class:</strong> ${img.type}</span>
+            </div>
+        `;
+        if (thumbs) {
+            thumbs.appendChild(thumbDiv);
+            thumbDiv.addEventListener('click', () => {
+                map.setView([img.latitude, img.longitude], 15);
+            });
+        }
         if (!img.latitude || !img.longitude) return;
         const icon = L.icon({
             iconUrl: URL_for_images + img.file_path,
@@ -112,6 +138,7 @@ function applyFilters() {
             iconAnchor: [22, 94],
             popupAnchor: [-3, -76]
         });
+        console.log(sidebar);
         L.marker([img.latitude, img.longitude], { icon })
             .bindPopup(createPopupHTML(img , URL_for_images , URL_for_view_image))
             .addTo(markers);
@@ -133,16 +160,14 @@ function checkAllFilters(image) {
     if (image.type && !checkClasses.includes(image.type)) {
         return false;
     }
-
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
     const imgDate = new Date(image.capture_date);
 
-    if (isNaN(imgDate)) return false; 
-
-    if (startDate && imgDate < new Date(startDate)) return false;
-    if (endDate && imgDate > new Date(endDate)) return false;
-
+    if (!isNaN(imgDate)){
+        if (startDate && imgDate < new Date(startDate)) return false;
+        if (endDate && imgDate > new Date(endDate)) return false;
+    }
     return true;
 }
 
@@ -184,6 +209,39 @@ function addMetaData() {
         return;
     }
     addMetadataField(0);
+
+}
+
+function enableZoomClustering(map) {
+    map.on('zoomend', () => {
+        if (!document.getElementById('toggle-cluster').checked) return;
+        clusters.clearLayers();
+        enableClustering(map, clusters, markers, filteredImages);
+    });
+}
+
+function enableMapStorageListener(map) {
+    window.addEventListener("storage", async (event) => {
+        if (event.key === 'upload_done') {
+            const data = JSON.parse(event.newValue);
+            const pending = localStorage.getItem('upload_pending');
+            if (pending && pending.token === data.token) {
+                const image = data.image;
+                localStorage.removeItem('upload_pending');
+                localStorage.removeItem('upload_done');
+                images.push(image);
+                filteredImages.push(image);
+                applyFilters();
+                alert("AI Image uploaded and added to the map successfully.");
+                if (tempMarker) {
+                    map.removeLayer(tempMarker);
+                    document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
+                    document.getElementById('sidebar').classList.add('visible');
+                    tempMarker = null;
+                }
+            }
+        }
+    });
 }
 
 function enablePointAdding(map) {
@@ -194,6 +252,10 @@ function enablePointAdding(map) {
             document.getElementById('sidebar').classList.add('visible');
             tempMarker = null;
             return;
+        }   
+        if (window.expandedMarkers.length > 0) {
+            disableClustering();
+            return;   
         }
         document.getElementById('sidebar').classList.remove('visible');
         const { lat, lng } = e.latlng;
@@ -324,16 +386,20 @@ function getHTMLForSVGIcon(iconURL, color) {
                 `;
     return html;
 }
+function disableClustering() {
+    window.expandedMarkers.forEach(m => map.removeLayer(m));
+    window.expandedMarkers = [];
+    window.hiddenClusters.forEach(c => map.addLayer(c));
+    window.hiddenClusters = [];
+    clusters.clearLayers();
+}
 
 /* Map feature toggles  event listener */
 document.getElementById('toggle-cluster').addEventListener('change', (e) => {
     if (e.target.checked) enableClustering(map, clusters, markers, filteredImages);
-    else disableClustering();
-});
-
-document.getElementById('toggle-heatmap').addEventListener('change', (e) => {
-    if (e.target.checked) showHeatmap();
-    else hideHeatmap();
+    else {
+        disableClustering();
+    }
 });
 
 document.getElementById('toggle-timeline').addEventListener('change', (e) => {
@@ -354,21 +420,20 @@ document.getElementById('import-other').addEventListener('click', () => {
     alert("Feature to import custom datasets coming soon!");
 });
 
-window.addEventListener("storage", async (event) => {
-    if (event.key === 'upload_done') {
-        const data = JSON.parse(event.newValue);
-        const pending = localStorage.getItem('upload_pending');
-        if (pending && pending.token === data.token) {
-            const image = data.image;
-            localStorage.removeItem('upload_pending');
-            localStorage.removeItem('upload_done');
-            images.push(image);
-            filteredImages.push(image);
-            applyFilters();
-            alert("AI Image uploaded and added to the map successfully.");
-        }
-    }
+document.getElementById('toggle-sidebar').addEventListener('click', () => {
+    const sidebar = document.querySelector('.map-controller .sidebar');
+    sidebar.classList.toggle('visible');
 });
+
+document.querySelectorAll('.image-thumbnail').forEach(div => {
+    div.addEventListener('click', (e) => {
+        const longitude = parseFloat(div.getAttribute('data-longitude'));
+        const latitude = parseFloat(div.getAttribute('data-latitude'));
+        map.setView([latitude, longitude], 15);
+    });
+});
+
+
 
 /**
  * Cluster points based on proximity.
@@ -378,18 +443,23 @@ window.addEventListener("storage", async (event) => {
  */
 
 
-//TODO: add heatmap, timeline, object links functionalities
+//TODO: timeline, object links functionalities
 /* 
-Ranger le javascript dans des modules (leaflet, filters, map features, etc.)
 Link between picture depending on detected objects
-Cliquer sur la carte pour ajouter un point en base de donnée ou une image via upload 1) avec get auto des coord 2) avec formulaire manuel
 Ajouter une sidebar avec la liste des images visibles sur la carte ? 
 Image browser -> dynamic sidebar and zoom on map
-Ajouter des SVG de choix à l'ajout des points sur la carte (restaurant, hotel, monument, repos etc.)
 
 2)
 Use other data or metadatas like objects etc for filtering or clustering...
 view by metadata , by objects , historical period...
 
 3) Outil de sélection de points / images pour faire des tracés entre les points sauvegardés sur le serveur ou base de donnée.
+
+Timeline : Outil de sélection d'objet parmi le temps ? Reconstruire l'historique d'un objet au travers du temps, déplacements etc ?
+Par exemple apparait en 1940 à telle endroit, puis en 1950 à un autre endroit etc...
+OU
+Timeline globale des images sur la carte ? Filtrer les images visibles sur la carte en fonction d'une timeline ? avec auto play 
+
+Option qui permettrait de lier des images / points entre eux avec metadatas , permettrait de tracer des chemins, itinéraires etc...
+
 */
