@@ -188,3 +188,32 @@ export function defaultObjectSelection(checkboxElem , sourceObjID , similarObjID
     }
 }
 window.defaultObjectSelection = defaultObjectSelection;
+
+export function getMetadataFromFields(metaFields) {
+    let metadata = {};
+    metaFields.forEach(field => {
+        const key = field.querySelector('select').value;
+        const value = field.querySelector('input').value;
+        if (key && value) {
+            metadata[key] = value;
+        }
+    });
+    return metadata;
+}
+export function controlInputValues(name, description , ...args) {
+    if (name && name.trim() === '') {
+        alert("Point name is required.");
+        return false;
+    }
+    if (description && description.trim() === '') {
+        alert("Point description is required.");
+        return false;
+    }
+    for (const arg of args) {
+        if (arg && arg.trim() === '') {
+            alert("All fields are required.");
+            return false;
+        }
+    }
+    return true;
+}

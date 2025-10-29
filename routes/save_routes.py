@@ -56,7 +56,6 @@ def save_point():
     loc = point.get("location")
     lat = point.get("latitude")
     lng = point.get("longitude")
-    icon_url = point.get("iconURL")
     svg_key = point.get("svgKey")
     color = point.get("color" , "#000000")
     metadata = point.get("metadata" , {})

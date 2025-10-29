@@ -2,17 +2,18 @@
 
 // Imports 
 import { enableClustering, disableClustering, showHeatmap, hideHeatmap, showTimeline, hideTimeline, showObjectLinks, hideObjectLinks } from './data_visualization.js';
-import { removeSelectOptionFromAll , setTrashIcon} from './utils.js';
+import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost } from './api.js';
+import { createPopupHTML , createPopupPoint , createPopupAddPoint } from './popup.js';
 // Main variables and map initialization
 
-const URL_for_images = window.appConfig.URL_for_images ;
+const URL_for_images = window.appConfig.URL_for_images;
 const URL_for_view_image = window.appConfig.URL_for_view_image;
-const URL_for_icons = window.appConfig.icons_path ;
-const images = window.appConfig.images ;
+const URL_for_icons = window.appConfig.icons_path;
+const images = window.appConfig.images;
 const classes = window.appConfig.classes;
-const icons = window.appConfig.icons ;
+const icons = window.appConfig.icons;
 const points = window.appConfig.points;
 const crossIcon = window.appConfig.crossIcon;
 const trashIcon = window.appConfig.trashIcon;
@@ -79,48 +80,18 @@ function handleActionPropagation(L) {
 }
 
 function addPoints(layer, points) {
+    let iconURL = URL_for_icons ;
     points.forEach(point => {
+        iconURL = point.icon_svg_path ? (URL_for_icons + point.icon_svg_path) : null;
         const icon = L.divIcon({
             className: 'point-icon',
-            html: getHTMLForSVGIcon(URL_for_icons + point.icon_svg_path, point.color_hex || '#000000')
+            html: getHTMLForSVGIcon(iconURL, point.color_hex || '#000000')
         });
-        const popupContent = `
-            <h3>Place: ${point.name || 'Unnamed Point'}</h3>
-            <p><strong>Description:</strong> ${point.description || 'No description available'}</p>
-            <p><strong>Location:</strong> ${point.location || 'Unknown'}</p>
-            <p><strong>Coordinates:</strong> (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})</p>
-            ${point.metadata && point.metadata.length > 0 ? '<h4>Metadata:</h4>' : ''}
-            <ul>
-                ${point.metadata.map(meta => `<li><strong>${meta.key}:</strong> ${meta.value}</li>`).join('')}
-            </ul>
-        `;
+        const popupContent = createPopupPoint(point);
         L.marker([point.latitude, point.longitude], { icon })
             .bindPopup(popupContent)
             .addTo(layer);
     });
-}
-
-/**
- * Create the HTML content for the image popup.
- * @param {Object} image - The image object containing details.
- * @returns {string} The HTML content for the popup.
- */
-function createPopupHTML(image) {
-    return `
-        <div class="popup-content">
-            <img src="${URL_for_images + image.file_path}" width="100" />
-            <h3>${image.title || 'Untitled'}</h3>
-            <p><strong>Type:</strong> ${image.type || 'Untitled'}</p>
-            <p><strong>Description:</strong> ${image.description || 'No description available'}</p>
-            <p><strong>Capture Date:</strong> ${image.capture_date || 'Unknown'}</p>
-            <p><strong>Location:</strong> ${image.location_name || 'Unknown'}</p>
-            <p><strong>Coordinates:</strong> (${image.latitude.toFixed(5)}, ${image.longitude.toFixed(5)})</p>
-            <p><strong>Source:</strong> ${image.source_type || 'Unknown'}</p>
-            <button onclick="window.open('${URL_for_view_image.replace('0', image.image_id)}')">
-                View Details
-            </button>
-        </div>
-    `;
 }
 
 /* Filter part control */
@@ -142,7 +113,7 @@ function applyFilters() {
             popupAnchor: [-3, -76]
         });
         L.marker([img.latitude, img.longitude], { icon })
-            .bindPopup(createPopupHTML(img))
+            .bindPopup(createPopupHTML(img , URL_for_images , URL_for_view_image))
             .addTo(markers);
     });
 }   
@@ -217,6 +188,14 @@ function addMetaData() {
 
 function enablePointAdding(map) {
     map.on('click', function(e) {
+        if (tempMarker) {
+            map.removeLayer(tempMarker);
+            document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
+            document.getElementById('sidebar').classList.add('visible');
+            tempMarker = null;
+            return;
+        }
+        document.getElementById('sidebar').classList.remove('visible');
         const { lat, lng } = e.latlng;
 
         if (tempMarker) {
@@ -225,50 +204,13 @@ function enablePointAdding(map) {
         }
 
         tempMarker = L.marker([lat, lng] , {
-            // faire un div marker diaming circle with border and color picker
             icon: L.divIcon({
                 className: 'temp-marker-icon',
                 html: `<div style="width:24px; height:24px; background:#000000; transform:rotate(45deg); border-radius:4px; border:2px solid white; box-shadow:0 1px 2px rgba(0,0,0,.35);"></div>`,
             })
         }).addTo(map)
-        const popupHTML = `
-            <div class="popup-add-point">
-                <h3>Add New Image</h3>
-                <div class="popup-columns">
-                    <div class="popup-left">
-                        <label for="point-name"> Name: </label>
-                        <input type="text" id="point-name" name="point-name" placeholder="Enter point name" required/><br/>
-
-                        <label for="point-description"> Description: </label>
-                        <textarea id="point-description" name="point-description" placeholder="Enter description" required></textarea><br/>
-
-                        <label for="point-location"> Location: </label>
-                        <input type="text" id="point-location" name="point-location" placeholder="Enter location name" /><br/>
-
-                        <p for="point-icon"> Icon: </p>
-                        <div class="icon-preview" id="icon-preview"> 
-                            ${icons.map(icon => `<img class="icon" src="${URL_for_icons + icon.svg_path}" alt="${icon.label}" data-key="${icon.key}" width="24" height="24" style="margin-right:5px; fill:red;" />`).join('')}
-                        </div>
-
-                        <label for="point-color"> Color: </label>
-                        <input type="color" id="point-color" name="point-color" value="#000000" /><br/>
-
-                        <div class="metadata-section" id="meta-0"></div>
-
-                        <button id="add-metadata-btn">+ Add Metadata</button>
-                        <button id="save-point-btn">Save Point</button>
-                    </div>
-                </div>
-                <br>
-                <div class="popup-right">
-                    <h4>AI Image import</h4>
-                    <p>Import an image detected with AI object detection at this location.</p>
-                    <button id="ai-upload-btn" onclick="uploadAIImage(${lat}, ${lng})">Upload AI Image</button>
-                    <div id="image-preview"></div>
-                </div>
-            </div>
-        `;        
-        
+        const popupHTML = createPopupAddPoint(icons, URL_for_icons, lat, lng); 
+            
         tempMarker.bindPopup(popupHTML).openPopup();
         document.getElementById('add-metadata-btn').addEventListener('click', () => {
             addMetaData();
@@ -277,7 +219,7 @@ function enablePointAdding(map) {
             await saveData(map, lat, lng);
         });
         document.getElementById('ai-upload-btn').addEventListener('click', () => {
-            alert("Feature to upload AI image coming soon!");
+            uploadAIImage(lat, lng);
         });
         document.querySelectorAll('.icon-preview .icon').forEach(img => {
             img.addEventListener('click', (e) => {
@@ -325,44 +267,35 @@ async function saveData(map , lat , lng) {
     const location = document.getElementById('point-location').value;
     const color = document.getElementById('point-color').value;
     const selectedIconElem = document.querySelector('.icon-preview .icon.selected');
+    let svgKey = null;
     let iconURL = null;
+    controlInputValues(name, description, location);
     if (selectedIconElem) {
+        svgKey = selectedIconElem.getAttribute('data-key');
         iconURL = selectedIconElem.getAttribute('src');
     }
-    let metadata = {};
-    document.querySelectorAll('.meta-field').forEach(field => {
-        const key = field.querySelector('select').value;
-        const value = field.querySelector('input').value;
-        if (key && value) {
-            metadata[key] = value;
-        }
-    });
-    const svgKey = selectedIconElem.getAttribute('data-key');
+    let metadata = getMetadataFromFields(document.querySelectorAll('.meta-field'));
+    const point = {
+        name,
+        description,
+        location,
+        latitude: lat,
+        longitude: lng,
+        svgKey,
+        color,
+        metadata
+    };
     const data = await apiPost('/save/save_point', {
-        point: {
-            name,
-            description,
-            location,
-            latitude: lat,
-            longitude: lng,
-            svgKey,
-            iconURL,
-            color,
-            metadata
-        }
+        point: point
     });
+    point.metadata = Object.entries(metadata).map(([key, value]) => ({ key, value }));
     if (data.status == 'success') {
         pointsLayer.addLayer(L.marker([lat, lng], {
         icon: L.divIcon({
             className: 'temp-marker-icon',
-            html: iconURL ? getHTMLForSVGIcon(iconURL, color) : `<div style="width:24px; height:24px; background:${color}; transform:rotate(45deg); border-radius:4px; border:2px solid white; box-shadow:0 1px 2px rgba(0,0,0,.35);"></div>`,
+            html: getHTMLForSVGIcon(iconURL, color)
         })
-        }).bindPopup(`
-            <h3>${name}</h3>
-            <p>${description}</p>
-            <p><strong>Location:</strong> ${location}</p>
-            <p><strong>Coordinates:</strong> (${lat.toFixed(5)}, ${lng.toFixed(5)})</p>
-        `));
+    }).bindPopup( createPopupPoint(point) ));
     } else {
         alert('Failed to save point: ' + data.error);
         return;
@@ -372,6 +305,7 @@ async function saveData(map , lat , lng) {
 }
 
 function getHTMLForSVGIcon(iconURL, color) {
+    if (!iconURL) return `<div style="width:24px; height:24px; background:${color}; transform:rotate(45deg); border-radius:4px; border:2px solid white; box-shadow:0 1px 2px rgba(0,0,0,.35);"></div>`
     const html = `
                     <div style=" 
                         width:24px;
