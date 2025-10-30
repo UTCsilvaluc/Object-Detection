@@ -217,6 +217,10 @@ function addMetaData() {
 
 function enableZoomClustering(map) {
     map.on('zoomend', () => {
+        if (window.isExpanding) {
+            window.isExpanding = false;
+            return;
+        }
         if (!document.getElementById('toggle-cluster').checked) return;
         clusters.clearLayers();
         enableClustering(map, clusters, markers, filteredImages);
@@ -252,7 +256,9 @@ function enablePointAdding(map) {
         if (tempMarker) {
             map.removeLayer(tempMarker);
             document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
-            document.getElementById('sidebar').classList.add('visible');
+            if (document.getElementById('toggle-filters').checked) {
+                document.getElementById('sidebar').classList.add('visible');
+            }
             tempMarker = null;
             return;
         }   

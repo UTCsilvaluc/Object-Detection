@@ -52,49 +52,40 @@ window.buildTimelineFromFilteredImages = buildTimelineFromFilteredImages;
 
 (function ($) {
   $.fn.timeline = function () {
-    var selectors = {
+    const selectors = {
       id: $(this),
       item: $(this).find(".timeline-item"),
       activeClass: "timeline-item--active",
       img: ".timeline__img"
     };
 
-    // Activer le premier élément
     selectors.item.eq(0).addClass(selectors.activeClass);
     selectors.id.css(
       "background-image",
       "url(" + selectors.item.first().find(selectors.img).attr("src") + ")"
     );
 
-    var itemLength = selectors.item.length;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const item = $(entry.target);
+          selectors.item.removeClass(selectors.activeClass);
+          item.addClass(selectors.activeClass);
 
-    $("#sidebar-timeline").on("scroll", function () {
-      var container = $(this);
-      var scrollTop = container.scrollTop();
-      var containerHeight = container.height();
-
-      // Centre visible du scroll
-      var centerY = scrollTop + containerHeight / 4;
-
-      selectors.item.each(function (i) {
-        var itemTop = $(this).position().top;
-        var itemBottom = itemTop + $(this).outerHeight();
-
-        // Si le centre du scroll tombe dans la zone de l’item
-        if (centerY >= itemTop && centerY <= itemBottom) {
           selectors.id.css(
             "background-image",
-            "url(" + $(this).find(selectors.img).attr("src") + ")"
+            "url(" + item.find(selectors.img).attr("src") + ")"
           );
-          selectors.item.removeClass(selectors.activeClass);
-          $(this).addClass(selectors.activeClass);
-        }
-
-        if (i === itemLength - 1 && centerY*2 > itemBottom) {
-          selectors.item.removeClass(selectors.activeClass);
-          selectors.item.last().addClass(selectors.activeClass);
         }
       });
+    }, {
+      root: document.getElementById("sidebar-timeline"),
+      threshold: 0.6 
+    });
+    selectors.item.each(function () {
+      observer.observe(this);
     });
   };
 })(jQuery);
+
+$("#timeline-1").timeline();
