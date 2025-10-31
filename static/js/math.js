@@ -49,3 +49,44 @@ export function centerCluster(cluster) {
         longitude: lonSum / cluster.length
     };
 }
+
+export function destinationPoint(lat, lon, distance, bearingDeg) {
+    const R = 6378137; // Earth radius in meters
+    const bearing = bearingDeg * Math.PI / 180;
+    lat = lat * Math.PI / 180;
+    lon = lon * Math.PI / 180;
+
+    const lat2 = Math.asin(
+        Math.sin(lat) * Math.cos(distance / R) +
+        Math.cos(lat) * Math.sin(distance / R) * Math.cos(bearing)
+    );
+
+    const lon2 = lon + Math.atan2(
+        Math.sin(bearing) * Math.sin(distance / R) * Math.cos(lat),
+        Math.cos(distance / R) - Math.sin(lat) * Math.sin(lat2)
+    );
+
+    return [
+        lat2 * 180 / Math.PI,
+        lon2 * 180 / Math.PI
+    ];
+}
+
+export function metersFromPixels(pixels, lat, zoom) {
+    const earthCircumference = 40075016.686; 
+    return pixels * earthCircumference * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom + 8);
+}
+
+export function getMaxPixelRadius(map, center) {
+    const mapSize = map.getSize(); // width/height in pixels
+
+    const centerPx = map.latLngToContainerPoint([center.latitude, center.longitude]);
+
+    // distance au bord gauche, droit, haut, bas
+    const distLeft = centerPx.x;
+    const distRight = mapSize.x - centerPx.x;
+    const distTop = centerPx.y;
+    const distBottom = mapSize.y - centerPx.y;
+
+    return Math.min(distLeft, distRight, distTop, distBottom);
+}

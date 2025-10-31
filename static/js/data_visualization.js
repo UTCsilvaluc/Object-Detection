@@ -1,4 +1,4 @@
-import { clusterPoints, centerCluster } from './math.js';
+import { clusterPoints, centerCluster , getMaxPixelRadius , destinationPoint , metersFromPixels} from './math.js';
 import { createPopupHTML } from './popup.js';
 window.expandedMarkers = [];
 window.hiddenClusters = [];
@@ -23,55 +23,80 @@ export function enableClustering(map, clusters, markers, filteredImages) {
     });
 }
 
-function expandCluster(cluster, map, center , markers) {
-    map.setView([center.latitude, center.longitude], Math.min(map.getZoom() + 2 , 18));
-
-    markers.eachLayer(marker => {
-        const pos = marker.getLatLng();
-        if (cluster.some(point => point.latitude === pos.lat && point.longitude === pos.lng)) {
-            window.hiddenClusters.push(marker);
-            map.removeLayer(marker);
+function getSafeZoom(map, center, pixelRadius, imageSize = 80 , count , markers) {
+    let bestZoom = map.getZoom();
+    const boundsMap = map.getBounds();
+    const screen = { w: map.getSize().x, h: map.getSize().y };
+    const R = (imageSize*Math.sqrt(2)) / 2;
+    const longueur = metersFromPixels(imageSize , center.latitude , bestZoom);
+    for (let z = bestZoom; z <= 18; z++) {
+        const R = metersFromPixels(pixelRadius, center.latitude, z);
+        const teta = (longueur/R)*(180/Math.PI);
+        if (360 / (teta*count) < 0.5) {
+            break;
         }
+        bestZoom = z;
+    }
+    return bestZoom;
+}
+
+function expandCluster(cluster, map, center, markers) {
+    window.expandedMarkers.forEach(marker => {
+        map.removeLayer(marker);
     });
+    window.expandedMarkers = [];
+    markers.eachLayer(marker => {
+        window.hiddenClusters.push(marker);
+        map.removeLayer(marker);
+    });
+    window.circle && map.removeLayer(window.circle);
+
     const count = cluster.length;
-    const bounds = map.getBounds();
-    const latDiff = bounds.getNorth() - bounds.getSouth();
-    const pixelHeight = map.getSize().y;
+    const desiredPixelRadius = 40 + count * 6;
 
-    const latPerPixel = latDiff / pixelHeight;
+    const maxPixelRadius = getMaxPixelRadius(map, center);
+    const pixelRadius = Math.min(desiredPixelRadius, maxPixelRadius);
 
-    const R = latPerPixel * (40 + count * 2); // 40px + 2px par image
+    const safeZoom = getSafeZoom(map, center, pixelRadius , 80 , count , markers);
 
+    map.setView([center.latitude, center.longitude], safeZoom);
+
+    const R = metersFromPixels(pixelRadius, center.latitude, safeZoom);
+    const circle = L.circle([center.latitude, center.longitude], {
+        radius: R,
+        color: 'red',
+        fillOpacity: 0.1
+    }).addTo(map);
+    window.circle = circle;
     cluster.forEach((point, index) => {
-        const angle = (index / count) * 2 * Math.PI;
-        const latOffset = R * Math.cos(angle);
-        const lonOffset = R * Math.sin(angle);
+        const angleDeg = (index / count) * 360;
+        const [lat, lon] = destinationPoint(center.latitude, center.longitude, R, angleDeg);
+
         const icon = L.icon({
             iconUrl: window.appConfig.URL_for_images + point.file_path,
             iconSize: [80, 80],
             iconAnchor: [22, 94],
             popupAnchor: [-3, -76]
         });
-        const marker = L.marker([point.latitude + latOffset, point.longitude + lonOffset], { icon })
-            .bindPopup(createPopupHTML(point , window.appConfig.URL_for_images , window.appConfig.URL_for_view_image))
+
+        const marker = L.marker([lat, lon], { icon })
+            .bindPopup(createPopupHTML(point, window.appConfig.URL_for_images, window.appConfig.URL_for_view_image))
             .addTo(map);
+
         window.expandedMarkers.push(marker);
     });
-    console.log(`Expanded cluster of ${count} points.`);
-}   
-
-export function showTimeline() {
-    alert("Timeline shown (feature coming soon)!");
-}
-
-export function hideTimeline() {
-    alert("Timeline hidden (feature coming soon)!");
-}
-
-export function showObjectLinks() {
-    alert("Object links shown (feature coming soon)!");
-}
-
-export function hideObjectLinks() {
-    alert("Object links hidden (feature coming soon)!");
+    window.expandedMarkers.forEach(marker => {
+        const d1 = map.distance(marker.getLatLng(), circle.getLatLng());
+        const p1 = map.containerPointToLayerPoint(map.latLngToContainerPoint(marker.getLatLng()));
+        window.expandedMarkers.forEach(m => {
+            if (m !== marker) {
+                const d2 = map.distance(m.getLatLng(), circle.getLatLng());
+                const p2 = map.containerPointToLayerPoint(map.latLngToContainerPoint(m.getLatLng()));
+                if (d1 < d2 && p1.distanceTo(p2) < 80) {
+                    map.setView([center.latitude, center.longitude], map.getZoom() + 1);
+                }
+            }
+        });
+    });
+    window.isExpanding = false;
 }

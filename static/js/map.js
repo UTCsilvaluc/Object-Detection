@@ -1,7 +1,7 @@
 // static/js/map.js
 
 // Imports 
-import { enableClustering, showTimeline, hideTimeline, showObjectLinks, hideObjectLinks } from './data_visualization.js';
+import { enableClustering } from './data_visualization.js';
 import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage} from './api.js';
@@ -27,6 +27,7 @@ let map = null;
 let pointsLayer = L.layerGroup();
 let markers = L.layerGroup();
 let clusters = L.layerGroup();
+window.circle = L.layerGroup();
 let checkClasses = [...classes];
 let filteredImages = [...images];
 let metadata_keys = window.appConfig.metadata_keys || [];
@@ -217,10 +218,6 @@ function addMetaData() {
 
 function enableZoomClustering(map) {
     map.on('zoomend', () => {
-        if (window.isExpanding) {
-            window.isExpanding = false;
-            return;
-        }
         if (!document.getElementById('toggle-cluster').checked) return;
         clusters.clearLayers();
         enableClustering(map, clusters, markers, filteredImages);
@@ -400,9 +397,10 @@ function disableClustering() {
     window.expandedMarkers = [];
     window.hiddenClusters.forEach(c => map.addLayer(c));
     window.hiddenClusters = [];
+    window.circle && map.removeLayer(window.circle);
     clusters.clearLayers();
+    enableClustering(map, clusters, markers, filteredImages);
 }
-
 /* Map feature toggles  event listener */
 document.getElementById('toggle-cluster').addEventListener('change', (e) => {
     if (e.target.checked) enableClustering(map, clusters, markers, filteredImages);
