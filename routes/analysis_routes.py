@@ -253,6 +253,7 @@ def upload():
     os.remove(img_path)
     return render_template(
         "result.html",
+        img_name=img_name,
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template
         **defautlSamParameters(), 

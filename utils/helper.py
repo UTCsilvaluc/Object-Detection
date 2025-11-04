@@ -443,7 +443,6 @@ def get_similar_objects(objects, top_k=5):
     for idx, obj in enumerate(objects):
         similar_object_details = []
         similar_objects = find_similar_objects(obj["embedding"], top_k)
-
         if not similar_objects:
             objects[idx]['similar_objects'] = []
             continue
@@ -454,7 +453,6 @@ def get_similar_objects(objects, top_k=5):
             for sim_obj in similar_objects:
                 if sim_obj["distance"] >= threshold:
                     continue  
-
                 instance = get_instance_object_by_object_id(sim_obj['object_id'])
                 data_sim_obj = {
                     "object_id": sim_obj['object_id'],
@@ -479,7 +477,7 @@ def get_similar_objects(objects, top_k=5):
                         if "cropped_file_path" in item:
                             data_sim_obj["cropped_file_path"] = item["cropped_file_path"]
                         if "metadata_key" in item and "metadata_value" in item and item["metadata_key"] and item["metadata_value"]:
-                            data_sim_obj["metadata"].append({ "key": item["metadata_key"], "value": item["metadata_value"] })
+                            data_sim_obj["metadata"].append({ "key": item["metadata_key"], "value": item["metadata_value"] , "obj_image_id": item.get("image_id" , None) , "obj_version_number": item.get("version_number" , None)})
                 if data_sim_obj["class"] and data_sim_obj["cropped_file_path"]:
                     similar_object_details.append(data_sim_obj)
                     found = True

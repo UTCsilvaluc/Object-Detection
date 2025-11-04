@@ -176,23 +176,65 @@
                                             {% for sim_obj in obj.similar_objects %}
                                                 <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">
                                                     <div class="left-similar">
-                                                        <p><strong>Object ID:</strong> {{ sim_obj.object_id }} </p>
-                                                        <p><strong>Similarity Score:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
-                                                        <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}" alt="Similar Object {{ sim_obj.object_id }}">
+                                                        <div class="similar-info">
+                                                            <p><strong>Object ID:</strong> {{ sim_obj.object_id }}</p>
+                                                            <p><strong>Similarity:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
+                                                        </div>
+                                                        <div class="similar-image-box">
+                                                            <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}"
+                                                                alt="Similar Object {{ sim_obj.object_id }}"
+                                                                class="similar-image">
+                                                        </div>
                                                     </div>
+
                                                     <div class="right-similar">
                                                         <div class="obj-meta">
-                                                            <h3>Metadatas of the similar object : </h3>
+                                                            <h3>Similar object {{ loop.index }} — Metadata</h3>
                                                             {% if sim_obj.metadata | length > 0 %}
-                                                                {% for elem in sim_obj.metadata %}
-                                                                    <p class="metadata_similar" data-key="{{ elem.key }}" data-value="{{ elem.value }}"><strong>{{ elem.key }}:</strong> {{ elem.value }}</p>
-                                                                {% endfor %}
-                                                                <span style="display: flex; flex-direction: row; gap: 5px; align-items: center; justify-content: center;"><p title="Allows to be the same object in database"><strong> Same object as object {{ obj.id }} ? </strong></p>
-                                                                    <input type="checkbox" role="radio" name="selected_similar_{{ obj.id }}" value="{{ sim_obj.object_id }}" onchange="defaultObjectSelection(this , '{{ obj.id }}' , '{{ sim_obj.object_id }}')">
-                                                                </span>
-                                                                <button type="button" class="edit-button" onclick="importMetadata(this , '{{ obj.id }}')">Import metadata of this object.</button>
+                                                                <div class="metadata-grouped">
+                                                                    {% set grouped = {} %}
+                                                                    {% for elem in sim_obj.metadata %}
+                                                                        {% set image_id = elem.obj_image_id %}
+                                                                        {% if image_id not in grouped %}
+                                                                            {% set _ = grouped.update({image_id: []}) %}
+                                                                        {% endif %}
+                                                                        {% set _ = grouped[image_id].append(elem) %}
+                                                                    {% endfor %}
+                                                                    {% for image_id, metadata_list in grouped.items() %}
+                                                                        <div class="metadata-source-block">
+                                                                            <h4>From Image {{ image_id }}
+                                                                                {% if metadata_list[0].obj_version_number %}
+                                                                                    — V{{ metadata_list[0].obj_version_number }}
+                                                                                {% endif %}
+                                                                            </h4>
+                                                                            <ul class="metadata-list">
+                                                                                {% for elem in metadata_list %}
+                                                                                    <li class="metadata-item" data-key ="{{ elem.key }}" data-value="{{ elem.value }}">
+                                                                                        <span class="meta-key">{{ elem.key }}:</span>
+                                                                                        <span class="meta-value">{{ elem.value }}</span>
+                                                                                    </li>
+                                                                                {% endfor %}
+                                                                            </ul>
+                                                                        </div>
+                                                                    {% endfor %}
+                                                                </div>
+                                                                <div class="same-object-field">
+                                                                    <label title="Mark this as the same real-world object in database">
+                                                                        Same object as object {{ obj.id }} ?
+                                                                        <input type="checkbox" role="radio" 
+                                                                            name="selected_similar_{{ obj.id }}" 
+                                                                            value="{{ sim_obj.object_id }}"
+                                                                            onchange="defaultObjectSelection(this , '{{ obj.id }}' , '{{ sim_obj.object_id }}')">
+                                                                    </label>
+                                                                </div>
+
+                                                                <button type="button" class="import-btn"
+                                                                    onclick="importMetadata(this , '{{ obj.id }}')">
+                                                                    Import metadata from this object
+                                                                </button>
+
                                                             {% else %}
-                                                                <p>No metadata available for this object.</p>
+                                                                <p class="no-metadata">No metadata available for this object.</p>
                                                             {% endif %}
                                                         </div>
                                                     </div>

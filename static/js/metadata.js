@@ -232,8 +232,7 @@ function importMetadata(button, targetObjID){
 
     const similarMetaContainer = button.closest('.obj-meta');
     if (!similarMetaContainer) return;
-    const metadataElems = similarMetaContainer.querySelectorAll('p.metadata_similar');
-
+    const metadataElems = similarMetaContainer.querySelectorAll('ul.metadata-list li.metadata-item');
     const accordionSection = button.closest('.accordion-section');
     if (!accordionSection) return;
 
@@ -255,11 +254,13 @@ function importMetadata(button, targetObjID){
     // If AppState.metadataUsed[targetObjID] is not defined yet, initialize it
     if (!AppState.metadataUsed[targetObjID]) AppState.metadataUsed[targetObjID] = [];
     const selects = Array.from(targetMetaContainer.querySelectorAll('.meta-field select'));
+    let keyAppended = [];
     metadataElems.forEach(metaElem => {
         const key = metaElem.getAttribute('data-key');
         const value = metaElem.getAttribute('data-value') ?? '';
         if (!key) return;
-
+        if (keyAppended.includes(key)) return;
+        keyAppended.push(key);
         const existingField = selects.find(sel => sel.value === key);
 
         if (existingField) {
