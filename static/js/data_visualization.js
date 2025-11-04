@@ -100,3 +100,22 @@ function expandCluster(cluster, map, center, markers) {
     });
     window.isExpanding = false;
 }
+
+export function showObjectLinks(links , map , linesLayer) {
+    Object.values(links).forEach(key => {
+        const latlngs = [];
+        const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+        key.forEach(point => {
+            if (point.latitude && point.longitude) {
+                latlngs.push([point.latitude, point.longitude]);
+            }
+        });
+        var polyline = L.polyline(latlngs, {color: randomColor}).addTo(linesLayer);
+    });
+    map.addLayer(linesLayer);
+}
+
+export function hideObjectLinks(map , linesLayer) {
+    linesLayer.clearLayers();
+    map.removeLayer(linesLayer);
+}

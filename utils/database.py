@@ -746,7 +746,7 @@ def get_instance_object_by_object_id(object_id: int):
         query = """
         SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
         FROM ObjectInstance OBJ
-        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id 
+        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
         WHERE OBJ.object_id = %s;
         """
         cur.execute(query, (object_id,))
@@ -774,6 +774,50 @@ def get_instance_object_by_object_id(object_id: int):
     finally:
         close_db_connection(conn)
 
+def get_link_between_objects():
+    """
+    Allows to find images where the same object appears multiple times.
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT I.image_id , I.latitude , I.longitude  , OBI.object_id
+        FROM Image AS I
+        JOIN ObjectInstance AS OBI ON I.image_id = OBI.image_id
+        WHERE (
+            OBI.object_id IN (
+                SELECT OBJ.object_id 
+                FROM Object AS OBJ
+                JOIN ObjectInstance AS OBI ON OBJ.object_id = OBI.object_id
+                GROUP BY OBJ.object_id
+                HAVING COUNT(DISTINCT OBI.image_id) > 1
+            )
+        );
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        print(rows)
+        links = []
+        for row in rows:
+            links.append({
+                "image_id": row[0],
+                "latitude": row[1],
+                "longitude": row[2],
+                "object_id": row[3]
+            })
+        cur.close()
+        print(links)
+        return links
+    except Exception as e:
+        print(f"Error fetching link between objects: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
 def find_similar_objects(embedding: list, top_k: int = 5):
     """
     Find similar objects based on the provided embedding using cosine similarity.
@@ -786,7 +830,6 @@ def find_similar_objects(embedding: list, top_k: int = 5):
 
         # Convert the embedding list to PostgreSQL vector format
         vector_str = "[" + ",".join(map(str, embedding)) + "]"
-
         query = """
         SELECT object_id, name, embedding <-> %s::vector AS distance
         FROM Object
@@ -794,7 +837,6 @@ def find_similar_objects(embedding: list, top_k: int = 5):
         ORDER BY distance ASC
         LIMIT %s;
         """
-
         cur.execute(query, (vector_str, top_k))
         rows = cur.fetchall()
         similar_objects = [

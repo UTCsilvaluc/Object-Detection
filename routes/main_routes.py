@@ -13,7 +13,8 @@ from utils.database import (
     get_all_metadata_keys,
     get_all_icons,
     get_all_points,
-    get_metadata_by_point_id
+    get_metadata_by_point_id,
+    get_link_between_objects
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -77,6 +78,17 @@ def map_view():
     metadata_keys = get_all_metadata_keys()
     icons = get_all_icons()
     points = get_all_points()
+    grouped = {}
+    links = get_link_between_objects()
+    for link in links:
+        if link['object_id'] not in grouped:
+            grouped[link['object_id']] = []
+        grouped[link['object_id']].append({
+            'latitude': link['latitude'],
+            'longitude': link['longitude'],
+            'image_id': link['image_id']
+        })
+    print("Grouped Links:", grouped)
     for point in points:
         point['metadata'] = get_metadata_by_point_id(point['point_id'])
-    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, points=points)
+    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, points=points, links=grouped)

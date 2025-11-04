@@ -1,7 +1,7 @@
 // static/js/map.js
 
 // Imports 
-import { enableClustering } from './data_visualization.js';
+import { enableClustering , showObjectLinks , hideObjectLinks} from './data_visualization.js';
 import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage} from './api.js';
@@ -15,6 +15,7 @@ const URL_for_view_image = window.appConfig.URL_for_view_image;
 const URL_for_icons = window.appConfig.icons_path;
 const images = window.appConfig.images;
 const classes = window.appConfig.classes;
+const objectLinks = window.appConfig.objects_linked || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
 const crossIcon = window.appConfig.crossIcon;
@@ -27,6 +28,7 @@ let map = null;
 let pointsLayer = L.layerGroup();
 let markers = L.layerGroup();
 let clusters = L.layerGroup();
+let linesLayer = L.layerGroup();
 window.circle = L.layerGroup();
 let checkClasses = [...classes];
 let filteredImages = [...images];
@@ -419,8 +421,8 @@ document.getElementById('toggle-timeline').addEventListener('change', (e) => {
 });
 
 document.getElementById('toggle-links').addEventListener('change', (e) => {
-    if (e.target.checked) showObjectLinks();
-    else hideObjectLinks();
+    if (e.target.checked) showObjectLinks(objectLinks , map , linesLayer);
+    else hideObjectLinks(map , linesLayer);
 });
 
 document.getElementById('import-geojson').addEventListener('click', () => {
@@ -475,9 +477,6 @@ document.getElementById('toggle-filters').addEventListener('change', (e) => {
 //TODO: timeline, object links functionalities
 /* 
 Link between picture depending on detected objects
-Ajouter une sidebar avec la liste des images visibles sur la carte ? 
-Image browser -> dynamic sidebar and zoom on map
-
 2)
 Use other data or metadatas like objects etc for filtering or clustering...
 view by metadata , by objects , historical period...
