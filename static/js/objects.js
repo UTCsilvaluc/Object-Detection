@@ -1,7 +1,6 @@
 async function removeObject(objID) {
     if (!confirm('Are you sure you want to delete this object?')) return;
-    const data = await apiPost('/objects/remove_object', { id: objID , img_name: "{{ name }}", img_original_path: "{{ original_image_path }}", img_annotated_path: "{{ annotated_image_path }}" });
-
+    const data = await apiPost('/objects/remove_object', { id: objID , img_name: window.AppConfig.name , img_original_path: window.AppConfig.original_image_path, img_annotated_path: window.AppConfig.annotated_image_path });
     if (!data) return;
     if (data.success) {
         const objElement = $(`#obj${objID}`);
