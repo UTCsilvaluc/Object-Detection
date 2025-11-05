@@ -10,9 +10,15 @@ DROP TABLE IF EXISTS Image CASCADE;
 DROP TABLE IF EXISTS Class CASCADE;
 DROP TABLE IF EXISTS MetadataDefinition CASCADE;
 DROP TYPE IF EXISTS metaType;
+DROP TYPE IF EXISTS link_entity;
 DROP TABLE IF EXISTS Icon CASCADE;
 DROP TABLE IF EXISTS MetaDataPoint CASCADE;
 DROP TABLE IF EXISTS Point CASCADE;
+DROP TABLE IF EXISTS LinkEndPoint CASCADE;
+DROP TABLE IF EXISTS LinkGeometry CASCADE;
+DROP TABLE IF EXISTS LinkMetadata CASCADE;
+DROP TABLE IF EXISTS Link CASCADE;
+DROP TABLE IF EXISTS LinkType CASCADE;
 
 
 -- ==============================================
@@ -146,13 +152,13 @@ CREATE TABLE MetaDataPoint (
     PRIMARY KEY (point_id, key)
 );
 
-CREATE TABLE IF NOT EXISTS LinkType (
+CREATE TABLE LinkType (
     key TEXT PRIMARY KEY,       -- ex: 'pilgrimage', '100-days', 'war-1980'
     label TEXT NOT NULL         
 );
 
 -- Allow to give a title to the link, e.g. "Pèlerinage Seg. A" , "First step of 100-days..."
-CREATE TABLE IF NOT EXISTS Link (
+CREATE TABLE Link (
     link_id SERIAL PRIMARY KEY,
     title TEXT,  
     description TEXT, 
@@ -167,7 +173,9 @@ CREATE TABLE LinkEndPoint(
     point_id INT,
     role TEXT,               -- e.g. 'start', 'end', 'waypoint'
     order_index INT,        -- order of the endpoint in the link
-    PRIMARY KEY (link_id, entity_type, image_id, point_id),
+    PRIMARY KEY (link_id, entity_type, order_index),
+    UNIQUE (link_id , image_id),
+    UNIQUE (link_id , point_id),
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON DELETE CASCADE,
     FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
     FOREIGN KEY (point_id) REFERENCES Point(point_id) ON DELETE CASCADE,
@@ -175,7 +183,7 @@ CREATE TABLE LinkEndPoint(
            (entity_type = 'point' AND point_id IS NOT NULL AND image_id IS NULL))
 );
 
-CREATE TABLE IF NOT EXISTS LinkGeometry(
+CREATE TABLE LinkGeometry(
     link_id INT NOT NULL,
     geojson JSONB NOT NULL,
     source TEXT,
@@ -183,7 +191,7 @@ CREATE TABLE IF NOT EXISTS LinkGeometry(
     FOREIGN KEY (link_id) REFERENCES Link(link_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS LinkMetadata (
+CREATE TABLE LinkMetadata (
     link_id INT NOT NULL,
     key TEXT NOT NULL,
     value TEXT,

@@ -39,7 +39,6 @@ let tempMarker = null;
 window.filteredImages = filteredImages;
 window.checkClasses = checkClasses;
 window.enableLinkCreation = false;
-window.clickedLinkItems = [];
 
 // Initialize the map after getting the user's location
 
@@ -218,12 +217,12 @@ document.querySelectorAll('.filter-class input[type="date"]').forEach(input => {
     });
 });
 
-function addMetaData() {
+function addMetaData(id) {
     if (metadata_keys_available.length === 0) {
         alert("No more metadata keys available to add.");
         return;
     }
-    addMetadataField(0);
+    addMetadataField(id);
 
 }
 
@@ -261,6 +260,7 @@ function enableMapStorageListener(map) {
 
 function enablePointAdding(map) {
     map.on('click', function(e) {
+        if (window.enableLinkCreation) return;
         if (tempMarker) {
             map.removeLayer(tempMarker);
             document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
@@ -292,7 +292,7 @@ function enablePointAdding(map) {
             
         tempMarker.bindPopup(popupHTML).openPopup();
         document.getElementById('add-metadata-btn').addEventListener('click', () => {
-            addMetaData();
+            addMetaData(0);
         });
         document.getElementById('save-point-btn').addEventListener('click', async () => {
             await saveData(map, lat, lng);
@@ -353,7 +353,8 @@ async function saveData(map , lat , lng) {
         svgKey = selectedIconElem.getAttribute('data-key');
         iconURL = selectedIconElem.getAttribute('src');
     }
-    let metadata = getMetadataFromFields(document.querySelectorAll('.meta-field'));
+    const metaDataContainer = document.getElementById('meta-0');
+    let metadata = getMetadataFromFields(metaDataContainer.querySelectorAll('.meta-field'));
     const point = {
         name,
         description,
@@ -454,6 +455,10 @@ document.querySelectorAll('.image-thumbnail').forEach(div => {
     });
 });
 
+document.getElementById('add-metadata-link').addEventListener('click', () => {
+    addMetaData(1);
+});
+
 document.getElementById("sidebar-timeline").addEventListener("scroll", (e) => {
     const activeItem = document.querySelector(".timeline-item--active");
     if (activeItem) {
@@ -488,6 +493,146 @@ document.getElementById('toggle-add-links').addEventListener('change', (e) => {
         //alert("Link creation disabled.");
     }
 });
+    
+document.getElementById('link-type').addEventListener('change', async (e) => {
+    if (e.target.value === '__new__') {
+        const key = prompt("Enter the key of the new link type:");
+        const label = prompt("Enter the label of the new link type:");
+        if (key && label) {
+            const data = await apiPost('/save/save_link_type', {
+                key: key,
+                label: label
+            });
+            if (data.success) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.text = label;
+                e.target.add(option, e.target.options[e.target.options.length - 1]);
+                e.target.value = key;
+            } else {
+                alert("Failed to add new link type: " + data.message);
+                e.target.value = e.target.options[0].value;
+            }
+        } else {
+            e.target.value = e.target.options[0].value;
+        }
+    }
+});
+
+document.getElementById('save-link').addEventListener('click', async () => {
+    const title = document.getElementById('link-title').value;
+    const description = document.getElementById('link-description').value;
+    const linkType = document.getElementById('link-type').value;
+    const linkTitleInput = document.getElementById('link-title').value;
+    controlInputValues(title, description , linkType , linkTitleInput);
+    const container = document.getElementById('selected-items');
+    if (container.childElementCount < 2) {
+        alert("Please select at least two items to create a link.");
+        return;
+    }
+    const items = Array.from(container.children);
+    const metaDataContainer = document.getElementById('meta-1');
+    let metadata = getMetadataFromFields(metaDataContainer.querySelectorAll('.meta-field'));
+    const GeoJSON = await getGeoJSONFileInput();
+    const linkData = {
+        title,
+        description,
+        link_type: linkType,
+        items: items.map(item => ({
+            id: item.dataset.id,
+            entity_type: item.dataset.type,
+            latitude: parseFloat(item.getAttribute('latitude')),
+            longitude: parseFloat(item.getAttribute('longitude'))
+        })),
+        metadata,
+        geojson: GeoJSON ? GeoJSON.geojson : null
+    };
+    const data = await apiPost('/save/save_link', {
+        link: linkData
+    });
+    if (data.status == 'success') {
+        alert("Link saved successfully.");
+        container.innerHTML = '<div class="empty-msg">No items selected.</div>';
+        document.getElementById('link-title').value = '';
+        document.getElementById('link-description').value = '';
+        document.getElementById('link-type').value = document.getElementById('link-type').options[0].value;
+        disableClustering();
+        document.getElementById('toggle-add-links').checked = false;
+        window.enableLinkCreation = false;
+        document.body.style.cursor = 'default';
+        document.getElementById('link-panel').classList.toggle('hidden');
+    } else {
+        alert('Failed to save link: ' + data.error);
+        return;
+    }
+});
+
+async function getGeoJSONFileInput() {
+    const input = document.getElementById('geojson-input');
+    const file = input.files[0];
+    const statusBox = document.getElementById('geojson-status');
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const geojson = JSON.parse(text);
+        if (geojson.type !== 'FeatureCollection' || !geojson.features || geojson.features.length === 0) {
+            statusBox.innerText = "Invalid GeoJSON format.";
+            return;
+        } 
+        const lineFeature = geojson.features.find(f => f.geometry && f.geometry.type === 'LineString');
+        if (!lineFeature) {
+            statusBox.innerText = "No LineString feature found in GeoJSON.";
+            return;
+        }
+        const coordinates = lineFeature.geometry.coordinates;
+        const latlngs = coordinates.map(coord => [coord[1], coord[0]]);
+        const polyline = L.polyline(latlngs, { color: 'blue' , weight: 4 , opacity: 0.7});
+        showGeoStatus("GeoJSON LineString path loaded successfully!" , "success");
+        return {geojson , polyline};
+    }
+    catch (error) {
+        statusBox.innerText = "Failed to load GeoJSON: " + error.message;
+        showGeoStatus("Failed to load GeoJSON: " + error.message , "error");
+        return null;
+    }
+}
+
+document.getElementById('geojson-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const statusBox = document.getElementById('geojson-status');
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const geojson = JSON.parse(text);
+        if (geojson.type !== 'FeatureCollection' || !geojson.features || geojson.features.length === 0) {
+            statusBox.innerText = "Invalid GeoJSON format.";
+            return;
+        } 
+        const lineFeature = geojson.features.find(f => f.geometry && f.geometry.type === 'LineString');
+        if (!lineFeature) {
+            statusBox.innerText = "No LineString feature found in GeoJSON.";
+            return;
+        }
+        const coordinates = lineFeature.geometry.coordinates;
+        const latlngs = coordinates.map(coord => [coord[1], coord[0]]);
+        const polyline = L.polyline(latlngs, { color: 'blue' , weight: 4 , opacity: 0.7}).addTo(map);
+        map.fitBounds(polyline.getBounds());
+        showGeoStatus("GeoJSON LineString path loaded successfully!" , "success");
+    }
+    catch (error) {
+        statusBox.innerText = "Failed to load GeoJSON: " + error.message;
+        showGeoStatus("Failed to load GeoJSON: " + error.message , "error");
+        return;
+    }
+    statusBox.innerText = "GeoJSON loaded successfully!";
+});
+function showGeoStatus(msg, type) {
+    const box = document.getElementById('geojson-status');
+    box.className = `geojson-status ${type}`;
+    box.textContent = msg;
+    box.style.display = 'block';
+}
+/* Link creation functionality */
 
 function handleLinkCreationClick(item , marker , type='image') {
     const iconEl = marker._icon;
@@ -506,6 +651,7 @@ function handleLinkCreationClick(item , marker , type='image') {
             src = item.iconURL;
             title = item.name;
             id = item.point_id;
+            type = 'point';
             if (divChild) {
                 divChild.style.border = '7px solid black';
             }
@@ -518,17 +664,19 @@ function handleLinkCreationClick(item , marker , type='image') {
         }
         return;
     }
-    window.clickedLinkItems.push(item);
     document.querySelector(".empty-msg")?.remove();
     const div = document.createElement('div');
     div.className = 'item';
     div.draggable = true;
+    div.setAttribute('latitude', item.latitude);
+    div.setAttribute('longitude', item.longitude);
     div.innerHTML = `
         <img src="${src}" alt="${title}" width="50" height="50"/>
         <span class="title">${title}</span>
         <span class="remove-item">&times;</span>
     `; 
     div.dataset.id = id;
+    div.dataset.type = type;
     container.appendChild(div);
     div.querySelector('.remove-item').addEventListener('click', () => {
         removeLinkItem(id , type , iconEl);
@@ -569,15 +717,6 @@ function removeLinkItem(id , type , iconEl) {
         }
     }
 }
-
-
-/**
- * Cluster points based on proximity.
- * @param {Array<Object>} points - Array of points with {latitude, longitude}
- * @param {number} tolerance - Distance tolerance for clustering
- * @returns {Array<Array<Object>>} - Array of clusters
- */
-
 
 //TODO: timeline, object links functionalities
 /* 

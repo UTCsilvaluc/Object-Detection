@@ -50,6 +50,11 @@
                 </div>
 
                 <hr>
+                <datalist id="existingLink">
+                    {% for link in links %}
+                    <option value="{{ link.title }}">
+                    {% endfor %}
+                </datalist>
                 <!-- Link Information -->
                 <div class="link-info">
                     <label>Link Title:</label>
@@ -57,10 +62,9 @@
 
                     <label>Link Type:</label>
                     <select id="link-type">
-                        <!-- {% for type in link_types %} -->
-                        <!-- <option value="{{ type.key }}">{{ type.label }}</option> -->
-                         <option value="test">test</option>
-                        <!-- {% endfor %} -->
+                        {% for type in link_types %}
+                        <option value="{{ type.key }}">{{ type.label }}</option>
+                        {% endfor %}
                         <option value="__new__">+ Add New Type</option>
                     </select>
 
@@ -78,11 +82,16 @@
                 <hr>
 
                 <h3>Metadata</h3>
-                <div id="metadata-section" class="metadata-section"></div>
-                <button class="small-btn" onclick="addMetadataField()">+ Add Metadata</button>
+                <div id="meta-1" class="metadata-section"></div>
+                <button class="small-btn" id="add-metadata-link">+ Add Metadata</button>
 
                 <hr>
-
+                <div class="geojson-box">
+                    <label class="geojson-label">Import GeoJSON Path:</label>
+                    <input type="file" id="geojson-input" accept=".geojson,.json">
+                    <small class="geojson-help">Upload a GeoJSON file containing a LineString path.</small>
+                    <div id="geojson-status" class="geojson-status"></div>
+                </div>
                 <button id="save-link" class="save-btn">Save Link</button>
             </div>
 
@@ -138,7 +147,9 @@
         window.appConfig = {
             images: {{ images|tojson }},
             classes: {{ classes|tojson }},
-            objects_linked: {{ links|tojson }},
+            objects_linked: {{ object_links|tojson }},
+            links: {{ links|tojson }},
+            link_types: {{ link_types|tojson }},
             metadata_keys: {{ metadata_keys|tojson }},
             icons: {{ icons|tojson }},
             points : {{ points|tojson }},

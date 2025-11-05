@@ -1,5 +1,6 @@
 from flask import Blueprint, request, redirect, url_for, current_app , render_template
 import os
+import json
 
 from utils.helper import (
     get_form_metadata,
@@ -14,7 +15,12 @@ from utils.helper import (
 from utils.database import (
     insert_point,
     insert_metadata_point,
-    get_all_metadata_keys 
+    get_all_metadata_keys ,
+    insert_link_type,
+    insert_link,
+    insert_link_endpoint,
+    insert_link_metadata,
+    insert_link_geometry
 )
 
 save_bp = Blueprint("save", __name__)
@@ -72,12 +78,58 @@ def save_point():
     svg_key = point.get("svgKey")
     color = point.get("color" , "#000000")
     metadata = point.get("metadata" , {})
-    print("Received point data:", point)
     point_id = insert_point(name, description , loc , lat, lng, svg_key, color)
-    print("Inserted point ID:", point_id)
     if not point_id:
         return {"success": False, "status": "error", "message": "Failed to insert point"}, 500
     for key, value in metadata.items():
         insert_metadata_point(point_id, key, value)
-    print("Inserted metadata for point ID:", point_id)
     return {"success": True, "message": "Point saved successfully", "status": "success"}, 200
+
+@save_bp.route('/save_link_type', methods=['POST'])
+def save_link_type():
+    data = request.get_json()
+    if not data:
+        return {"success": False, "message": "No data provided"}, 400
+    key = data.get("key")
+    label = data.get("label")
+    if not key or not label:
+        return {"success": False, "message": "Key and label are required"}, 400
+    success = insert_link_type(key, label)
+    if not success:
+        return {"success": False, "message": "Failed to insert link type"}, 500
+    return {"success": True, "message": "Link type saved successfully"}, 200
+
+@save_bp.route('save_link', methods=['POST'])
+def save_link():
+    data = request.get_json()
+    if not data:
+        return {"success": False, "message": "No data provided"}, 400
+    link = data.get("link")
+    if not link:
+        return {"success": False, "message": "No link data provided"}, 400
+    title = link.get("title")
+    description = link.get("description")
+    link_type = link.get("link_type")
+    items = link.get("items", []) # id , latitude , longitude
+    metadata = link.get("metadata", {})
+    geojson = link.get("geojson" , None)
+    role = None
+    link_id = insert_link(title, description, link_type)
+    if not link_id:
+        return {"success": False, "message": "Failed to insert link"}, 500
+    idx = 0
+    for item in items:
+        if item.get("entity_type") == "image":
+            insert_link_endpoint(link_id, item.get("entity_type"), item.get("id"), None, "waypoint", idx)
+        elif item.get("entity_type") == "point":
+            insert_link_endpoint(link_id, item.get("entity_type"), None, item.get("id"), "waypoint", idx)
+        idx += 1 
+    for key, value in metadata.items():
+        success = insert_link_metadata(link_id, key, value)
+        if not success:
+            return {"success": False, "message": f"Failed to insert metadata key: {key}"}, 500
+    if geojson:
+        success = insert_link_geometry(link_id, json.dumps(geojson), None)
+    if not success:
+        return {"success": False, "message": "Failed to insert link geometry"}, 500
+    return {"success": True, "message": "Link saved successfully"}, 200

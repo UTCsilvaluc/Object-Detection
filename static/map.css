@@ -487,7 +487,7 @@
     top: 10px;
     right: 10px;
     width: 320px;
-    max-height: 85vh;
+    max-height: 450px;
     overflow-y: auto;
     background: white;
     border-radius: 8px;
@@ -603,4 +603,56 @@
 .item.dragging {
     opacity: 0.6;
     outline: 2px dashed #666;
+}
+
+.geojson-box {
+    margin-top: 8px;
+    padding: 10px;
+    background: rgba(255,255,255,0.85);
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.geojson-label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+#geojson-input {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #fafafa;
+}
+
+#geojson-input:hover {
+    border-color: #666;
+}
+
+.geojson-help {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.geojson-status {
+    margin-top: 6px;
+    font-size: 12px;
+    padding: 4px;
+    border-radius: 4px;
+    display: none;
+}
+
+.geojson-status.success {
+    background: #d6ffd8;
+    color: #105f18;
+}
+
+.geojson-status.error {
+    background: #ffd6d6;
+    color: #8b0000;
 }

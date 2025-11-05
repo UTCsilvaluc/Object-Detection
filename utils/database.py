@@ -188,6 +188,113 @@ def insert_metadata_point(point_id: int , key: str , value: str):
     finally:
         close_db_connection(conn)
 
+def insert_link_type(key: str , label: str):
+    """
+    Insert a new link type record into the LinkType table.
+    :param key: str
+    :param label: str
+    :return: bool
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO LinkType (key, label)
+        VALUES (%s, %s);
+        """
+        cur.execute(insert_query, (key, label))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error inserting link type: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def insert_link(title: str , description: str , link_type: str):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        query = """
+        INSERT INTO Link (title, description, link_type)
+        VALUES (%s, %s, %s)
+        RETURNING link_id;
+        """
+        cur.execute(query, (title, description, link_type))
+        link_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        return link_id
+    except Exception as e:
+        print(f"Error inserting link: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def insert_link_endpoint(link_id: int , entity_type: str , image_id: int = None , point_id: int = None , role: str = None , order_index: int = None):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO LinkEndPoint (link_id, entity_type, image_id, point_id, role, order_index)
+        VALUES (%s, %s, %s, %s, %s, %s);
+        """
+        cur.execute(insert_query, (link_id, entity_type, image_id, point_id, role, order_index))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error inserting link endpoint: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def insert_link_metadata(link_id: int , key: str , value: str):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO LinkMetadata (link_id, key, value)
+        VALUES (%s, %s, %s);
+        """
+        cur.execute(insert_query, (link_id, key, value))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error inserting link metadata: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
+
+def insert_link_geometry(link_id: int , geojson: str , source: str = None):
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        insert_query = """
+        INSERT INTO LinkGeometry (link_id, geojson, source)
+        VALUES (%s, %s, %s);
+        """
+        cur.execute(insert_query, (link_id, geojson, source))
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error inserting link geometry: {e}")
+        return False
+    finally:
+        close_db_connection(conn)
 def create_object(name: str , description: str = None , type: str = None , embedding: list = None):
     """
     Create a new object record in the Object table.
@@ -814,6 +921,59 @@ def get_link_between_objects():
         return links
     except Exception as e:
         print(f"Error fetching link between objects: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_link_types():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = "SELECT key, label FROM LinkType;"
+        cur.execute(query)
+        rows = cur.fetchall()
+        link_types = []
+        for row in rows:
+            link_types.append({
+                "key": row[0],
+                "label": row[1]
+            })  
+        cur.close()
+        return link_types
+    except Exception as e:
+        print(f"Error fetching link types: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_links():
+    """
+    Get all links from the Link table.
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = "SELECT link_id, title, description, link_type, created_at FROM Link;"
+        cur.execute(query)
+        rows = cur.fetchall()
+        links = []
+        for row in rows:
+            links.append({
+                "link_id": row[0],
+                "title": row[1],
+                "description": row[2],
+                "link_type": row[3],
+                "created_at": row[4]
+            })  
+        cur.close()
+        return links
+    except Exception as e:
+        print(f"Error fetching links: {e}")
         return []
     finally:
         close_db_connection(conn)
