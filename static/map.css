@@ -481,3 +481,126 @@
     border-color: #007BFF;
 }
 
+/* LINK PANEL */
+.link-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 320px;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.2);
+    font-family: Arial, sans-serif;
+    z-index: 5000;
+}
+
+.link-panel.hidden {
+    display: none;
+}
+
+.link-panel h2, .link-panel h3 {
+    margin: 10px 0;
+}
+
+.selected-items {
+    border: 2px dashed #aaa;
+    min-height: 80px;
+    padding: 10px;
+    border-radius: 6px;
+    background: rgba(240,240,240,0.6);
+}
+
+.selected-items .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+    cursor: grab;
+}
+
+.selected-items .item img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.selected-items .item .item-name {
+    flex: 1;
+    font-size: 13px;
+}
+
+.selected-items .item .remove-btn {
+    color: red;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.link-info label {
+    font-size: 13px;
+    font-weight: bold;
+    display: block;
+    margin-top: 8px;
+}
+
+.link-info input, .link-info select, .link-info textarea {
+    width: 100%;
+    margin-top: 4px;
+    padding: 6px;
+    border-radius: 4px;
+    border: 1px solid #bbb;
+    font-size: 13px;
+}
+
+.new-type-box {
+    background: #f8f8f8;
+    padding: 10px;
+    border: 1px dashed #bbb;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.metadata-section .meta-field {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.metadata-section .meta-field input {
+    flex: 1;
+}
+
+.small-btn {
+    background: #007bff;
+    color: white;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 5px;
+}
+
+.save-btn {
+    width: 100%;
+    padding: 10px;
+    background: green;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.item.dragging {
+    opacity: 0.6;
+    outline: 2px dashed #666;
+}

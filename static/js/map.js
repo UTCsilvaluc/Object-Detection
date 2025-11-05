@@ -5,7 +5,7 @@ import { enableClustering , showObjectLinks , hideObjectLinks} from './data_visu
 import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage} from './api.js';
-import { createPopupHTML , createPopupPoint , createPopupAddPoint } from './popup.js';
+import { createPopupHTML , createPopupPoint , createPopupAddPoint , addPoint} from './popup.js';
 // Main variables and map initialization
 
 const $ = window.jQuery;
@@ -38,6 +38,8 @@ let tempMarker = null;
 
 window.filteredImages = filteredImages;
 window.checkClasses = checkClasses;
+window.enableLinkCreation = false;
+window.clickedLinkItems = [];
 
 // Initialize the map after getting the user's location
 
@@ -84,8 +86,11 @@ function handleLocationError(error) {
 function handleActionPropagation(L) {
     // Prevent event propagation for filter actions
     const filterDiv = document.querySelector('.filter');
+    const linkPanelDiv = document.getElementById('link-panel');
     L.DomEvent.disableClickPropagation(filterDiv);
     L.DomEvent.disableScrollPropagation(filterDiv);
+    L.DomEvent.disableClickPropagation(linkPanelDiv);
+    L.DomEvent.disableScrollPropagation(linkPanelDiv);
 }
 
 function addPoints(layer, points) {
@@ -96,10 +101,9 @@ function addPoints(layer, points) {
             className: 'point-icon',
             html: getHTMLForSVGIcon(iconURL, point.color_hex || '#000000')
         });
+        point.iconURL = iconURL;
         const popupContent = createPopupPoint(point);
-        L.marker([point.latitude, point.longitude], { icon })
-            .bindPopup(popupContent)
-            .addTo(layer);
+        addPoint(L, point, icon, layer , popupContent);
     });
 }
 
@@ -146,7 +150,12 @@ function applyFilters() {
         });
         L.marker([img.latitude, img.longitude], { icon })
             .bindPopup(createPopupHTML(img , URL_for_images , URL_for_view_image))
-            .addTo(markers);
+            .addTo(markers)
+            .addEventListener('click', (e) => {
+                if (window.enableLinkCreation) {
+                    handleLinkCreationClick(img , e.target);
+                }   
+            });
     });
     buildTimelineFromFilteredImages(filteredImages , URL_for_images);
 }   
@@ -353,19 +362,18 @@ async function saveData(map , lat , lng) {
         longitude: lng,
         svgKey,
         color,
-        metadata
+        metadata, 
+        iconURL
     };
     const data = await apiPost('/save/save_point', {
         point: point
     });
     point.metadata = Object.entries(metadata).map(([key, value]) => ({ key, value }));
     if (data.status == 'success') {
-        pointsLayer.addLayer(L.marker([lat, lng], {
-        icon: L.divIcon({
-            className: 'temp-marker-icon',
+        addPoint(L , point, L.divIcon({
+            className: 'point-icon',
             html: getHTMLForSVGIcon(iconURL, color)
-        })
-    }).bindPopup( createPopupPoint(point) ));
+        }) , pointsLayer , createPopupPoint(point) , iconURL);
     } else {
         alert('Failed to save point: ' + data.error);
         return;
@@ -465,6 +473,103 @@ document.getElementById('toggle-filters').addEventListener('change', (e) => {
         filterDiv.classList.remove('visible');
     }
 });
+
+document.getElementById('toggle-add-links').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        window.enableLinkCreation = true;
+        document.body.style.cursor = 'crosshair';
+        document.getElementById('toggle-filters').checked = false;
+        document.querySelector('.filter').classList.remove('visible');
+        document.getElementById('link-panel').classList.toggle('hidden');
+        //alert("Link creation enabled. Click on two points or more to create a link between them.");
+    } else {
+        window.enableLinkCreation = false;
+        document.body.style.cursor = 'default';
+        //alert("Link creation disabled.");
+    }
+});
+
+function handleLinkCreationClick(item , marker , type='image') {
+    const iconEl = marker._icon;
+    let src = '';
+    let title = '';
+    let id = '';
+    if (iconEl) {
+        //si img ou si div
+        if (type === 'image') {
+            src = (URL_for_images + item.file_path);
+            title = item.title;
+            id = item.image_id;
+            iconEl.style.border = '3px solid red';
+        } else {
+            const divChild = iconEl.querySelector('div');
+            src = item.iconURL;
+            title = item.name;
+            id = item.point_id;
+            if (divChild) {
+                divChild.style.border = '7px solid black';
+            }
+        }        
+    }
+    const container = document.getElementById('selected-items');
+    if (Array.from(container.children).some(child => child.dataset.id == id)) {
+        if (confirm("This item is already selected for linking. Do you want to remove it? (yes/no)")) {
+            removeLinkItem(id , type , iconEl);
+        }
+        return;
+    }
+    window.clickedLinkItems.push(item);
+    document.querySelector(".empty-msg")?.remove();
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.draggable = true;
+    div.innerHTML = `
+        <img src="${src}" alt="${title}" width="50" height="50"/>
+        <span class="title">${title}</span>
+        <span class="remove-item">&times;</span>
+    `; 
+    div.dataset.id = id;
+    container.appendChild(div);
+    div.querySelector('.remove-item').addEventListener('click', () => {
+        removeLinkItem(id , type , iconEl);
+    });
+    enableDragSort();
+}
+window.handleLinkCreationClick = handleLinkCreationClick;
+
+function enableDragSort() {
+    const items = document.querySelectorAll('.selected-items .item');
+
+    items.forEach(item => {
+        item.addEventListener('dragstart', () => item.classList.add("dragging"));
+        item.addEventListener('dragend', () => item.classList.remove("dragging"));
+    });
+
+    const zone = document.querySelector('.selected-items');
+    zone.addEventListener('dragover', e => {
+        e.preventDefault();
+        const dragging = document.querySelector(".dragging");
+        const after = [...zone.querySelectorAll(".item:not(.dragging)")].find(i => {
+            const box = i.getBoundingClientRect();
+            return e.clientY < box.top + box.height / 2;
+        });
+        after ? zone.insertBefore(dragging, after) : zone.appendChild(dragging);
+    });
+}
+
+function removeLinkItem(id , type , iconEl) {
+    const container = document.getElementById('selected-items');
+    Array.from(container.children).find(child => parseInt(child.dataset.id) == parseInt(id)).remove();
+    if (type === 'image') {
+        iconEl.style.border = 'none';
+    } else {
+        const divChild = iconEl.querySelector('div');
+        if (divChild) {
+            divChild.style.border = '2px solid white';
+        }
+    }
+}
+
 
 /**
  * Cluster points based on proximity.

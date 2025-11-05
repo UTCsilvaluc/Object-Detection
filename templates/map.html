@@ -39,6 +39,53 @@
                     <button type="button" onclick="applyFilters()">Apply Filters</button>
                 </form>
             </div>
+            <!-- LINK CREATION PANEL -->
+            <div id="link-panel" class="link-panel hidden">
+                <h2>Create a New Link</h2>
+
+                <!-- Selected Elements -->
+                <h3>Selected Elements (drag to reorder):</h3>
+                <div id="selected-items" class="selected-items">
+                    <p class="empty-msg">Click any image, object or point on the map to add it here.</p>
+                </div>
+
+                <hr>
+                <!-- Link Information -->
+                <div class="link-info">
+                    <label>Link Title:</label>
+                    <input type="text" id="link-title" placeholder="Ex: Segment 1 / Shrine → Temple">
+
+                    <label>Link Type:</label>
+                    <select id="link-type">
+                        <!-- {% for type in link_types %} -->
+                        <!-- <option value="{{ type.key }}">{{ type.label }}</option> -->
+                         <option value="test">test</option>
+                        <!-- {% endfor %} -->
+                        <option value="__new__">+ Add New Type</option>
+                    </select>
+
+                    <div id="new-type-box" class="new-type-box" style="display:none;">
+                        <input type="text" id="new-type-key" placeholder="Internal key (ex: pilgrimage)">
+                        <input type="text" id="new-type-label" placeholder="Displayed label (ex: Pèlerinage)">
+                        <textarea id="new-type-description" placeholder="Description (optional)"></textarea>
+                        <button class="small-btn" onclick="createNewLinkType()">Save New Type</button>
+                    </div>
+
+                    <label>Description (optional):</label>
+                    <textarea id="link-description" placeholder="Describe this link..."></textarea>
+                </div>
+
+                <hr>
+
+                <h3>Metadata</h3>
+                <div id="metadata-section" class="metadata-section"></div>
+                <button class="small-btn" onclick="addMetadataField()">+ Add Metadata</button>
+
+                <hr>
+
+                <button id="save-link" class="save-btn">Save Link</button>
+            </div>
+
         </div>
         <div class="sidebar visible" id="sidebar-images">
             <h2>Image sidebar</h2>
@@ -73,6 +120,10 @@
                 <input type="checkbox" id="toggle-filters" checked>
                 <span>Show Filters</span>
             </label>
+            <label>
+                <input type="checkbox" id="toggle-add-links">
+                <span>Enable Link Creation</span>
+            </label>
         </div>
 
         <hr>
@@ -97,7 +148,6 @@
             trashIcon: "{{ url_for('static', filename='img/svg/trash.png') }}",
             icons_path: "{{ url_for('static', filename='img/svg/') }}"
         };
-
         const AppState = {
             metadataKeys : window.appConfig.metadata_keys,
             classNames : window.appConfig.classes,

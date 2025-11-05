@@ -88,3 +88,14 @@ export function createPopupAddPoint(icons, URL_for_icons, lat, lng) {
     `;
     return popupHTML;
 }        
+
+export function addPoint(L , point, icon, layer , popupContent) {
+    L.marker([point.latitude, point.longitude], { icon })
+            .bindPopup(popupContent)
+            .addTo(layer)
+            .addEventListener('click', (event) => {
+                if (window.enableLinkCreation) {
+                    window.handleLinkCreationClick(point , event.target , 'point');
+                } 
+    });
+}

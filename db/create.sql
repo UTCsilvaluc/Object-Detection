@@ -13,6 +13,30 @@ DROP TYPE IF EXISTS metaType;
 DROP TABLE IF EXISTS Icon CASCADE;
 DROP TABLE IF EXISTS MetaDataPoint CASCADE;
 DROP TABLE IF EXISTS Point CASCADE;
+
+
+-- ==============================================
+-- 2. Enum Types
+-- ==============================================
+CREATE TYPE metaType AS ENUM(
+    'short', 
+    'text', 
+    'int', 
+    'float', 
+    'short_float', 
+    'coordinate', 
+    'bool', 
+    'date', 
+    'date-hr-sec', 
+    'string', 
+    'enum'
+);
+
+CREATE TYPE link_entity AS ENUM(
+    'image',
+    'point'
+);
+
 -- ==============================================
 -- 2. Tables
 -- ==============================================
@@ -68,19 +92,6 @@ CREATE TABLE ObjectInstance (
     FOREIGN KEY (version_number, image_id) REFERENCES VersionedImage(version_number, image_id) ON DELETE CASCADE,
     PRIMARY KEY (object_id, image_id, version_number)
 );
-CREATE TYPE metaType AS ENUM(
-    'short', 
-    'text', 
-    'int', 
-    'float', 
-    'short_float', 
-    'coordinate', 
-    'bool', 
-    'date', 
-    'date-hr-sec', 
-    'string', 
-    'enum'
-);
 
 CREATE TABLE MetadataDefinition(
     key TEXT PRIMARY KEY,
@@ -103,6 +114,10 @@ CREATE TABLE Metadata (
     FOREIGN KEY (key) REFERENCES MetadataDefinition(key) ON DELETE CASCADE,
     PRIMARY KEY (object_id, version_number, image_id, key)
 );
+
+-- ==============================================
+-- Map system tables
+-- ==============================================
 
 CREATE TABLE Icon(
     key TEXT PRIMARY KEY,
@@ -131,71 +146,57 @@ CREATE TABLE MetaDataPoint (
     PRIMARY KEY (point_id, key)
 );
 
-INSERT INTO Icon (key, label, svg_path) VALUES
-('bike', 'Bike', 'bike.svg'),
-('break', 'Break', 'break.svg'),
-('bus', 'Bus', 'bus.svg'),
-('coffin', 'Coffin', 'coffin.svg'),
-('house', 'House', 'house.svg'),
-('information', 'Information', 'information.svg'),
-('rest', 'Rest', 'rest.svg'),
-('restaurant', 'Restaurant', 'restaurant.svg'),
-('temple', 'Temple', 'temple.svg'),
-('toilets', 'Toilets', 'toilets.svg'),
-('train', 'Train', 'train.svg');
+CREATE TABLE IF NOT EXISTS LinkType (
+    key TEXT PRIMARY KEY,       -- ex: 'pilgrimage', '100-days', 'war-1980'
+    label TEXT NOT NULL         
+);
+
+-- Allow to give a title to the link, e.g. "Pèlerinage Seg. A" , "First step of 100-days..."
+CREATE TABLE IF NOT EXISTS Link (
+    link_id SERIAL PRIMARY KEY,
+    title TEXT,  
+    description TEXT, 
+    link_type TEXT NOT NULL REFERENCES LinkType(key) ON DELETE RESTRICT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE LinkEndPoint(
+    link_id INT NOT NULL,
+    entity_type link_entity NOT NULL,
+    image_id INT,
+    point_id INT,
+    role TEXT,               -- e.g. 'start', 'end', 'waypoint'
+    order_index INT,        -- order of the endpoint in the link
+    PRIMARY KEY (link_id, entity_type, image_id, point_id),
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON DELETE CASCADE,
+    FOREIGN KEY (image_id) REFERENCES Image(image_id) ON DELETE CASCADE,
+    FOREIGN KEY (point_id) REFERENCES Point(point_id) ON DELETE CASCADE,
+    CHECK ((entity_type = 'image' AND image_id IS NOT NULL AND point_id IS NULL) OR
+           (entity_type = 'point' AND point_id IS NOT NULL AND image_id IS NULL))
+);
+
+CREATE TABLE IF NOT EXISTS LinkGeometry(
+    link_id INT NOT NULL,
+    geojson JSONB NOT NULL,
+    source TEXT,
+    PRIMARY KEY (link_id),
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS LinkMetadata (
+    link_id INT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (link_id) REFERENCES Link(link_id) ON DELETE CASCADE,
+    FOREIGN KEY (key) REFERENCES MetadataDefinition(key) ON DELETE CASCADE,
+    PRIMARY KEY (link_id, key)
+);
+
 -- ==============================================
-
-INSERT INTO Class (name, description) VALUES
-('Person', 'Human individual detected in the image'),
-('Building', 'Architectural structures such as houses, temples, or towers'),
-('Artifact', 'Historical or cultural objects, tools, or art pieces'),
-('Animal', 'Domestic or wild animals'),
-('Plant', 'Vegetation including trees, flowers, and crops'),
-('Landscape', 'Natural scenery, including mountains, rivers, and terrain'),
-('Historical Map', 'Old maps representing geographical information'),
-('Historical Document', 'Documents of historical value or manuscripts'),
-('Inscription', 'Text or carvings engraved on surfaces or objects');
-
+-- 3. Triggers
 -- ==============================================
--- Insert default Metadata Definitions
--- ==============================================
-INSERT INTO MetadataDefinition (key, description, type, format_pattern, enum_values, metric) VALUES
--- ===== Textual / String =====
-('title', 'Short title or name of the object', 'short', '^[\\p{L}\\p{N}\\s\\-_,.()]{1,100}$', NULL, NULL),
-('description', 'Detailed textual description', 'text', NULL, NULL, NULL),
-('creator', 'Author, artist or maker of the object', 'string', '^[\\p{L}\\s\\-]{1,100}$', NULL, NULL),
-('language', 'Primary language of the text or inscription', 'enum', NULL, 'Japanese;English;French;Chinese;Korean;Other', NULL),
-
--- ===== Numeric =====
-('height', 'Height of the object', 'float', '^[0-9]+(\\.[0-9]+)?$', NULL, 'cm'),
-('width', 'Width of the object', 'float', '^[0-9]+(\\.[0-9]+)?$', NULL, 'cm'),
-('length', 'Length or depth of the object', 'float', '^[0-9]+(\\.[0-9]+)?$', NULL, 'cm'),
-('weight', 'Weight of the object', 'float', '^[0-9]+(\\.[0-9]+)?$', NULL, 'kg'),
-
--- ===== Coordinates =====
-('latitude', 'Geographical latitude', 'coordinate', '^[-+]?([1-8]?\\d(\\.\\d+)?|90(\\.0+)?)$', NULL, '°'),
-('longitude', 'Geographical longitude', 'coordinate', '^[-+]?(180(\\.0+)?|((1[0-7]\\d)|([1-9]?\\d))(\\.\\d+)?)$', NULL, '°'),
-
--- ===== Boolean =====
-('is_original', 'Indicates whether this object is an original or a reproduction', 'bool', '^(true|false|0|1)$', NULL, NULL),
-('is_historical', 'Specifies if the object has historical significance', 'bool', '^(true|false|0|1)$', NULL, NULL),
-
--- ===== Date =====
-('date_of_birth', 'Date of birth (for a person or creation date)', 'date', '^\\d{4}-\\d{2}-\\d{2}$', NULL, NULL),
-('capture_date', 'Date of image capture', 'date-hr-sec', '^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}$', NULL, NULL),
-
--- ===== Enumerations =====
-('material', 'Material composition of the object', 'enum', NULL, 'Wood;Stone;Metal;Paper;Ceramic;Glass;Fabric;Plastic;Other', NULL),
-('condition', 'Preservation condition of the object', 'enum', NULL, 'Excellent;Good;Fair;Poor;Restored', NULL),
-('orientation', 'Orientation of the object or photo', 'enum', NULL, 'Portrait;Landscape;Square;Unknown', NULL),
-
--- ===== Specialized formats =====
-('confidence_score', 'Confidence level of detection (0-1)', 'short_float', '^(0(\\.\\d+)?|1(\\.0+)?)$', NULL, NULL),
-('person_age', 'Approximate age of person', 'int', '^[0-9]{1,3}$', NULL, 'years'),
-('temperature', 'Temperature at capture time', 'float', '^-?[0-9]+(\\.[0-9]+)?$', NULL, '°C'),
-('file_format', 'File format type', 'enum', NULL, 'JPEG;PNG;TIFF;BMP;WEBP;Other', NULL),
-('cultural_period', 'Cultural or historical period of the object', 'string', '^[\\p{L}\\s\\-_,.()]{1,50}$', NULL, NULL);
-
+-- Trigger to auto-increment version_number in VersionedImage
 
 CREATE OR REPLACE FUNCTION auto_increment_version()
 RETURNS TRIGGER AS $$
