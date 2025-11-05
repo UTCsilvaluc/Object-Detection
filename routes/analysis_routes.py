@@ -177,7 +177,7 @@ def re_run_analysis():
     return render_template(
         "result.html",
         result=result_data,
-        name=img_name,
+        img_name=img_name,
         **img_data,
         **sam_parameters,
         model=model,

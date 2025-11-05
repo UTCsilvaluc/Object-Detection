@@ -24,6 +24,6 @@ $('#data_form').addEventListener('submit', function(event) {
 });
 window.addEventListener("beforeunload", function () {
     if (AppState.submitting) return;
-    fetch("/clear_temp", { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img_name: "{{ name }}", img_annotated_path: "{{ annotated_image_path }}", img_original_path: "{{ original_image_path }}" }) });
+    fetch("/clear_temp", { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img_name: window.AppConfig.name, img_annotated_path: window.AppConfig.annotated_image_path, img_original_path: window.AppConfig.original_image_path }) });
 });
 

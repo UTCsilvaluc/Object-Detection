@@ -18,7 +18,7 @@
                 <div>
                     <div id="analysis-panel" class="analysis-panel" hidden>
                         <form action="{{url_for('analysis.re_run_analysis')}}" method="post">
-                            <input type="hidden" name="img_name" id="img_name" value="{{ name }}">
+                            <input type="hidden" name="img_name" id="img_name" value="{{ img_name }}">
                             <input type="hidden" name="img_original_path" id="img_original_path" value="{{ original_image_path }}">
                             <input type="hidden" name="img_annotated_path" id="img_annotated_path" value="{{ annotated_image_path }}">
                             <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token }}">
@@ -66,7 +66,7 @@
                 <img src="{{ url_for('main_routes.temp_img', filename=original_image_path) }}" alt="Original Image" class="original-image" onclick="addPointToAnalyse(this , event);" >
             </div>
             <div class="info">
-                <p><strong>Name:</strong> {{ name }}</p>
+                <p><strong>Name:</strong> {{ img_name }}</p>
                 <p><strong>Description:</strong> {{ desc }}</p>
                 <p><strong>Date:</strong> {{ date }}</p>
                 <p><strong>Location:</strong> {{ location }} ({{ latitude }}, {{ longitude }})</p>
@@ -89,7 +89,7 @@
         <div class="right-panel">
             <h2>Detected Objects</h2>
                 <form action="{{url_for('save.save_metadata')}}" id="data_form" method="post">
-                    <input type="hidden" name="img_name" value="{{ name }}">
+                    <input type="hidden" name="img_name" value="{{ img_name }}">
                     <input type="hidden" name="img_desc" value="{{ desc }}">
                     <input type="hidden" name="img_date" value="{{ date }}">
                     <input type="hidden" name="img_location" value="{{ location }}">
