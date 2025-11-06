@@ -7,7 +7,7 @@ import json
 from utils.database import *
 from ultralytics.utils.plotting import colors
 import io
-from PIL import Image
+from PIL import Image , ExifTags, ImageOps
 import regex
 import numpy as np
 
@@ -417,13 +417,19 @@ def draw_annotations(image, objects):
 def fileStorage_to_image(file_storage):
     """
     Convert a Flask FileStorage object to an OpenCV image.
+    Handle image orientation based on EXIF data in case of images taken from mobile devices.
     :param file_storage: Flask FileStorage object
     :return: OpenCV image (numpy array) or None if conversion fails
     """
     img_bytes = file_storage.read()
     img_bytes = io.BytesIO(img_bytes)
     try:
-        img = Image.open(img_bytes).convert("RGB")
+        img = Image.open(img_bytes)
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception as e:
+            pass
+        img = img.convert("RGB")
     except Exception as e:
         return None
     img_array = np.array(img)
