@@ -76,7 +76,6 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
         buf.seek(0)
         img_pil = Image.open(buf)
         plt.close()
-        print(f"Global SAM result saved to {global_path}")
 
         # Save each isolated object
         for idx, mask in enumerate(masks):
@@ -93,7 +92,6 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
 
             obj_path = os.path.join(save_dir, f"{base_name}_obj_{idx+1}.png")
             cv2.imwrite(obj_path, cv2.cvtColor(obj_crop, cv2.COLOR_RGB2BGR))
-            print(f"Saved merged object {idx+1} to {obj_path}")
     # Convert img_pil to numpy array
     img_pil = np.array(img_pil)
 

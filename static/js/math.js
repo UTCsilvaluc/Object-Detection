@@ -91,10 +91,41 @@ export function getMaxPixelRadius(map, center) {
     return Math.min(distLeft, distRight, distTop, distBottom);
 }
 
+/**
+ * Calculates the angle of inclination (slope) between two geographic points on the map.
+ * Using trigonometric functions to determine the angle based on pixel positions.
+ * @param {*} map - The map object.
+ * @param {*} lat1 - The latitude of the first point.
+ * @param {*} lon1 - The longitude of the first point.
+ * @param {*} lat2 - The latitude of the second point.
+ * @param {*} lon2 - The longitude of the second point.
+ * @returns {number} - The angle of inclination in degrees.
+ */
 export function degOfPente(map, lat1, lon1, lat2, lon2) {
     const point1 = map.latLngToContainerPoint([lat1, lon1]);
     const point2 = map.latLngToContainerPoint([lat2, lon2]);
     const latDiff = point2.y - point1.y;
     const lonDiff = point2.x - point1.x;
     return Math.atan2(latDiff, lonDiff) * (180 / Math.PI);
+}
+
+/**
+ * Gets the center marker position on the map. As the icon may have an anchor offset,
+ * @param {Object} marker - The marker object.
+ * @param {Object} map - The map object.
+ * @param {Object} L - The Leaflet object.
+ * @returns {Object} - The center marker position.
+ */
+export function getCenterMarker(marker , map , L){
+    const icon = marker.options.icon;
+    const iconSize = icon.options.iconSize || [80, 80];
+    const iconAnchor = icon.options.iconAnchor || [iconSize[0] / 2, iconSize[1] / 2];
+    const latlng = marker.getLatLng();
+    const pixelMarkerCoords = map.latLngToContainerPoint(latlng);
+    const centerPixel = L.point(
+        pixelMarkerCoords.x + (iconSize[0]/2 - iconAnchor[0]),
+        pixelMarkerCoords.y + (iconSize[1]/2 - iconAnchor[1])
+    );
+    const centerLatLng = map.containerPointToLatLng(centerPixel);
+    return {centerPixel , centerLatLng};
 }

@@ -253,16 +253,12 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         embedding = current_object_json.get("embedding", None)
         instance_value = request.form.get(f"objects[{i}][value]")
 
-        # Sauvegarde du crop
         crop_path = normalize_path(request.form.get(f"objects[{i}][crop_path]"))
         object_path = save_image_permanently(crop_path, upload_folder, f"{img_name}_obj{i}.jpg")
         object_file_name = os.path.basename(object_path)
 
-        # Insertion en base
-        print(f"Processing object {i} with similar_object: {similar_object}")
         if similar_object:
             object_id = int(similar_object)
-            print(f"Using existing object ID {object_id} for object {i}")
         else:
             object_id = create_object(
                 name=f"{img_name}_obj{i}",
@@ -270,7 +266,6 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
                 type=class_id,
                 embedding=embedding
             )
-            print(f"Created new object ID {object_id} for object {i}")
 
         create_instance_object(
             object_id=object_id,

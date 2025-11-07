@@ -252,3 +252,14 @@ export async function getGeoJSONFileInput() {
         return null;
     }
 }
+
+export function getMarkerByLatLng(markers, lat, lng) {
+    let foundMarker = null;
+    markers.eachLayer(marker => {
+        const markerLatLng = marker.getLatLng();
+        if (markerLatLng.lat == lat && markerLatLng.lng == lng) {
+            foundMarker = marker;
+        }
+    });
+    return foundMarker;
+}

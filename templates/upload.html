@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YOLO Results</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='result.css') }}">
+    <title>AI Image Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='upload.css') }}">
 </head>
 <body>
     <div class="container">
@@ -218,15 +218,6 @@
                                                                         </div>
                                                                     {% endfor %}
                                                                 </div>
-                                                                <div class="same-object-field">
-                                                                    <label title="Mark this as the same real-world object in database">
-                                                                        Same object as object {{ obj.id }} ?
-                                                                        <input type="checkbox" role="radio" 
-                                                                            name="selected_similar_{{ obj.id }}" 
-                                                                            value="{{ sim_obj.object_id }}"
-                                                                            onchange="defaultObjectSelection(this , '{{ obj.id }}' , '{{ sim_obj.object_id }}')">
-                                                                    </label>
-                                                                </div>
 
                                                                 <button type="button" class="import-btn"
                                                                     onclick="importMetadata(this , '{{ obj.id }}')">
@@ -236,6 +227,15 @@
                                                             {% else %}
                                                                 <p class="no-metadata">No metadata available for this object.</p>
                                                             {% endif %}
+                                                            <div class="same-object-field">
+                                                                    <label title="Mark this as the same real-world object in database">
+                                                                        Same object as object {{ obj.id }} ?
+                                                                        <input type="checkbox" role="radio" 
+                                                                            name="selected_similar_{{ obj.id }}" 
+                                                                            value="{{ sim_obj.object_id }}"
+                                                                            onchange="defaultObjectSelection(this , '{{ obj.id }}' , '{{ sim_obj.object_id }}')">
+                                                                    </label>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

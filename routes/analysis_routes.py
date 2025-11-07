@@ -175,7 +175,7 @@ def re_run_analysis():
     class_name = get_all_classes()
     metadata_keys = get_all_metadata_keys()
     return render_template(
-        "result.html",
+        "upload.html",
         result=result_data,
         img_name=img_name,
         **img_data,
@@ -217,7 +217,6 @@ def upload():
     # Traitement des résultats YOLO
     model = "YOLOv8"
     if result_data["num_objects"] == 0:
-        print("No objects detected with YOLO, switching to SAM...")
         model = ModelFactory.get_model("sam")
         raw_results , _ , img_result  = model.run(img_path)
         result_data = model.process_results(raw_results , img_cv)
@@ -252,7 +251,7 @@ def upload():
     metadata_keys = get_all_metadata_keys()
     os.remove(img_path)
     return render_template(
-        "result.html",
+        "upload.html",
         img_name=img_name,
         result=result_data,
         **metadata,  # injection directe des métadonnées dans le template

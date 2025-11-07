@@ -15,9 +15,9 @@ const URL_for_view_image = window.appConfig.URL_for_view_image;
 const URL_for_icons = window.appConfig.icons_path;
 const images = window.appConfig.images;
 const classes = window.appConfig.classes;
-const objectLinks = window.appConfig.objects_linked || [];
 const links = window.appConfig.links || [];
 const linkTypes = window.appConfig.link_types || [];
+let objectLinks = window.appConfig.objects_linked || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
 const crossIcon = window.appConfig.crossIcon;
@@ -31,6 +31,7 @@ let pointsLayer = L.layerGroup();
 let markers = L.layerGroup();
 let clusters = L.layerGroup();
 let linesLayer = L.layerGroup();
+let objectLinesLayer = L.layerGroup();
 window.circle = L.layerGroup();
 let checkClasses = [...classes];
 let filteredImages = [...images];
@@ -72,8 +73,9 @@ function initMap(position) {
     // Add points to the map based on filtered images
     applyFilters();
     addPoints(pointsLayer, points);
-    addLinksToMap(linesLayer, map, links);
+    addLinksToMap(linesLayer, map, links , markers , L);
     enableZoomClustering(map);
+    updateLinkOnZoom(map);
     enableClustering(map, clusters, markers, filteredImages);
     enableMapStorageListener(map);
     enablePointAdding(map);
@@ -235,6 +237,13 @@ function enableZoomClustering(map) {
     });
 }
 
+function updateLinkOnZoom(map) {
+    map.on('zoomend', () => {
+        if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
+        if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+    });
+}
+
 function enableMapStorageListener(map) {
     window.addEventListener("storage", async (event) => {
         if (event.key === 'upload_done') {
@@ -248,6 +257,13 @@ function enableMapStorageListener(map) {
                 filteredImages.push(image);
                 applyFilters();
                 alert("AI Image uploaded and added to the map successfully.");
+                const dataReq = await apiPost('objects/link_between_objects', {});
+                if (dataReq.status === 'success') {
+                    objectLinks = dataReq.links;
+                    if (document.getElementById('toggle-object-links').checked) {
+                        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+                    }
+                }
                 if (tempMarker) {
                     map.removeLayer(tempMarker);
                     document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
@@ -272,7 +288,7 @@ function enablePointAdding(map) {
             return;
         }   
         if (window.expandedMarkers.length > 0) {
-            disableClustering();
+            disableClustering(map, clusters, markers, filteredImages);
             return;   
         }
         document.getElementById('sidebar').classList.remove('visible');
@@ -344,7 +360,7 @@ function enablePointAdding(map) {
 document.getElementById('toggle-cluster').addEventListener('change', (e) => {
     if (e.target.checked) enableClustering(map, clusters, markers, filteredImages);
     else {
-        disableClustering();
+        disableClustering(map, clusters, markers, filteredImages);
     }
 });
 
@@ -357,9 +373,9 @@ document.getElementById('toggle-timeline').addEventListener('change', (e) => {
     }
 });
 
-document.getElementById('toggle-links').addEventListener('change', (e) => {
-    if (e.target.checked) showObjectLinks(objectLinks , map , linesLayer);
-    else hideObjectLinks(map , linesLayer);
+document.getElementById('toggle-object-links').addEventListener('change', (e) => {
+    if (e.target.checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+    else hideObjectLinks(map , objectLinesLayer);
 });
 
 document.getElementById('import-geojson').addEventListener('click', () => {
@@ -520,21 +536,11 @@ document.getElementById('geojson-input').addEventListener('change', async (e) =>
     statusBox.innerText = "GeoJSON loaded successfully!";
 });
 
-
-//TODO: timeline, object links functionalities
-/* 
-Link between picture depending on detected objects
-2)
-Use other data or metadatas like objects etc for filtering or clustering...
-view by metadata , by objects , historical period...
-
-3) Outil de sélection de points / images pour faire des tracés entre les points sauvegardés sur le serveur ou base de donnée.
-
-Timeline : Outil de sélection d'objet parmi le temps ? Reconstruire l'historique d'un objet au travers du temps, déplacements etc ?
-Par exemple apparait en 1940 à telle endroit, puis en 1950 à un autre endroit etc...
-OU
-Timeline globale des images sur la carte ? Filtrer les images visibles sur la carte en fonction d'une timeline ? avec auto play 
-
-Option qui permettrait de lier des images / points entre eux avec metadatas , permettrait de tracer des chemins, itinéraires etc...
-
-*/
+document.getElementById('toggle-show-links').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        addLinksToMap(linesLayer, map, links , markers , L);
+        linesLayer.addTo(map);
+    } else {
+        map.removeLayer(linesLayer);
+    }
+});

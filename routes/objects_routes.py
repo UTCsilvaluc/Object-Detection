@@ -12,6 +12,10 @@ from utils.helper import (
     draw_annotations,
     get_next_id_available
 )
+
+from utils.database import (
+    get_link_between_objects
+)
 from models.factory import ModelFactory
 
 object_bp = Blueprint("objects", __name__)
@@ -106,3 +110,19 @@ def remove_object():
     cv2.imwrite(img_annotated_path, image)
 
     return {"success": True, "num_objects": len(objects)}, 200
+
+@object_bp.route('/link_between_objects', methods=['POST'])
+def link_between_objects():
+    object_links = get_link_between_objects()
+    grouped = {}
+    if object_links is None:
+        return {"status": 'error' ,"success": False, "message": "Failed to retrieve links"}, 500
+    for object_link in object_links:
+        if object_link['object_id'] not in grouped:
+            grouped[object_link['object_id']] = []
+        grouped[object_link['object_id']].append({
+            'latitude': object_link['latitude'],
+            'longitude': object_link['longitude'],
+            'image_id': object_link['image_id']
+        })
+    return {"status": 'success' ,"success": True, "links": grouped}, 200

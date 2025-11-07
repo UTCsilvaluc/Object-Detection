@@ -1,5 +1,7 @@
 import { clusterPoints, centerCluster , getMaxPixelRadius , destinationPoint , metersFromPixels} from './math.js';
+import { getCenterMarker } from './math.js';
 import { createPopupHTML } from './popup.js';
+import { getMarkerByLatLng } from './utils.js';
 window.expandedMarkers = [];
 window.hiddenClusters = [];
 window.isExpanding = false;
@@ -101,31 +103,33 @@ function expandCluster(cluster, map, center, markers) {
     window.isExpanding = false;
 }
 
-export function showObjectLinks(links , map , linesLayer) {
-    Object.values(links).forEach(key => {
+export function showObjectLinks(markers , L , objectLinks , map , objectLinesLayer) {
+    objectLinesLayer.clearLayers();
+    Object.values(objectLinks).forEach(key => {
         const latlngs = [];
         const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
         key.forEach(point => {
             if (point.latitude && point.longitude) {
-                latlngs.push([point.latitude, point.longitude]);
+                const marker = getMarkerByLatLng(markers , point.latitude , point.longitude);
+                const center = getCenterMarker(marker , map , L);
+                latlngs.push([center.centerLatLng.lat, center.centerLatLng.lng]);
             }
         });
-        var polyline = L.polyline(latlngs, {color: randomColor}).addTo(linesLayer);
+        var polyline = L.polyline(latlngs, {color: randomColor}).addTo(objectLinesLayer);
     });
-    map.addLayer(linesLayer);
+    map.addLayer(objectLinesLayer);
 }
 
-export function hideObjectLinks(map , linesLayer) {
-    linesLayer.clearLayers();
-    map.removeLayer(linesLayer);
+export function hideObjectLinks(map , objectLinesLayer) {
+    objectLinesLayer.clearLayers();
+    map.removeLayer(objectLinesLayer);
 }
 
-export function disableClustering() {
+export function disableClustering(map, clusters, markers, filteredImages) {
     window.expandedMarkers.forEach(m => map.removeLayer(m));
     window.expandedMarkers = [];
     window.hiddenClusters.forEach(c => map.addLayer(c));
     window.hiddenClusters = [];
     window.circle && map.removeLayer(window.circle);
     clusters.clearLayers();
-    enableClustering(map, clusters, markers, filteredImages);
 }

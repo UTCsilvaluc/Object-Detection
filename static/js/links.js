@@ -1,5 +1,5 @@
-import { degOfPente } from "./math.js";
-
+import { degOfPente, getCenterMarker } from "./math.js";
+import { getMarkerByLatLng } from "./utils.js";
 export function createPolylineWithText(linesLayer , latlngs, map, link) {
     const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
     const polyline = L.polyline(latlngs, { color: randomColor , weight: 4 , opacity: 0.7});
@@ -25,7 +25,7 @@ export function createPolylineWithText(linesLayer , latlngs, map, link) {
     return polyline;
 }
 
-export function addLinksToMap(linesLayer , map, links) {
+export function addLinksToMap(linesLayer , map, links , markers , L) {
     linesLayer.clearLayers();
     links.forEach(link => {
         if (link.geometry) {
@@ -69,11 +69,30 @@ export function addLinksToMap(linesLayer , map, links) {
             }
         } else {
             const latlngs = link.endpoints.map(item => [item.latitude , item.longitude]);
+            centerLatLngsWithAnchor(latlngs, markers, map, L);
             const polyline = createPolylineWithText(linesLayer,latlngs, map, link);
             linesLayer.addLayer(polyline);
             linesLayer.addTo(map);
         }
     });
+}
+/**
+ * Centers the given latitude/longitude pairs based on the markers' positions.
+ * @param {*} latlngs - The latitude/longitude pairs to center.
+ * @param {*} markers - The markers layer.
+ * @param {*} map - The map object.
+ * @param {*} L - The Leaflet object.
+ * @returns {Array} - The centered latitude/longitude pairs.
+ */
+function centerLatLngsWithAnchor(latlngs, markers , map , L) {
+    latlngs.forEach((latlng , index) => {
+        const marker = getMarkerByLatLng(markers, latlng[0], latlng[1]);
+        if (marker) {
+            const newLatLng = getCenterMarker(marker , map , L);
+            latlngs[index] = [newLatLng.centerLatLng.lat , newLatLng.centerLatLng.lng];
+        }
+    });
+    return latlngs;
 }
 
 export function removeLinkItem(id , type , iconEl) {
