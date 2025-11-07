@@ -16,7 +16,10 @@ from utils.database import (
     get_metadata_by_point_id,
     get_link_between_objects,
     get_all_links,
-    get_all_link_types
+    get_all_link_types,
+    get_link_endpoints,
+    get_link_metadata,
+    get_link_geometry
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -84,6 +87,10 @@ def map_view():
     object_links = get_link_between_objects()
     link_types = get_all_link_types()
     links = get_all_links()
+    for link in links:
+        link['endpoints'] = get_link_endpoints(link['link_id'])
+        link['metadata'] = get_link_metadata(link['link_id'])
+        link['geometry'] = get_link_geometry(link['link_id'])
     for object_link in object_links:
         if object_link['object_id'] not in grouped:
             grouped[object_link['object_id']] = []

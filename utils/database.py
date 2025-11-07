@@ -978,6 +978,93 @@ def get_all_links():
     finally:
         close_db_connection(conn)
 
+
+def get_link_endpoints(link_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT LEP.entity_type, LEP.image_id, LEP.point_id, LEP.role, LEP.order_index , img.latitude, img.longitude, pt.latitude, pt.longitude
+        FROM LinkEndPoint LEP
+        LEFT JOIN Image img ON LEP.image_id = img.image_id
+        LEFT JOIN Point pt ON LEP.point_id = pt.point_id
+        WHERE link_id = %s
+        ORDER BY order_index ASC;
+        """
+        cur.execute(query, (link_id,))
+        rows = cur.fetchall()
+        endpoints = []
+        for row in rows:
+            latitude = row[5] if row[5] is not None else row[7]
+            longitude = row[6] if row[6] is not None else row[8]
+            endpoints.append({
+                "entity_type": row[0],
+                "image_id": row[1],
+                "point_id": row[2],
+                "role": row[3],
+                "order_index": row[4],
+                "latitude": latitude,
+                "longitude": longitude
+            })  
+        cur.close()
+        return endpoints
+    except Exception as e:
+        print(f"Error fetching link endpoints: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_link_metadata(link_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT key , value FROM LinkMetadata WHERE link_id = %s;
+        """
+        cur.execute(query, (link_id,))
+        rows = cur.fetchall()
+        metadata = []
+        for row in rows:
+            metadata.append({
+                "key": row[0],
+                "value": row[1]
+            })
+        cur.close()
+        return metadata
+    except Exception as e:
+        print(f"Error fetching link metadata: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_link_geometry(link_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT geojson, source FROM LinkGeometry WHERE link_id = %s;
+        """
+        cur.execute(query, (link_id,))
+        row = cur.fetchone()
+        if row:
+            geometry = {
+                "geojson": row[0],
+                "source": row[1]
+            }
+            return geometry
+        cur.close()
+        return None
+    except Exception as e:
+        print(f"Error fetching link geometry: {e}")
+        return None
+    finally:
+        close_db_connection(conn)
 def find_similar_objects(embedding: list, top_k: int = 5):
     """
     Find similar objects based on the provided embedding using cosine similarity.

@@ -118,6 +118,7 @@ def save_link():
     if not link_id:
         return {"success": False, "message": "Failed to insert link"}, 500
     idx = 0
+    success = True
     for item in items:
         if item.get("entity_type") == "image":
             insert_link_endpoint(link_id, item.get("entity_type"), item.get("id"), None, "waypoint", idx)
@@ -132,4 +133,4 @@ def save_link():
         success = insert_link_geometry(link_id, json.dumps(geojson), None)
     if not success:
         return {"success": False, "message": "Failed to insert link geometry"}, 500
-    return {"success": True, "message": "Link saved successfully"}, 200
+    return {"status": 'success' ,"success": True, "message": "Link saved successfully"}, 200

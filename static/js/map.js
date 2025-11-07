@@ -1,21 +1,23 @@
 // static/js/map.js
 
 // Imports 
-import { enableClustering , showObjectLinks , hideObjectLinks} from './data_visualization.js';
-import { removeSelectOptionFromAll , setTrashIcon , getMetadataFromFields , controlInputValues} from './utils.js';
+import { enableClustering , showObjectLinks , hideObjectLinks , disableClustering} from './data_visualization.js';
+import { setTrashIcon , getMetadataFromFields , controlInputValues , getGeoJSONFileInput , showGeoStatus} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
-import { apiPost , uploadAIImage} from './api.js';
-import { createPopupHTML , createPopupPoint , createPopupAddPoint , addPoint} from './popup.js';
+import { apiPost , uploadAIImage , saveData} from './api.js';
+import { createPopupHTML , createPopupPoint , createPopupAddPoint , addPoint , getHTMLForSVGIcon} from './popup.js';
+import {addLinksToMap , handleLinkCreationClick , clearLinkCreationForm , createPolylineWithText} from './links.js';
 // Main variables and map initialization
 
 const $ = window.jQuery;
-
 const URL_for_images = window.appConfig.URL_for_images;
 const URL_for_view_image = window.appConfig.URL_for_view_image;
 const URL_for_icons = window.appConfig.icons_path;
 const images = window.appConfig.images;
 const classes = window.appConfig.classes;
 const objectLinks = window.appConfig.objects_linked || [];
+const links = window.appConfig.links || [];
+const linkTypes = window.appConfig.link_types || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
 const crossIcon = window.appConfig.crossIcon;
@@ -70,6 +72,7 @@ function initMap(position) {
     // Add points to the map based on filtered images
     applyFilters();
     addPoints(pointsLayer, points);
+    addLinksToMap(linesLayer, map, links);
     enableZoomClustering(map);
     enableClustering(map, clusters, markers, filteredImages);
     enableMapStorageListener(map);
@@ -152,7 +155,7 @@ function applyFilters() {
             .addTo(markers)
             .addEventListener('click', (e) => {
                 if (window.enableLinkCreation) {
-                    handleLinkCreationClick(img , e.target);
+                    handleLinkCreationClick(img , e.target , 'image' , URL_for_images);
                 }   
             });
     });
@@ -189,8 +192,6 @@ function refreshFilteredImages() {
     filteredImages = images.filter(checkAllFilters);
     applyFilters();
 }
-
-/* Event listeners */
 
 document.querySelectorAll('.class-list input[type="checkbox"]').forEach(checkbox => {
     checkbox.addEventListener('change', (event) => {
@@ -295,7 +296,7 @@ function enablePointAdding(map) {
             addMetaData(0);
         });
         document.getElementById('save-point-btn').addEventListener('click', async () => {
-            await saveData(map, lat, lng);
+            await saveData(map, lat, lng , tempMarker , pointsLayer);
         });
         document.getElementById('ai-upload-btn').addEventListener('click', () => {
             uploadAIImage(lat, lng);
@@ -340,79 +341,6 @@ function enablePointAdding(map) {
     });
 }
 
-async function saveData(map , lat , lng) {
-    const name = document.getElementById('point-name').value;
-    const description = document.getElementById('point-description').value;
-    const location = document.getElementById('point-location').value;
-    const color = document.getElementById('point-color').value;
-    const selectedIconElem = document.querySelector('.icon-preview .icon.selected');
-    let svgKey = null;
-    let iconURL = null;
-    controlInputValues(name, description, location);
-    if (selectedIconElem) {
-        svgKey = selectedIconElem.getAttribute('data-key');
-        iconURL = selectedIconElem.getAttribute('src');
-    }
-    const metaDataContainer = document.getElementById('meta-0');
-    let metadata = getMetadataFromFields(metaDataContainer.querySelectorAll('.meta-field'));
-    const point = {
-        name,
-        description,
-        location,
-        latitude: lat,
-        longitude: lng,
-        svgKey,
-        color,
-        metadata, 
-        iconURL
-    };
-    const data = await apiPost('/save/save_point', {
-        point: point
-    });
-    point.metadata = Object.entries(metadata).map(([key, value]) => ({ key, value }));
-    if (data.status == 'success') {
-        addPoint(L , point, L.divIcon({
-            className: 'point-icon',
-            html: getHTMLForSVGIcon(iconURL, color)
-        }) , pointsLayer , createPopupPoint(point) , iconURL);
-    } else {
-        alert('Failed to save point: ' + data.error);
-        return;
-    }
-    map.removeLayer(tempMarker);
-    document.querySelectorAll('.popup-add-point').forEach(el => el.remove());
-}
-
-function getHTMLForSVGIcon(iconURL, color) {
-    if (!iconURL) return `<div style="width:24px; height:24px; background:${color}; transform:rotate(45deg); border-radius:4px; border:2px solid white; box-shadow:0 1px 2px rgba(0,0,0,.35);"></div>`
-    const html = `
-                    <div style=" 
-                        width:24px;
-                        height:24px;
-                        background-color:${color};
-                        -webkit-mask-image:url('${iconURL}');
-                        mask-image:url('${iconURL}');
-                        -webkit-mask-size:contain;
-                        mask-size:contain;
-                        -webkit-mask-repeat:no-repeat;
-                        mask-repeat:no-repeat;
-                        border: 2px solid white;
-                        box-shadow:0 1px 2px rgba(0,0,0,.35);
-                    ">
-                    </div>
-                `;
-    return html;
-}
-function disableClustering() {
-    window.expandedMarkers.forEach(m => map.removeLayer(m));
-    window.expandedMarkers = [];
-    window.hiddenClusters.forEach(c => map.addLayer(c));
-    window.hiddenClusters = [];
-    window.circle && map.removeLayer(window.circle);
-    clusters.clearLayers();
-    enableClustering(map, clusters, markers, filteredImages);
-}
-/* Map feature toggles  event listener */
 document.getElementById('toggle-cluster').addEventListener('change', (e) => {
     if (e.target.checked) enableClustering(map, clusters, markers, filteredImages);
     else {
@@ -488,9 +416,7 @@ document.getElementById('toggle-add-links').addEventListener('change', (e) => {
         document.getElementById('link-panel').classList.toggle('hidden');
         //alert("Link creation enabled. Click on two points or more to create a link between them.");
     } else {
-        window.enableLinkCreation = false;
-        document.body.style.cursor = 'default';
-        //alert("Link creation disabled.");
+        clearLinkCreationForm(markers , pointsLayer);
     }
 });
     
@@ -551,51 +477,22 @@ document.getElementById('save-link').addEventListener('click', async () => {
         link: linkData
     });
     if (data.status == 'success') {
-        alert("Link saved successfully.");
-        container.innerHTML = '<div class="empty-msg">No items selected.</div>';
-        document.getElementById('link-title').value = '';
-        document.getElementById('link-description').value = '';
-        document.getElementById('link-type').value = document.getElementById('link-type').options[0].value;
-        disableClustering();
-        document.getElementById('toggle-add-links').checked = false;
-        window.enableLinkCreation = false;
-        document.body.style.cursor = 'default';
-        document.getElementById('link-panel').classList.toggle('hidden');
+        if (GeoJSON && GeoJSON.polyline) {
+            const polyline = createPolylineWithText(linesLayer,GeoJSON.latlngs, map, linkData);
+            linesLayer.addLayer(polyline);
+            linesLayer.addTo(map);
+        } else {
+            let latlngs = items.map(item => [parseFloat(item.getAttribute('latitude')) , parseFloat(item.getAttribute('longitude'))]);
+            const polyline = createPolylineWithText(linesLayer,latlngs, map, linkData);
+            linesLayer.addLayer(polyline);
+            linesLayer.addTo(map);
+        }
+        clearLinkCreationForm(markers , pointsLayer);
     } else {
         alert('Failed to save link: ' + data.error);
         return;
     }
 });
-
-async function getGeoJSONFileInput() {
-    const input = document.getElementById('geojson-input');
-    const file = input.files[0];
-    const statusBox = document.getElementById('geojson-status');
-    if (!file) return;
-    try {
-        const text = await file.text();
-        const geojson = JSON.parse(text);
-        if (geojson.type !== 'FeatureCollection' || !geojson.features || geojson.features.length === 0) {
-            statusBox.innerText = "Invalid GeoJSON format.";
-            return;
-        } 
-        const lineFeature = geojson.features.find(f => f.geometry && f.geometry.type === 'LineString');
-        if (!lineFeature) {
-            statusBox.innerText = "No LineString feature found in GeoJSON.";
-            return;
-        }
-        const coordinates = lineFeature.geometry.coordinates;
-        const latlngs = coordinates.map(coord => [coord[1], coord[0]]);
-        const polyline = L.polyline(latlngs, { color: 'blue' , weight: 4 , opacity: 0.7});
-        showGeoStatus("GeoJSON LineString path loaded successfully!" , "success");
-        return {geojson , polyline};
-    }
-    catch (error) {
-        statusBox.innerText = "Failed to load GeoJSON: " + error.message;
-        showGeoStatus("Failed to load GeoJSON: " + error.message , "error");
-        return null;
-    }
-}
 
 document.getElementById('geojson-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -613,10 +510,6 @@ document.getElementById('geojson-input').addEventListener('change', async (e) =>
             statusBox.innerText = "No LineString feature found in GeoJSON.";
             return;
         }
-        const coordinates = lineFeature.geometry.coordinates;
-        const latlngs = coordinates.map(coord => [coord[1], coord[0]]);
-        const polyline = L.polyline(latlngs, { color: 'blue' , weight: 4 , opacity: 0.7}).addTo(map);
-        map.fitBounds(polyline.getBounds());
         showGeoStatus("GeoJSON LineString path loaded successfully!" , "success");
     }
     catch (error) {
@@ -626,97 +519,7 @@ document.getElementById('geojson-input').addEventListener('change', async (e) =>
     }
     statusBox.innerText = "GeoJSON loaded successfully!";
 });
-function showGeoStatus(msg, type) {
-    const box = document.getElementById('geojson-status');
-    box.className = `geojson-status ${type}`;
-    box.textContent = msg;
-    box.style.display = 'block';
-}
-/* Link creation functionality */
 
-function handleLinkCreationClick(item , marker , type='image') {
-    const iconEl = marker._icon;
-    let src = '';
-    let title = '';
-    let id = '';
-    if (iconEl) {
-        //si img ou si div
-        if (type === 'image') {
-            src = (URL_for_images + item.file_path);
-            title = item.title;
-            id = item.image_id;
-            iconEl.style.border = '3px solid red';
-        } else {
-            const divChild = iconEl.querySelector('div');
-            src = item.iconURL;
-            title = item.name;
-            id = item.point_id;
-            type = 'point';
-            if (divChild) {
-                divChild.style.border = '7px solid black';
-            }
-        }        
-    }
-    const container = document.getElementById('selected-items');
-    if (Array.from(container.children).some(child => child.dataset.id == id)) {
-        if (confirm("This item is already selected for linking. Do you want to remove it? (yes/no)")) {
-            removeLinkItem(id , type , iconEl);
-        }
-        return;
-    }
-    document.querySelector(".empty-msg")?.remove();
-    const div = document.createElement('div');
-    div.className = 'item';
-    div.draggable = true;
-    div.setAttribute('latitude', item.latitude);
-    div.setAttribute('longitude', item.longitude);
-    div.innerHTML = `
-        <img src="${src}" alt="${title}" width="50" height="50"/>
-        <span class="title">${title}</span>
-        <span class="remove-item">&times;</span>
-    `; 
-    div.dataset.id = id;
-    div.dataset.type = type;
-    container.appendChild(div);
-    div.querySelector('.remove-item').addEventListener('click', () => {
-        removeLinkItem(id , type , iconEl);
-    });
-    enableDragSort();
-}
-window.handleLinkCreationClick = handleLinkCreationClick;
-
-function enableDragSort() {
-    const items = document.querySelectorAll('.selected-items .item');
-
-    items.forEach(item => {
-        item.addEventListener('dragstart', () => item.classList.add("dragging"));
-        item.addEventListener('dragend', () => item.classList.remove("dragging"));
-    });
-
-    const zone = document.querySelector('.selected-items');
-    zone.addEventListener('dragover', e => {
-        e.preventDefault();
-        const dragging = document.querySelector(".dragging");
-        const after = [...zone.querySelectorAll(".item:not(.dragging)")].find(i => {
-            const box = i.getBoundingClientRect();
-            return e.clientY < box.top + box.height / 2;
-        });
-        after ? zone.insertBefore(dragging, after) : zone.appendChild(dragging);
-    });
-}
-
-function removeLinkItem(id , type , iconEl) {
-    const container = document.getElementById('selected-items');
-    Array.from(container.children).find(child => parseInt(child.dataset.id) == parseInt(id)).remove();
-    if (type === 'image') {
-        iconEl.style.border = 'none';
-    } else {
-        const divChild = iconEl.querySelector('div');
-        if (divChild) {
-            divChild.style.border = '2px solid white';
-        }
-    }
-}
 
 //TODO: timeline, object links functionalities
 /* 

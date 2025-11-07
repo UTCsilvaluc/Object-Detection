@@ -90,3 +90,11 @@ export function getMaxPixelRadius(map, center) {
 
     return Math.min(distLeft, distRight, distTop, distBottom);
 }
+
+export function degOfPente(map, lat1, lon1, lat2, lon2) {
+    const point1 = map.latLngToContainerPoint([lat1, lon1]);
+    const point2 = map.latLngToContainerPoint([lat2, lon2]);
+    const latDiff = point2.y - point1.y;
+    const lonDiff = point2.x - point1.x;
+    return Math.atan2(latDiff, lonDiff) * (180 / Math.PI);
+}

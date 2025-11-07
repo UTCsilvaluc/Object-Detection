@@ -119,3 +119,13 @@ export function hideObjectLinks(map , linesLayer) {
     linesLayer.clearLayers();
     map.removeLayer(linesLayer);
 }
+
+export function disableClustering() {
+    window.expandedMarkers.forEach(m => map.removeLayer(m));
+    window.expandedMarkers = [];
+    window.hiddenClusters.forEach(c => map.addLayer(c));
+    window.hiddenClusters = [];
+    window.circle && map.removeLayer(window.circle);
+    clusters.clearLayers();
+    enableClustering(map, clusters, markers, filteredImages);
+}

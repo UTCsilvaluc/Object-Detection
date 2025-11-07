@@ -99,3 +99,55 @@ export function addPoint(L , point, icon, layer , popupContent) {
                 } 
     });
 }
+
+export function popupPolylineLink(link) {
+    const title = link.title || "Unnamed Link";
+    const desc = link.description || "No description available";
+    const type = link.link_type || "Unknown type";
+    const date = link.created_at ? new Date(link.created_at).toLocaleDateString() : "Unknown date";
+
+    let metadataHTML = "";
+    if (link.metadata && link.metadata.length > 0) {
+        metadataHTML = `
+        <h4 style="margin-top:6px;">Metadata</h4>
+        <ul style="padding-left:18px; margin:3px 0;">
+            ${link.metadata.map(meta => `
+                <li><strong>${meta.key}:</strong> ${meta.value}</li>
+            `).join("")}
+        </ul>`;
+    } else {
+        metadataHTML = `<p><em>No metadata</em></p>`;
+    }
+    return `
+        <div style="font-family:Arial, sans-serif; font-size:13px; line-height:1.35; max-width:220px;">
+            <h3 style="margin:0 0 4px 0; font-size:16px;">📌 ${title}</h3>
+
+            <p style="margin:2px 0;"><strong>Description:</strong><br>${desc}</p>
+            <p style="margin:2px 0;"><strong>Type:</strong> ${type}</p>
+            <p style="margin:2px 0;"><strong>Created:</strong> ${date}</p>
+
+            ${metadataHTML}
+        </div>
+    `;
+}
+
+export function getHTMLForSVGIcon(iconURL, color) {
+    if (!iconURL) return `<div style="width:24px; height:24px; background:${color}; transform:rotate(45deg); border-radius:4px; border:2px solid white; box-shadow:0 1px 2px rgba(0,0,0,.35);"></div>`
+    const html = `
+                    <div style=" 
+                        width:24px;
+                        height:24px;
+                        background-color:${color};
+                        -webkit-mask-image:url('${iconURL}');
+                        mask-image:url('${iconURL}');
+                        -webkit-mask-size:contain;
+                        mask-size:contain;
+                        -webkit-mask-repeat:no-repeat;
+                        mask-repeat:no-repeat;
+                        border: 2px solid white;
+                        box-shadow:0 1px 2px rgba(0,0,0,.35);
+                    ">
+                    </div>
+                `;
+    return html;
+}

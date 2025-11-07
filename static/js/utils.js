@@ -217,3 +217,38 @@ export function controlInputValues(name, description , ...args) {
     }
     return true;
 }
+
+export function showGeoStatus(msg, type) {
+    const box = document.getElementById('geojson-status');
+    box.className = `geojson-status ${type}`;
+    box.textContent = msg;
+    box.style.display = 'block';
+}
+
+export async function getGeoJSONFileInput() {
+    const input = document.getElementById('geojson-input');
+    const file = input.files[0];
+    const statusBox = document.getElementById('geojson-status');
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const geojson = JSON.parse(text);
+        if (geojson.type !== 'FeatureCollection' || !geojson.features || geojson.features.length === 0) {
+            statusBox.innerText = "Invalid GeoJSON format.";
+            return;
+        } 
+        const lineFeature = geojson.features.find(f => f.geometry && f.geometry.type === 'LineString');
+        if (!lineFeature) {
+            statusBox.innerText = "No LineString feature found in GeoJSON.";
+            return;
+        }
+        const coordinates = lineFeature.geometry.coordinates;
+        const latlngs = coordinates.map(coord => [coord[1], coord[0]]);
+        const polyline = L.polyline(latlngs, { color: 'blue' , weight: 4 , opacity: 0.7});
+        return {geojson , polyline , latlngs};
+    }
+    catch (error) {
+        statusBox.innerText = "Failed to load GeoJSON: " + error.message;
+        return null;
+    }
+}
