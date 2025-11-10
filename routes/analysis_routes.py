@@ -116,6 +116,7 @@ def re_run_analysis():
     csrf_token = request.form.get("csrf_token", "")
     img_original_path = build_img_temp_path(img_original_path)
     img_annotated_path = build_img_temp_path(img_annotated_path)
+    tile = request.form.get("tile-based-analysis", "off") == "on"
     if not os.path.exists(img_original_path):
         return {"error": "Image not found"}, 404
     DEFAULT_SAM_PARAMS = defautlSamParameters()
@@ -124,8 +125,7 @@ def re_run_analysis():
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
     model = ModelFactory.get_model("sam")
-    mask_generator = SAM_GLOBAL_INSTANCE.get_mask_generator(sam_parameters)
-    results , img_original , img_result  = model.run(img_original_path , mask_generator=mask_generator)
+    results , img_original , img_result  = model.run(img_original_path , tiled=tile , defaultParameters=sam_parameters)
     result_data = model.process_results(results , img_original)
     read_json = build_json_temp_path(f"{img_name}.json")
     img_data = {}

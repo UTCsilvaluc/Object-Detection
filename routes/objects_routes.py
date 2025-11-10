@@ -62,7 +62,8 @@ def merge_objects():
     #Suppression des anciens objets dans le JSON (later)
     #Ajout du nouvel objet
     new_id = int(get_next_id_available(objects))
-    _ , temp_object_name = save_temp_img(obj_img, new_id)
+    object_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
+    _ , temp_object_name = save_temp_img(object_img_rgb, new_id)
     path = build_img_temp_path(temp_object_name)
     new_object = {
         "class_id": 0,
