@@ -35,7 +35,7 @@ def process_yolo_results(self,results, img, img_result):
         # Encoder crop en base64
         # dans process_yolo_results, même principe
         _ , obj_crop_path = save_temp_img(obj_crop, idx)
-        embedding_vector = self.generate_embedding(img_rgb , box , sam_predictor).tolist()
+        embedding_vector = self.generate_embedding(img_rgb , box).tolist()
         objects.append({
             "class_id": int(cls_id),
             "id": int(idx),

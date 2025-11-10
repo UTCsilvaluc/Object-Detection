@@ -65,18 +65,19 @@ def segment_object_with_sam(img_rgb, bbox):
     :param predictor: instance of SamPredictor
     :return: segmented crop and binary mask
     """
-    
+    from models.pretrained_models import SAM_GLOBAL_INSTANCE 
     x_min, y_min, x_max, y_max = map(int, bbox)
-
     # Cropping the region of interest
     crop = img_rgb[y_min:y_max, x_min:x_max]
     if crop.size == 0:
         return None, None
 
     # SAM expects the full image, but we can use it locally:
-    predictor.set_image(img_rgb)
-    box = np.array([x_min, y_min, x_max, y_max])
-    masks, _, _ = predictor.predict(box=box, multimask_output=False)
+    predictor = SAM_GLOBAL_INSTANCE.get_mask_predictor()
+    with SAM_GLOBAL_INSTANCE.get_predictor_lock():
+        predictor.set_image(img_rgb)
+        box = np.array([x_min, y_min, x_max, y_max])
+        masks, _, _ = predictor.predict(box=box, multimask_output=False)
 
     if masks is None or len(masks) == 0:
         return None, None

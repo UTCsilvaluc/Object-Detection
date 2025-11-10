@@ -22,8 +22,7 @@ from .main_routes import clear_temp
 
 from models.factory import ModelFactory
 from models.pretrained_models import (
-    get_sam_model,
-    SAMModel,
+    SAM_GLOBAL_INSTANCE,
     defautlSamParameters
 )
 from utils.database import (
@@ -37,6 +36,7 @@ analysis_bp = Blueprint("analysis", __name__)
 
 @analysis_bp.route('/analyse_point', methods=['POST'])
 def analyse_point():
+    from models.pretrained_models import safe_predict_point
     data = request.get_json() or {}
     img_name = data.get("img_name", "")
     img_annotated_path = build_img_temp_path(data.get("img_annotated_path", "")) #For annotated image path
@@ -52,17 +52,7 @@ def analyse_point():
     img = cv2.imread(img_original_path)
     if img is None:
         return {"error": "Failed to read image"}, 500
-    # --- SAM Prediction ---
-    sam_predictor = SAMModel().get_mask_predictor()
-    sam_predictor.set_image(img)
-    input_point = np.array([[x, y]])
-    input_label = np.array([1])
-
-    masks, scores, logits = sam_predictor.predict(
-        point_coords=input_point,
-        point_labels=input_label,
-        multimask_output=False
-    ) #Return a np.darray of masks (N,H,W) , scores (N,) and logits (N,H,W)
+    masks , scores , logits = safe_predict_point(img, x, y)
     if masks is None or masks.shape[0] == 0:
         bbox = [x - 100, y - 100, x + 100, y + 100]
         obj_img = img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
@@ -99,7 +89,8 @@ def analyse_point():
     except Exception as e:
         return {"error": f"Failed to read JSON: {e}"}, 500
     new_id = int(get_next_id_available(result_data["objects"]))
-    _ , temp_object_name = save_temp_img(obj_img , new_id)
+    obj_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
+    _ , temp_object_name = save_temp_img(obj_img_rgb , new_id)
     path = build_img_temp_path(temp_object_name)
     new_object = {
         "class_id": 0,
@@ -133,7 +124,7 @@ def re_run_analysis():
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
     model = ModelFactory.get_model("sam")
-    mask_generator = SAMModel().get_mask_generator(sam_parameters)
+    mask_generator = SAM_GLOBAL_INSTANCE.get_mask_generator(sam_parameters)
     results , img_original , img_result  = model.run(img_original_path , mask_generator=mask_generator)
     result_data = model.process_results(results , img_original)
     read_json = build_json_temp_path(f"{img_name}.json")
