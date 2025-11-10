@@ -22,8 +22,8 @@ from .main_routes import clear_temp
 
 from models.factory import ModelFactory
 from models.pretrained_models import (
-    sam_model,
-    sam_predictor,
+    get_sam_model,
+    SAMModel,
     defautlSamParameters
 )
 from utils.database import (
@@ -53,6 +53,7 @@ def analyse_point():
     if img is None:
         return {"error": "Failed to read image"}, 500
     # --- SAM Prediction ---
+    sam_predictor = SAMModel().get_mask_predictor()
     sam_predictor.set_image(img)
     input_point = np.array([[x, y]])
     input_label = np.array([1])
@@ -132,13 +133,7 @@ def re_run_analysis():
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
     model = ModelFactory.get_model("sam")
-    mask_generator = SamAutomaticMaskGenerator(
-        sam_model,
-        points_per_side=sam_parameters["points_per_side"],
-        pred_iou_thresh=sam_parameters["pred_iou_thresh"],
-        stability_score_thresh=sam_parameters["stability_score_thresh"],
-        min_mask_region_area=sam_parameters["min_mask_region_area"]
-    )
+    mask_generator = SAMModel().get_mask_generator(sam_parameters)
     results , img_original , img_result  = model.run(img_original_path , mask_generator=mask_generator)
     result_data = model.process_results(results , img_original)
     read_json = build_json_temp_path(f"{img_name}.json")
@@ -190,24 +185,23 @@ def re_run_analysis():
 @analysis_bp.route('/upload', methods=['POST'])
 def upload():
     file = request.files['image']
+    # Récupération des métadonnées via helper
+    metadata = get_form_metadata(request)
+    img_name = metadata.get("name", "unnamed")
     if not file:
         return "No file uploaded", 400
-    filename = file.filename
-    if check_if_title_exist(filename):
-        return f"The image name '{filename}' already exists. Please choose a different name. 画像名 '{filename}' は既に存在します。別の名前を選んでください。", 400
+    if check_if_title_exist(img_name):
+        return f"The image name '{img_name}' already exists. Please choose a different name. 画像名 '{img_name}' は既に存在します。別の名前を選んでください。", 400
     img_cv = fileStorage_to_image(file)
     if img_cv is None:
         return "Invalid image file", 400
-    img_path = build_img_temp_path(filename)
+    img_path = build_img_temp_path(f"{img_name}.jpg")
     os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(build_img_temp_path() , exist_ok=True)
     success = cv2.imwrite(img_path, img_cv)
     if not success:
         return "Failed to save image", 500
 
-    # Récupération des métadonnées via helper
-    metadata = get_form_metadata(request)
-    img_name = metadata.get("name", "unnamed")
     # Chargement image + YOLO
     model_name = "yolo"
     model = ModelFactory.get_model(model_name)

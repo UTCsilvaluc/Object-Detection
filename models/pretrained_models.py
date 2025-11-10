@@ -4,20 +4,21 @@ from segment_anything import sam_model_registry, SamAutomaticMaskGenerator , Sam
 import os   
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
-import io
 from PIL import Image
 from models.helpers import filter_and_merge_segments
+from segment_anything import sam_model_registry , SamAutomaticMaskGenerator , SamPredictor
 import matplotlib     
 matplotlib.use('Agg')  # Utiliser le backend 'Agg' pour matplotlib
 
 #Device
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+SAM_DEVICE = torch.device("cpu")
 
 #YOLO
 yolo_model = YOLO('yolov8n.pt')
 
 #SAM
+
 def defautlSamParameters():
     return {
         "points_per_side": 16, 
@@ -28,18 +29,31 @@ def defautlSamParameters():
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
 sam_checkpoint = os.path.join(CHECKPOINTS_DIR, "sam_vit_h.pth")
-model_type = "vit_h"
-sam_model = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-sam_model.to(device='cpu')  # erreur float32 mps
-mask_generator = SamAutomaticMaskGenerator(
-    sam_model,
-    **defautlSamParameters()
-)
-sam_predictor = SamPredictor(sam_model)
 base_save_dir = "img/ModelGen"
 os.makedirs(base_save_dir, exist_ok=True)
 sam_dir = os.path.join(base_save_dir, "SAM")
-def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3 , mask_generator=mask_generator):
+
+GLOBAL_SAM_MODEL = None
+def get_sam_model():
+    global GLOBAL_SAM_MODEL
+    if GLOBAL_SAM_MODEL is None:
+        GLOBAL_SAM_MODEL = sam_model_registry["vit_h"](checkpoint=sam_checkpoint).to(device=SAM_DEVICE)
+    return GLOBAL_SAM_MODEL
+class SAMModel:
+    def __init__(self, checkpoint_path: str = None ):
+        self.sam = get_sam_model()
+    def get_mask_generator(self, defautlSamParameters=defautlSamParameters()):
+        return SamAutomaticMaskGenerator(
+            self.sam,
+            points_per_side=defautlSamParameters["points_per_side"],
+            pred_iou_thresh=defautlSamParameters["pred_iou_thresh"],
+            stability_score_thresh=defautlSamParameters["stability_score_thresh"],
+            min_mask_region_area=defautlSamParameters["min_mask_region_area"]
+        )
+    def get_mask_predictor(self):
+        return SamPredictor(self.sam)
+
+def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
     """
     Segment objects in an image using the SAM model.
     :image_path: Path to the input image.
@@ -49,6 +63,7 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
     :merge_thresh: IoU threshold for merging segments.
     :returns: Tuple (masks, original_image, annotated_image)
     """
+    mask_generator = SAMModel().get_mask_generator(defautlSamParameters())
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     masks = mask_generator.generate(image_rgb)
@@ -62,20 +77,13 @@ def segment_sam(image_path, save=True, min_area=15000, iou_thresh=0.9, merge_thr
         base_name = os.path.splitext(os.path.basename(image_path))[0]
         save_dir = os.path.join(sam_dir, base_name)
         os.makedirs(save_dir, exist_ok=True)
-
-        # Save the picture with all masks overlaid
-        plt.figure(figsize=(10, 10))
-        plt.imshow(image_rgb)
         for mask in masks:
             seg = mask["segmentation"]
-            plt.contour(seg, colors=np.random.rand(3,), linewidths=1)
-        plt.axis("off")
-        global_path = os.path.join(save_dir, f"{base_name}_all_masks.png")
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-        buf.seek(0)
-        img_pil = Image.open(buf)
-        plt.close()
+            contours , _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(image_rgb, contours, -1, (0,255,0), 2)
+
+        img_pil = Image.fromarray(image_rgb)
+
 
         # Save each isolated object
         for idx, mask in enumerate(masks):

@@ -1,6 +1,5 @@
 from .strategy import BaseModelStrategy
 from .strategy import YOLOStrategy , SAMStrategy
-from .pretrained_models import mask_generator
 
 class ModelFactory:
     @staticmethod
@@ -8,6 +7,6 @@ class ModelFactory:
         if strategy == "yolo":
             return YOLOStrategy()
         elif strategy == "sam":
-            return SAMStrategy(mask_generator=mask_generator)
+            return SAMStrategy()
         else:
             raise ValueError(f"Unknown strategy: {strategy}")

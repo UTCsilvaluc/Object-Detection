@@ -57,7 +57,7 @@ def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thres
     final_masks = [{"segmentation": m.astype(np.uint8)} for m in merged]
     return final_masks
 
-def segment_object_with_sam(img_rgb, bbox, predictor):
+def segment_object_with_sam(img_rgb, bbox):
     """
     Use SAM to segment precisely an object from a YOLO bbox.
     :param img_rgb: full image in RGB
@@ -65,6 +65,7 @@ def segment_object_with_sam(img_rgb, bbox, predictor):
     :param predictor: instance of SamPredictor
     :return: segmented crop and binary mask
     """
+    
     x_min, y_min, x_max, y_max = map(int, bbox)
 
     # Cropping the region of interest

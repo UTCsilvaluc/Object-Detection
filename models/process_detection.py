@@ -2,7 +2,7 @@ import cv2
 import numpy as np  
 from utils.helper import save_temp_img , build_img_temp_path
 from .object_embedding import generate_embedding_from_crop
-from models.pretrained_models import sam_predictor
+from .pretrained_models import SAMModel
 import numpy as np
 import cv2
 import os
@@ -18,6 +18,7 @@ def process_yolo_results(self,results, img, img_result):
     :param img_result: Image annotée (RGB)
     :return: Dictionnaire avec les informations des objets détectés
     """
+    sam_predictor = SAMModel().get_mask_predictor()
     boxes = results[0].boxes.xyxy.cpu().numpy()   # [x_min, y_min, x_max, y_max]
     cls_ids = results[0].boxes.cls.cpu().numpy().astype(int)
     scores = results[0].boxes.conf.cpu().numpy()

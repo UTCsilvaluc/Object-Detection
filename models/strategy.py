@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import os
 from .helpers import segment_object_with_sam
-from .pretrained_models import yolo_model , mask_generator , segment_sam
+from .pretrained_models import yolo_model , segment_sam 
 from .process_detection import process_yolo_results , process_SAM
 from utils.helper import save_temp_img , build_img_temp_path
 import cv2
@@ -61,12 +61,12 @@ class YOLOStrategy(BaseModelStrategy):
     def merge_objects(self, image , *objects):
         # Implémentation de la fusion des objets détectés
         pass
-    def generate_embedding(self, img_rgb , bbox , predictor):
+    def generate_embedding(self, img_rgb , bbox):
         """
         YOLO embedding generation using SAM for precise segmentation.
         Otherwise, backgrounds or other objects may interfere with the embedding.
         """
-        crop_object , mask = segment_object_with_sam(img_rgb, bbox, predictor)
+        crop_object , mask = segment_object_with_sam(img_rgb, bbox)
         _ , crop_path = save_temp_img(crop_object, "temp_embedding")
         from .object_embedding import generate_embedding_from_crop
         embedding = generate_embedding_from_crop(build_img_temp_path(crop_path))
@@ -75,13 +75,11 @@ class YOLOStrategy(BaseModelStrategy):
 
 
 class SAMStrategy(BaseModelStrategy):
-    def __init__(self , save_dir="img/ModelGen/SAM"  , mask_generator=mask_generator):
+    def __init__(self , save_dir="img/ModelGen/SAM"):
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
-        self.mask_generator = mask_generator
     def run(self, image_path, mask_generator=None):
-        mg = mask_generator if mask_generator else self.mask_generator
-        masks , img , img_result = segment_sam(image_path=image_path , mask_generator=mg)
+        masks , img , img_result = segment_sam(image_path=image_path)
         return masks , img , img_result
     def process_results(self, masks , img):
         return process_SAM(self, masks , img)
