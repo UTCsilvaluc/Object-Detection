@@ -126,7 +126,8 @@ def re_run_analysis():
     img_cv = cv2.imread(img_original_path)
     model = ModelFactory.get_model("sam")
     results , img_original , img_result  = model.run(img_original_path , tiled=tile , defaultParameters=sam_parameters)
-    result_data = model.process_results(results , img_original)
+    img_rgb = cv2.cvtColor(img_original , cv2.COLOR_BGR2RGB)
+    result_data = model.process_results(results , img_rgb)
     read_json = build_json_temp_path(f"{img_name}.json")
     img_data = {}
     if os.path.exists(read_json):

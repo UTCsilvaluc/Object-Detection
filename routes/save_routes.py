@@ -83,7 +83,7 @@ def save_point():
         return {"success": False, "status": "error", "message": "Failed to insert point"}, 500
     for key, value in metadata.items():
         insert_metadata_point(point_id, key, value)
-    return {"success": True, "message": "Point saved successfully", "status": "success"}, 200
+    return {"success": True, "message": "Point saved successfully", "status": "success" , "point_id": point_id}, 200
 
 @save_bp.route('/save_link_type', methods=['POST'])
 def save_link_type():
@@ -110,27 +110,27 @@ def save_link():
     title = link.get("title")
     description = link.get("description")
     link_type = link.get("link_type")
-    items = link.get("items", []) # id , latitude , longitude
+    endpoints = link.get("endpoints", []) # id , latitude , longitude
     metadata = link.get("metadata", {})
-    geojson = link.get("geojson" , None)
+    geometry = link.get("geometry" , None)
     role = None
     link_id = insert_link(title, description, link_type)
     if not link_id:
         return {"success": False, "message": "Failed to insert link"}, 500
     idx = 0
     success = True
-    for item in items:
+    for item in endpoints:
         if item.get("entity_type") == "image":
-            insert_link_endpoint(link_id, item.get("entity_type"), item.get("id"), None, "waypoint", idx)
+            insert_link_endpoint(link_id, item.get("entity_type"), item.get("image_id"), None, "waypoint", idx)
         elif item.get("entity_type") == "point":
-            insert_link_endpoint(link_id, item.get("entity_type"), None, item.get("id"), "waypoint", idx)
+            insert_link_endpoint(link_id, item.get("entity_type"), None, item.get("point_id"), "waypoint", idx)
         idx += 1 
     for key, value in metadata.items():
         success = insert_link_metadata(link_id, key, value)
         if not success:
             return {"success": False, "message": f"Failed to insert metadata key: {key}"}, 500
-    if geojson:
-        success = insert_link_geometry(link_id, json.dumps(geojson), None)
+    if geometry:
+        success = insert_link_geometry(link_id, json.dumps(geometry), None)
     if not success:
         return {"success": False, "message": "Failed to insert link geometry"}, 500
-    return {"status": 'success' ,"success": True, "message": "Link saved successfully"}, 200
+    return {"status": 'success' ,"success": True, "message": "Link saved successfully" , "link_id": link_id}, 200

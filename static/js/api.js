@@ -68,6 +68,7 @@ export async function saveData(map , lat , lng , tempMarker , pointsLayer) {
     });
     point.metadata = Object.entries(metadata).map(([key, value]) => ({ key, value }));
     if (data.status == 'success') {
+        point.point_id = data.point_id;
         addPoint(L , point, L.divIcon({
             className: 'point-icon',
             html: getHTMLForSVGIcon(iconURL, color)

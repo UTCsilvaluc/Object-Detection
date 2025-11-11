@@ -1,3 +1,5 @@
+import { handleLinkCreationClick } from "./links.js";
+
 /**
  * Create the HTML content for the point popup.
  * @param {Object} point - The point object containing details.
@@ -91,13 +93,13 @@ export function createPopupAddPoint(icons, URL_for_icons, lat, lng) {
 
 export function addPoint(L , point, icon, layer , popupContent) {
     L.marker([point.latitude, point.longitude], { icon })
-            .bindPopup(popupContent)
-            .addTo(layer)
-            .addEventListener('click', (event) => {
-                if (window.enableLinkCreation) {
-                    window.handleLinkCreationClick(point , event.target , 'point');
-                } 
-    });
+        .bindPopup(popupContent)
+        .addTo(layer)
+        .addEventListener('click', (event) => {
+            if (window.enableLinkCreation) {
+                handleLinkCreationClick(point , event.target , 'point');
+            } 
+        });
 }
 
 export function popupPolylineLink(link) {
@@ -120,12 +122,10 @@ export function popupPolylineLink(link) {
     }
     return `
         <div style="font-family:Arial, sans-serif; font-size:13px; line-height:1.35; max-width:220px;">
-            <h3 style="margin:0 0 4px 0; font-size:16px;">📌 ${title}</h3>
-
+            <h3 style="margin:0 0 4px 0; font-size:16px;">${title}</h3>
             <p style="margin:2px 0;"><strong>Description:</strong><br>${desc}</p>
             <p style="margin:2px 0;"><strong>Type:</strong> ${type}</p>
             <p style="margin:2px 0;"><strong>Created:</strong> ${date}</p>
-
             ${metadataHTML}
         </div>
     `;

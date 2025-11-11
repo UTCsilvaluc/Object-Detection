@@ -479,30 +479,28 @@ document.getElementById('save-link').addEventListener('click', async () => {
     const linkData = {
         title,
         description,
+        metadata: metadata,
         link_type: linkType,
-        items: items.map(item => ({
-            id: item.dataset.id,
-            entity_type: item.dataset.type,
+        endpoints: items.map((item , index) => ({
+            entity_type: item.getAttribute('type'),
+            image_id: item.getAttribute('type') === 'image' ? item.getAttribute('itemID') : null,
+            point_id: item.getAttribute('type') === 'point' ? item.getAttribute('itemID') : null,
+            order_index: index,
             latitude: parseFloat(item.getAttribute('latitude')),
-            longitude: parseFloat(item.getAttribute('longitude'))
+            longitude: parseFloat(item.getAttribute('longitude')),
+            role: "waypoint"
+
         })),
         metadata,
-        geojson: GeoJSON ? GeoJSON.geojson : null
+        geometry: GeoJSON ? GeoJSON.geojson : null
     };
     const data = await apiPost('/save/save_link', {
         link: linkData
     });
     if (data.status == 'success') {
-        if (GeoJSON && GeoJSON.polyline) {
-            const polyline = createPolylineWithText(linesLayer,GeoJSON.latlngs, map, linkData);
-            linesLayer.addLayer(polyline);
-            linesLayer.addTo(map);
-        } else {
-            let latlngs = items.map(item => [parseFloat(item.getAttribute('latitude')) , parseFloat(item.getAttribute('longitude'))]);
-            const polyline = createPolylineWithText(linesLayer,latlngs, map, linkData);
-            linesLayer.addLayer(polyline);
-            linesLayer.addTo(map);
-        }
+        linkData.id = data.link_id;
+        links.push(linkData);
+        addLinksToMap(linesLayer, map, links , markers , L);
         clearLinkCreationForm(markers , pointsLayer);
     } else {
         alert('Failed to save link: ' + data.error);

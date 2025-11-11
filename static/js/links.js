@@ -1,5 +1,6 @@
 import { degOfPente, getCenterMarker } from "./math.js";
 import { getMarkerByLatLng } from "./utils.js";
+import { popupPolylineLink } from "./popup.js";
 export function createPolylineWithText(linesLayer , latlngs, map, link) {
     const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
     const polyline = L.polyline(latlngs, { color: randomColor , weight: 4 , opacity: 0.7});
@@ -19,6 +20,7 @@ export function createPolylineWithText(linesLayer , latlngs, map, link) {
         });
         L.marker(midPoint, { icon: labelIcon , interactive: false}).addTo(linesLayer);
     });
+    polyline.bindPopup(popupPolylineLink(link));
     polyline.addEventListener('click', (e) => {
         polyline.openPopup();
     });
@@ -163,6 +165,8 @@ export function handleLinkCreationClick(item , marker , type='image' , URL_for_i
     div.draggable = true;
     div.setAttribute('latitude', item.latitude);
     div.setAttribute('longitude', item.longitude);
+    div.setAttribute('type', type);
+    div.setAttribute('itemID', id);
     div.innerHTML = `
         <img src="${src}" alt="${title}" width="50" height="50"/>
         <span class="title">${title}</span>
