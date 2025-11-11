@@ -5,9 +5,11 @@ from utils.database import (
     check_if_metadata_key_exist,
     create_new_metadata_key,
     check_if_class_exist,
-    create_new_class
+    create_new_class,
+    find_similar_objects_by_metadatas,
+    find_similar_objects_by_value
 )
-from utils.helper import return_regex_by_name
+from utils.helper import return_regex_by_name , get_similar_objects_by_metadatas
 
 metadata_bp = Blueprint("metadata", __name__)
 
@@ -45,3 +47,19 @@ def add_class():
     if req:
         return {"success":True} , 201
     return {"success":False , "error": "insertion failed."} , 500
+
+@metadata_bp.route('/search_by_metadata', methods=['POST'])
+def search_by_metadata():
+    data = request.get_json() or {}
+    metadata = data.get("metadata" , [])
+    searchValue = data.get("searchValue" , "")
+    if not metadata and not searchValue:
+        return {"success": False, "error": "Metadata or search value is required."}, 400
+    if metadata:
+        similar_objects = find_similar_objects_by_metadatas(metadata)
+    else:
+        similar_objects = find_similar_objects_by_value(searchValue)
+    similar_objects_datas = get_similar_objects_by_metadatas(similar_objects)
+    if similar_objects_datas is None:
+        return {"success": False, "error": "Error retrieving similar objects."}, 500   
+    return {"success": True, "metadata_received": metadata, "similar_objects": similar_objects_datas}, 200

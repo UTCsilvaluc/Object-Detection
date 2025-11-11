@@ -489,3 +489,42 @@ def get_similar_objects(objects, top_k=5):
         objects[idx]['similar_objects'] = similar_object_details
 
     return objects
+
+def get_similar_objects_by_metadatas(similar_objects: list):
+    """
+    :param metadata_list: List of metadata dictionaries. Format : [{"key": str , "value": str}, ...]
+    :return: List of similar objects matching the provided metadata.
+    Each object contains its details along with the matching metadata.
+    """
+    results = []
+
+    for sim_obj in similar_objects:
+        instance = get_instance_object_by_object_id(sim_obj['object_id'])
+        data_sim_obj = {
+            "object_id": sim_obj['object_id'],
+            "class": None,
+            "cropped_file_path": None,
+            "metadata": []
+        }
+
+        # --- Cas 1 : get_instance return a dict ---
+        if isinstance(instance, dict):
+            data_sim_obj["class"] = instance.get("class")
+            data_sim_obj["cropped_file_path"] = instance.get("cropped_file_path")
+            if "metadata" in instance:
+                data_sim_obj["metadata"] = instance["metadata"]
+
+        # --- Cas 2 : get_instance return a list of items ---
+        elif isinstance(instance, list):
+            for item in instance:
+                if "class" in item:
+                    data_sim_obj["class"] = item["class"]
+                if "cropped_file_path" in item:
+                    data_sim_obj["cropped_file_path"] = item["cropped_file_path"]
+                if "metadata_key" in item and "metadata_value" in item and item["metadata_key"] and item["metadata_value"]:
+                    data_sim_obj["metadata"].append({ "key": item["metadata_key"], "value": item["metadata_value"] , "obj_image_id": item.get("image_id" , None) , "obj_version_number": item.get("version_number" , None)})
+
+        if data_sim_obj["class"] and data_sim_obj["cropped_file_path"]:
+            results.append(data_sim_obj)
+
+    return results

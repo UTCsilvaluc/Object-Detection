@@ -1,3 +1,5 @@
+import { apiPost } from "./api.js";
+
 let crossIcon = null;
 function setCrossIcon(icon) {
     crossIcon = icon;
@@ -95,9 +97,10 @@ function writeMetaDataField(metaField, objID , metaIndex , key=null , value=null
     `;
 }
 window.writeMetaDataField = writeMetaDataField;
-function addMetadataField(objID, key = null, value = null) {
+function addMetadataField(objID, key = null, value = null , search = false) {
+    console.log(search);
     objID = parseInt(objID);
-    const container = document.getElementById(`meta-${objID}`);
+    const container = search ? document.getElementById(`metasearch-${objID}`) : document.getElementById(`meta-${objID}`);
     const metaIndex = container.children.length - 1; 
     let div = document.createElement('div');
     div.className = 'meta-field';
@@ -369,4 +372,143 @@ function changeType(selectedItem){
     hidden.value = selecteur.value;
 }
 window.changeType = changeType;
+
+function researchSimilar(button){
+    const researchDiv = button.nextElementSibling;
+    if (researchDiv.classList.contains('visible')){
+        researchDiv.classList.remove('visible');
+        return;
+    }
+    researchDiv.classList.add('visible');
+}
+window.researchSimilar = researchSimilar;
+
+async function searchByMetadata(objID){
+    const section = document.querySelector(`#obj${objID} .search-metadata-container`);
+    const container = document.getElementById(`metasearch-${objID}`);
+    const selectedRadio = section.querySelector('input[name="search_mode"]:checked');
+    let flaskData = {};
+    if (selectedRadio && selectedRadio.value === "value_only"){
+        const valueInput = section.querySelector('#value-search');
+        const searchValue = valueInput.value.trim();
+        if (searchValue.length === 0){
+            alert("Please enter a value to search for.");
+            return;
+        }
+        flaskData = { searchValue : searchValue };
+    } else {
+        let metadata = [];
+        Array.from(container.querySelectorAll('.meta-field')).forEach(field => {
+            const keySelect = field.querySelector('select');
+            const valueInput = field.querySelector('input');
+            if (keySelect && valueInput) {
+                metadata.push({
+                    key: keySelect.value,
+                    value: valueInput.value
+                });
+            }
+        });
+        flaskData = { metadata: metadata };
+    }
+    console.log(flaskData);
+    const data = await apiPost('/metadata/search_by_metadata', flaskData);
+    if (!data) return;
+    if (data.success) {
+        const resultDiv = document.querySelector(`#obj${objID} .search-results`);
+        resultDiv.innerHTML = "";
+        data.similar_objects.forEach((simObj , index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'obj-wrapper-similar';
+            wrapper.innerHTML = `
+                <div class="left-similar">
+                    <div class="similar-info">
+                        <p> <strong>Object ID:</strong> ${simObj.object_id}</p>
+                    </div>
+                    <div class="similar-image-box">
+                        <img src="${window.AppConfig.URL_for_images + simObj.cropped_file_path}" alt="Similar Object Image" class="similar-image">
+                    </div>
+                </div>
+            `;
+
+            const right = document.createElement('div');
+            right.className = 'right-similar';
+
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'obj-meta';
+            metaDiv.innerHTML = `<h3> Similar Object Index ${index} - Metadata </h3>`;
+
+            if (simObj.metadata && Object.keys(simObj.metadata).length > 0) {
+                const grouped = {};
+                simObj.metadata.forEach(meta => {
+                    const imgID = meta.obj_image_id || 'no_image';
+                    if (!grouped[imgID]) {
+                        grouped[imgID] = [];
+                    }
+                    grouped[imgID].push(meta);
+                });
+
+                const metadataGrouped = document.createElement('div');
+                metadataGrouped.className = 'metadata-grouped';
+
+                Object.entries(grouped).forEach(([imgID, metas]) => {
+                    const block = document.createElement('div');
+                    block.className = 'metadata-source-block';
+                    const versionText = metas[0].obj_version_number ? ` - V${metas[0].obj_version_number})` : '';
+                    block.innerHTML = `
+                        <h4> From Image ID: ${imgID}${imgID !== 'no_image' ? versionText : ''} </h4>
+                        <ul class="metadata-list">
+                            ${metas.map(meta => `
+                                <li class="metadata-item" data-key="${meta.key}" data-value="${meta.value}">
+                                    <span class="meta-key">${meta.key}:</span> 
+                                    <span class="meta-value">${meta.value}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                    metadataGrouped.appendChild(block);
+                });
+
+                metaDiv.appendChild(metadataGrouped);
+
+                const importBtn = document.createElement('button');
+                importBtn.type = 'button';
+                importBtn.className = 'import-btn';
+                importBtn.textContent = 'Import Metadata from this Object';
+                importBtn.onclick = () => importMetadata(importBtn, objID);
+                metaDiv.appendChild(importBtn);
+            } else {
+                metaDiv.innerHTML += `<p class="no-metadata">No metadata available for this object.</p>`;
+            }
+            const sameDiv = document.createElement('div');
+            sameDiv.className = 'same-object-field';
+            sameDiv.innerHTML = `
+                <label title="Mark this as the same real-world object in database">
+                    Same object as object ID ${simObj.object_id} ?
+                    <input type="checkbox" role="radio" name="selected_similar_${objID}" value="${simObj.object_id}" onchange="defaultObjectSelection(this , '${objID}' , '${simObj.object_id}')">
+                </label>
+            `;
+            metaDiv.appendChild(sameDiv);
+            right.appendChild(metaDiv);
+            wrapper.appendChild(right);
+            resultDiv.appendChild(wrapper);
+        });         
+    } else {
+        alert("Failed to search by metadata: " + data.error);
+    }
+}
+window.searchByMetadata = searchByMetadata;
+
+function updateSimilarSearch(radio){
+    const search_row = radio.closest('.research-similar').querySelector('.search-row');
+    const value_search = radio.closest('.research-similar').querySelector('#value-search');
+    if (radio.checked && radio.value === "value_only"){
+        search_row.style.display = "none";
+        value_search.style.display = "block";
+    } else {
+        search_row.style.display = "flex";
+        value_search.style.display = "none";
+    }
+}
+window.updateSimilarSearch = updateSimilarSearch;
+
 export { returnRegexByName , returnInputTypeByName , addMetadataField, createNewMetadata, createNewMetadataKey, handleNewMetadataType, importMetadata, changeKey, changeValue , changeType , removeMetadataField , handleNewType , writeMetaDataField};

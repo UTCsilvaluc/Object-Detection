@@ -175,6 +175,34 @@
                                     </div>
                                     {% if obj.similar_objects and obj.similar_objects|length > 0 %}
                                     <div class="similar-container">
+                                        <button type="button" onclick="researchSimilar(this)">Research Similar Objects</button>
+                                        <div id="research-similar" class="research-similar">
+                                            <h4 style="text-align: center;">Search similar objects by metadata</h4>
+                                            <div class="search-metadata-container">
+                                                <div class="search-row" style="display: flex; flex-direction: column; gap: 5px;">
+                                                    <div class="metadata-container" id="metasearch-{{ obj.id }}">
+                                                    </div>
+                                                    <button type="button" onclick="addMetadataField('{{ obj.id }}' , null , null , true)">+ Add Search Metadata</button>
+                                                </div>
+                                                <div class="search-filters"></div>
+                                                <div class="search-mode">
+                                                    <label>
+                                                        <input type="radio" name="search_mode" value="metadata" onchange="updateSimilarSearch(this)" checked>
+                                                        Search by metadata (key + value)
+                                                    </label>
+                                                    <label>
+                                                        <input type="radio" name="search_mode" value="value_only" onchange="updateSimilarSearch(this)">
+                                                        Search by value only
+                                                    </label>
+                                                </div>
+                                                <input type="text" id="value-search" placeholder="Search any value..." style="display:none;">
+                                                <button type="button" style="background-color: #34d170;" onclick="searchByMetadata('{{ obj.id }}')">
+                                                    Search
+                                                </button>
+                                            </div>
+
+                                            <div class="search-results"></div>
+                                        </div>
                                         <button type="button" onclick="showSimilar(this)">Show similar objects</button>
                                         <div class="similar-objects" style="display: none;">
                                             {% for sim_obj in obj.similar_objects %}
@@ -294,6 +322,7 @@
         original_image_path: "{{ original_image_path }}",
         crossIcon : "{{ url_for('static', filename='img/svg/cross.png') }}",
         trashIcon : "{{ url_for('static', filename='img/svg/trash.png') }}",
+        URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
         metadata_keys: {{ metadata_keys | tojson }},
         class_names: {{ class_name | tojson }},
     };

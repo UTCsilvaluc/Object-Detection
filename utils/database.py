@@ -1097,3 +1097,93 @@ def find_similar_objects(embedding: list, top_k: int = 5):
         return []
     finally:
         close_db_connection(conn)
+
+from dateutil import parser
+
+def normalize_value(value: str):
+    if not value:
+        return value
+    value = value.strip()
+    try:
+        # Essaye de convertir en date normalisée
+        return parser.parse(value).date().isoformat()
+    except:
+        return value.lower()
+
+def find_similar_objects_by_metadatas(metadatas: list[dict[str, str]]):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        where_clauses = []
+        params = []
+
+        for m in metadatas:
+            key = m.get("key")
+            value = normalize_value(m.get("value"))
+            where_clauses.append("(LOWER(MD.key) = LOWER(%s) AND LOWER(MD.value) = LOWER(%s))")
+            params.extend([key, value])
+
+        if not where_clauses:
+            return []
+
+        WHERE = " OR ".join(where_clauses)
+
+        query = f"""
+        SELECT OBJ.object_id, OBJ.name, COUNT(MD.key) AS match_count
+        FROM Object OBJ 
+        JOIN ObjectInstance OBI ON OBJ.object_id = OBI.object_id
+        JOIN Metadata MD ON OBI.object_id = MD.object_id 
+        WHERE {WHERE}
+        GROUP BY OBJ.object_id 
+        ORDER BY match_count DESC;
+        """
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        similar_objects = [
+            {"object_id": row[0], "name": row[1], "match_count": row[2]}
+            for row in rows
+        ]
+
+        cur.close()
+        return similar_objects
+
+    except Exception as e:
+        print(f"Error finding similar objects by metadatas: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def find_similar_objects_by_value(value: str):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        normalized_value = normalize_value(value)
+        query = """
+        SELECT OBJ.object_id , OBJ.name , COUNT(MD.key) AS match_count
+        FROM Object OBJ 
+        JOIN ObjectInstance OBI ON OBJ.object_id = OBI.object_id
+        JOIN Metadata MD ON OBI.object_id = MD.object_id 
+        WHERE LOWER(MD.value) ILIKE LOWER(%s)
+        GROUP BY OBJ.object_id 
+        ORDER BY match_count DESC;
+        """
+        cur.execute(query, (f"%{normalized_value}%",))
+        rows = cur.fetchall()
+        similar_objects = [ 
+            {"object_id": row[0], "name": row[1], "match_count": row[2]}
+            for row in rows
+        ]
+        cur.close()
+        return similar_objects
+
+    except Exception as e:
+        print(f"Error finding similar objects by value: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
