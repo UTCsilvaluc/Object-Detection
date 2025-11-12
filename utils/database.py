@@ -295,6 +295,7 @@ def insert_link_geometry(link_id: int , geojson: str , source: str = None):
         return False
     finally:
         close_db_connection(conn)
+
 def create_object(name: str , description: str = None , type: str = None , embedding: list = None):
     """
     Create a new object record in the Object table.
@@ -978,7 +979,6 @@ def get_all_links():
     finally:
         close_db_connection(conn)
 
-
 def get_link_endpoints(link_id: int):
     conn = get_db_connection()
     if conn is None:
@@ -1065,6 +1065,30 @@ def get_link_geometry(link_id: int):
         return None
     finally:
         close_db_connection(conn)
+
+def get_all_metadatas_values():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = "SELECT DISTINCT key , value FROM Metadata;"
+        cur.execute(query)
+        rows = cur.fetchall()
+        metadatas = []
+        for row in rows:
+            metadatas.append({
+                "key": row[0],
+                "value": row[1]
+            })
+        cur.close()
+        return metadatas
+    except Exception as e:
+        print(f"Error fetching all metadata values: {e}")
+        return []
+    finally:        
+        close_db_connection(conn)
+        
 def find_similar_objects(embedding: list, top_k: int = 5):
     """
     Find similar objects based on the provided embedding using cosine similarity.
