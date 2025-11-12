@@ -98,7 +98,6 @@ function writeMetaDataField(metaField, objID , metaIndex , key=null , value=null
 }
 window.writeMetaDataField = writeMetaDataField;
 function addMetadataField(objID, key = null, value = null , search = false) {
-    console.log(search);
     objID = parseInt(objID);
     const container = search ? document.getElementById(`metasearch-${objID}`) : document.getElementById(`meta-${objID}`);
     const metaIndex = container.children.length - 1; 
@@ -128,6 +127,9 @@ function addMetadataField(objID, key = null, value = null , search = false) {
         (regex ? " | Format: " + regex : "");
     if (value){
         inputValue.value = value;
+    }
+    if (document.getElementById(`autocomplete-${selectedOption.value}`)){
+        inputValue.setAttribute("list", `autocomplete-${selectedOption.value}`);
     }
     elemKey.setAttribute("data-old-value", elemKey.value);
     AppState.metadataUsed[objID].push(elemKey.value);
@@ -335,6 +337,10 @@ function changeKey(selectElem){
     if (type === "bool") {
         inputValue.value = "false";
     }
+    if (document.getElementById(`autocomplete-${selectedOption.value}`)){
+        inputValue.setAttribute("list", `autocomplete-${selectedOption.value}`);
+    }
+
     selectElem.setAttribute("data-old-value", selectElem.value);
     let objIndex = metadataContainer.id.split('-')[1];
     let key = selectElem.value;

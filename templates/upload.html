@@ -171,6 +171,16 @@
         </div>
     </div>
 </div>
+
+{% for metadata in metadata_keys %}
+    <datalist id="autocomplete-{{metadata.key}}">
+    {% for elem in metadatas_values if elem.key == metadata.key %}
+        <option value="{{ elem.value }}">
+            <h2>Key: {{ elem.key }}</h2>
+        </option>
+    {% endfor %}
+    </datalist>
+{% endfor %}
                             {% for obj in result.objects %}
                             <div class="accordion-section" id="obj{{ obj.id }}">
                                 <div class="accordion-header" onclick="toggleAccordion('obj-data{{ obj.id }}')">

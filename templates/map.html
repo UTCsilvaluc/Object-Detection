@@ -58,15 +58,22 @@
                 <!-- Link Information -->
                 <div class="link-info">
                     <label>Link Title:</label>
-                    <input type="text" id="link-title" placeholder="Ex: Segment 1 / Shrine → Temple">
+                    <input type="text" id="link-title" list="existingLinkTitles" placeholder="Ex: Segment 1 / Shrine → Temple">
 
                     <label>Link Type:</label>
                     <select id="link-type">
+                        {% set firstKey = link_types[0].key %}
                         {% for type in link_types %}
                         <option value="{{ type.key }}">{{ type.label }}</option>
                         {% endfor %}
                         <option value="__new__">+ Add New Type</option>
                     </select>
+                    <datalist id="existingLinkTitles">
+                        {% for link in links if link.link_type == firstKey %}
+                        <h2>Type : {{ link.link_type }}</h2>
+                        <option value="{{ link.title }}">
+                        {% endfor %}
+                    </datalist>
 
                     <div id="new-type-box" class="new-type-box" style="display:none;">
                         <input type="text" id="new-type-key" placeholder="Internal key (ex: pilgrimage)">

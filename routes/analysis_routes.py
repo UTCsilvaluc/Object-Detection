@@ -29,6 +29,7 @@ from utils.database import (
     get_all_classes,
     get_all_metadata_keys,
     check_if_title_exist,
+    get_all_metadatas_values
 )
 
 analysis_bp = Blueprint("analysis", __name__)
@@ -238,6 +239,7 @@ def upload():
         result_data["objects"] = objects
     class_name = get_all_classes()
     metadata_keys = get_all_metadata_keys()
+    metadatas_values = get_all_metadatas_values()
     os.remove(img_path)
     return render_template(
         "upload.html",
@@ -250,4 +252,5 @@ def upload():
         original_image_path=original_rel_path,
         class_name=class_name,
         metadata_keys=metadata_keys,
+        metadatas_values=metadatas_values
     )

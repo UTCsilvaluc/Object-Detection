@@ -458,6 +458,19 @@ document.getElementById('link-type').addEventListener('change', async (e) => {
         } else {
             e.target.value = e.target.options[0].value;
         }
+    } else {
+        const currentValue = e.target.value;
+        const linkTitles = links
+            .filter(link => link.link_type == currentValue)
+            .map(link => link.title);
+        const dataList = document.getElementById("existingLinkTitles");
+        dataList.innerHTML = ""; 
+
+       dataList.innerHTML = linkTitles.map(title => `
+            <option value="${title}">
+            <h2>Type : ${currentValue}</h2>
+            </option>
+       `).join(``);
     }
 });
 
