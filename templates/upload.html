@@ -110,22 +110,23 @@
                     <div class="accordion">
                         <div class="accordion-item">
 <div class="accordion-section template" id="obj-template" style="display:none;">
-<div class="accordion-header">Template</div>
-    <div class="accordion-content">
+    <div class="accordion-header"> Template </div>
+    <div class="accordion-content" id="obj-data__ID__">
         <div class="obj-wrapper">
             <div class="left-obj-info">
                 <p><strong>BBox:</strong> [0, 0, 0, 0]</p>
                 <img src="" alt="Object template">
-                <input disabled type="hidden" name="objects[0][crop_path]" value="">
+                <input disabled type="hidden" name="objects[__ID__][crop_path]" value="">
             </div>
             <div class="right-obj-info">
-                <input disabled type="hidden" name="objects[0][class_id]" value="0">
-                <input disabled type="hidden" name="objects[0][score]" value="1.0">
-                <input disabled type="hidden" name="objects[0][bbox]" value="[0,0,0,0]">
+                <input disabled type="hidden" name="objects[__ID__][class_id]" value="0">
+                <input disabled type="hidden" name="objects[__ID__][score]" value="1.0">
+                <input disabled type="hidden" name="objects[__ID__][bbox]" value="[0,0,0,0]">
+                <input disabled type="hidden" name="objects[__ID__][default_object]" value="">
                 <div class="metadata-container" id="meta-template">
                     <div class="meta-field">
-                        <input disabled type="text" name="objects[0][type]" value="type" readonly>
-                        <select disabled name="objects[0][value]" class="object_type" onchange="handleNewType(this)" required>
+                        <input disabled type="text" name="objects[__ID__][type]" value="type" readonly>
+                        <select disabled name="objects[__ID__][value]" class="object_type" onchange="handleNewType(this)" required>
                             {% for cls in class_name %}
                                 <option value="{{cls}}">{{cls}}</option>
                             {% endfor %}
@@ -133,7 +134,39 @@
                         </select>
                     </div>
                 </div>
-                <button disabled type="button" onclick="addMetadataField('0')">+ Add metadata</button>
+                <button disabled type="button" onclick="addMetadataField('__ID__')">+ Add metadata</button>
+            </div>
+        </div>
+        <div class="similar-container">
+            <button disabled type="button" onclick="researchSimilar(this)">Research Similar Objects</button>
+            <div id="research-similar" class="research-similar">
+                <h4 style="text-align: center;">Search similar objects by metadata</h4>
+                <div class="search-metadata-container">
+                    <div class="search-row" style="display: flex; flex-direction: column; gap: 5px;">
+                        <div class="metadata-container" id="metasearch-__ID__"></div>
+                        <button disabled type="button" onclick="addMetadataField('__ID__' , null , null , true)">+ Add Search Metadata</button>
+                    </div>
+                    <div class="search-filters"></div>
+                    <div class="search-mode">
+                        <label>
+                            <input disabled type="radio" name="search_mode" value="metadata" onchange="updateSimilarSearch(this)" checked>
+                            Search by metadata (key + value)
+                        </label>
+                        <label>
+                            <input disabled type="radio" name="search_mode" value="value_only" onchange="updateSimilarSearch(this)">
+                            Search by value only
+                        </label>
+                    </div>
+                    <input type="text" id="value-search" placeholder="Search any value..." style="display:none;">
+                    <button type="button" style="background-color: #34d170;" onclick="searchByMetadata('__ID__')">
+                        Search
+                    </button>
+                </div>
+                <div class="search-results"></div>
+            </div>
+            <button disabled type="button" onclick="showSimilar(this)">Show similar objects</button>
+            <div class="similar-objects" style="display: none;">
+                <!-- Will be written by Javascript -->
             </div>
         </div>
     </div>
@@ -146,7 +179,7 @@
                                         <input type="checkbox" name="merge_{{ obj.id }}" id="merge_{{ obj.id }}" title="Select this object to merge it with another one">
                                         <img src="{{ url_for('static', filename='img/svg/trash.png') }}" alt="Object {{ loop.index }}" class="trash-icon" onclick="event.stopPropagation(); removeObject('{{ obj.id }}');">
                                     </div>
-                                    </div>
+                                </div>
                                 <div class="accordion-content" id="obj-data{{ obj.id }}">
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">

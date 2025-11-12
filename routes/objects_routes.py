@@ -10,14 +10,14 @@ from utils.helper import (
     save_json,
     save_temp_img,
     draw_annotations,
-    get_next_id_available
+    get_next_id_available,
+    get_similar_objects
 )
 
 from utils.database import (
     get_link_between_objects
 )
 from models.factory import ModelFactory
-
 object_bp = Blueprint("objects", __name__)
 
 @object_bp.route('/merge_objects', methods=['POST'])
@@ -73,13 +73,17 @@ def merge_objects():
         "contour": contours,
         "obj_crop_path": temp_object_name,
     }
+    embedding = model.generate_embedding(build_img_temp_path(temp_object_name)).tolist()
+    new_object["embedding"] = embedding
+    newObject = get_similar_objects([new_object])
+    new_object["similar_objects"] = newObject[0]["similar_objects"]
     result_data["objects"].append(new_object)
     result_data["num_objects"] = len(result_data["objects"])
     save_json(result_data, build_json_temp_path(), img_name)
     #Réannotation de l'image
     image = draw_annotations(image, result_data["objects"])
     cv2.imwrite(img_annotated_path, image)
-    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_name) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"]))}, 200
+    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_name) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"])) , "simObj": newObject[0]["similar_objects"]}, 200
 
 @object_bp.route('/remove_object', methods=['POST'])
 def remove_object():

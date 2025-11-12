@@ -52,12 +52,20 @@ window.resetMetaForm = resetMetaForm;
 export function addOrUpdateObjectSection(data) {
     refreshImage();
     refreshCount(data.num_objects);
+    const id = data.image_id || data.new_object_id;
+    const template = document.querySelector(`.accordion-section.template`).outerHTML;
+    const html = template.replace(/__ID__/g, id)
+        .replace('[0,0,0,0]', data.bbox || '[0,0,0,0]')
+        .replace('Object template', `Object ${id}`);
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const accordion_section = temp.firstElementChild;
 
     // Cloning and updating the accordion section
-    let accordion_section = document.querySelector(`.accordion-section.template`).cloneNode(true);
     accordion_section.style.display = "block";
     accordion_section.classList.remove("template");
     accordion_section.querySelectorAll('[disabled]').forEach(el => el.disabled = false);
+
     let accordion_header = accordion_section.querySelector(`.accordion-header`);
     let accordion_content = accordion_section.querySelector(`.accordion-content`);
     let obj_wrapper = accordion_content.querySelector(`.obj-wrapper`);
@@ -70,7 +78,6 @@ export function addOrUpdateObjectSection(data) {
     img.src = data.image_path || data.pathObj;
     img.alt = `Object ${data.image_id || data.new_object_id}`;
 
-    const id = data.image_id ?? data.new_object_id;
     const class_id = data.class_id || data.new_object_id;
     const tmpName = data.tmpName || data.nameNewObj;
     accordion_section.id = 'obj' + id;
@@ -81,20 +88,94 @@ export function addOrUpdateObjectSection(data) {
     accordion_section.id = `obj${id}`;
     accordion_content.id = `obj-data${id}`;
 
-    // --- Update dynamic fields ---
-    right_obj_info.querySelector('input[name$="[class_id]"]').name = `objects[${id}][class_id]`;
+
     right_obj_info.querySelector('input[name$="[class_id]"]').value = class_id;
-
-    right_obj_info.querySelector('input[name$="[score]"]').name = `objects[${id}][score]`;
     right_obj_info.querySelector('input[name$="[score]"]').value = 1.0;
-
-    right_obj_info.querySelector('input[name$="[bbox]"]').name = `objects[${id}][bbox]`;
     right_obj_info.querySelector('input[name$="[bbox]"]').value = data.bbox;
 
     let metadataContainer = right_obj_info.querySelector('.metadata-container');
     writeClassMetaField(metadataContainer , id , AppState.classNames);
-    let addMetaButton = right_obj_info.querySelector('button[onclick^="addMetadataField"]');
-    addMetaButton.setAttribute('onclick', `addMetadataField('${id}')`);
+    const similarObjectsDiv = accordion_content.querySelector('.similar-objects');
+    if (data.simObj && data.simObj.length > 0) {
+
+        data.simObj.forEach((simObj, index) => {
+
+            const grouped = {};
+            (simObj.metadata || []).forEach(meta => {
+                const imgID = meta.obj_image_id || 'no_image';
+                if (!grouped[imgID]) grouped[imgID] = [];
+                grouped[imgID].push(meta);
+            });
+
+            const groupedHTML = Object.entries(grouped).map(([imgID, metas]) => {
+
+                const versionText = metas[0].obj_version_number
+                    ? ` — V${metas[0].obj_version_number}`
+                    : "";
+
+                const items = metas.map(m => `
+                    <li class="metadata-item" data-key="${m.key}" data-value="${m.value}">
+                        <span class="meta-key">${m.key}:</span>
+                        <span class="meta-value">${m.value}</span>
+                    </li>
+                `).join("");
+
+                return `
+                    <div class="metadata-source-block">
+                        <h4>From Image ${imgID}${versionText}</h4>
+                        <ul class="metadata-list">
+                            ${items}
+                        </ul>
+                    </div>
+                `;
+            }).join("");
+
+            const objWrapperSimilar = document.createElement('div');
+            objWrapperSimilar.className = 'obj-wrapper-similar';
+
+            objWrapperSimilar.innerHTML = `
+                <div class="left-similar">
+                    <div class="similar-info">
+                        <p><strong>Object ID:</strong> ${simObj.object_id}</p>
+                        <p><strong>Similarity:</strong> ${((1 - simObj.distance) * 100).toFixed(2)}%</p>
+                    </div>
+                    <div class="similar-image-box">
+                        <img src="${window.AppConfig.URL_for_images + simObj.cropped_file_path}"
+                            alt="Similar Object ${simObj.object_id}"
+                            class="similar-image">
+                    </div>
+                </div>
+
+                <div class="right-similar">
+                    <div class="obj-meta">
+                        <h3>Similar object ${index + 1} — Metadata</h3>
+
+                        ${simObj.metadata && simObj.metadata.length > 0
+                            ? `<div class="metadata-grouped">${groupedHTML}</div>
+                            <button type="button" class="import-btn"
+                                onclick="importMetadata(this , '${id}')">
+                                Import metadata from this object
+                            </button>`
+                            : `<p class="no-metadata">No metadata available for this object.</p>`
+                        }
+
+                        <div class="same-object-field">
+                            <label title="Mark this as the same real-world object in database">
+                                Same object as object ${id}?
+                                <input type="checkbox" role="radio"
+                                    name="selected_similar_${id}"
+                                    value="${simObj.object_id}"
+                                    onchange="defaultObjectSelection(this , '${id}' , '${simObj.object_id}')">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            similarObjectsDiv.appendChild(objWrapperSimilar);
+        });
+    }
+
 
     $('.accordion-item').appendChild(accordion_section);
     $('input[name="max_object_detected"]').value =
@@ -165,7 +246,6 @@ window.addSelectOptionFromAll = addSelectOptionFromAll;
 export function showSimilar(button){
     button.innerText = button.innerText === "Show similar objects" ? "Hide similar objects" : "Show similar objects";
     const objWrapper = button.nextElementSibling; 
-    console.log("hid-similar:", objWrapper);
     if (objWrapper && button.innerText === "Hide similar objects") {
         objWrapper.style.display = "block";
     } else {

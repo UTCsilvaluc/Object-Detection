@@ -400,17 +400,24 @@ button:hover {
 }
 
 .left-similar {
+    flex : 0 0 80px;
     background: #f3f6ff;
     border: 1px solid #c8d7ff;
     border-radius: 6px;
     padding: 10px;
-    width: 180px;
     min-height: 160px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
 }
 
+.right-similar {
+    flex: 1;
+    margin-left: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
 .similar-info p {
     margin: 3px 0;
     font-size: 13px;
@@ -548,6 +555,7 @@ button:hover {
     flex-direction: row;
     gap: 5px;
     justify-content: flex-start;
+    overflow-y: auto;
 }
 
 /* --- SEARCH SIMILAR PANEL --- */
@@ -642,6 +650,7 @@ button:hover {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overflow-y: auto;
 }
 
 .search-results .obj-wrapper-similar {

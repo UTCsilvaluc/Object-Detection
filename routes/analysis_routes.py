@@ -19,7 +19,7 @@ from utils.helper import (
 )
 
 from .main_routes import clear_temp
-
+from models.object_embedding import generate_embedding_from_crop
 from models.factory import ModelFactory
 from models.pretrained_models import (
     SAM_GLOBAL_INSTANCE,
@@ -100,13 +100,16 @@ def analyse_point():
         "contour": contour_points,
         "obj_crop_path": path,
     }
+    embedding = generate_embedding_from_crop(path)
+    new_object["embedding"] = embedding.tolist()
+    newObject = get_similar_objects([new_object] , top_k=5)
     result_data["objects"].append(new_object)
     result_data["num_objects"] = len(result_data["objects"])
     result_data = result_data
     new_annotated_img = draw_annotations(img, result_data["objects"])
     cv2.imwrite(img_annotated_path, new_annotated_img)
     save_json(result_data, build_json_temp_path(), img_name)
-    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_name), "bbox": bbox , "tmpName": temp_object_name}, 200
+    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_name), "bbox": bbox , "tmpName": temp_object_name , "simObj": newObject[0]["similar_objects"]}, 200
 
 @analysis_bp.route('/re_run_analysis', methods=['POST'])
 def re_run_analysis():

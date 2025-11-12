@@ -36,7 +36,7 @@ class BaseModelStrategy(ABC):
     def generate_embedding(self, image_crop_path):
         """
         Generate embedding for a given image crop.
-        :param image_crop_path: Path to the image crop.
+        :param image_crop_path: Path to the image crop. ABSOLUTE PATH.
         :return: Embedding vector.
         """
         from .object_embedding import generate_embedding_from_crop
