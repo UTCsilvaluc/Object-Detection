@@ -187,13 +187,40 @@ function checkAllFilters(image) {
         if (startDate && imgDate < new Date(startDate)) return false;
         if (endDate && imgDate > new Date(endDate)) return false;
     }
+
+    if (!filterByMetadata(image)) {
+        return false;
+    }
     return true;
 }
+
+function filterByMetadata(image) {
+    const metadatasRequired = Array.from(document.querySelectorAll('#metadata-filter input[type="checkbox"]:checked')).map(cb => cb.value);
+    const metadatasContainingInImages = {}; //This is a dictionnary of lists : 1: image_id -> set of metadatas keys contained in this image
+    image.objects.forEach((obj) => {
+        metadatasContainingInImages[image.image_id] = metadatasContainingInImages[image.image_id] || new Set();
+        Object.keys(obj.metadatas).forEach((key) => {
+            if (obj.metadatas[key].key && !(metadatasContainingInImages[image.image_id].has(obj.metadatas[key].key))) {
+                metadatasContainingInImages[image.image_id].add(obj.metadatas[key].key);
+            }
+        });
+    });
+    for (let i = 0; i < metadatasRequired.length; i++) {
+        const key = metadatasRequired[i];
+        if (!(metadatasContainingInImages[image.image_id] && metadatasContainingInImages[image.image_id].has(key))) {
+            return false;
+        }
+    }
+    return true;
+}
+window.filterByMetadata = filterByMetadata;
 
 function refreshFilteredImages() {
     filteredImages = images.filter(checkAllFilters);
     applyFilters();
+    // Update all global links and object links based on filtered images (Next step implementation)
 }
+window.refreshFilteredImages = refreshFilteredImages;
 
 document.querySelectorAll('.class-list input[type="checkbox"]').forEach(checkbox => {
     checkbox.addEventListener('change', (event) => {
@@ -554,4 +581,29 @@ document.getElementById('toggle-show-links').addEventListener('change', (e) => {
     } else {
         map.removeLayer(linesLayer);
     }
+});
+ 
+document.getElementById('toggle-only-images-with-links').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        const keepImagesIDs = new Set();
+        links.forEach(link => {
+            link.endpoints.forEach(endpoint => {
+                if (endpoint.entity_type === 'image' && endpoint.image_id) {
+                    keepImagesIDs.add(endpoint.image_id);
+                }
+            });
+        });
+        Object.values(objectLinks).forEach(arrayOfLinks => {
+            arrayOfLinks.forEach(link => {
+                if (link.image_id && !(keepImagesIDs.has(link.image_id))) {
+                    keepImagesIDs.add(link.image_id);
+                }
+            });
+        });
+        filteredImages = images.filter(img => keepImagesIDs.has(img.image_id));
+        enableClustering(map, clusters, markers, filteredImages);
+    } else {
+        filteredImages = images.filter(checkAllFilters);
+    }
+    applyFilters();
 });

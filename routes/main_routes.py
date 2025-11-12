@@ -101,4 +101,13 @@ def map_view():
         })
     for point in points:
         point['metadata'] = get_metadata_by_point_id(point['point_id'])
+    for image in images:
+        versionedImages = get_versions_by_image_id(image['image_id'])
+        objects = get_objects_by_image_version(image['image_id'] , versionedImages[0]['version_number']) if versionedImages else []
+        idx = 0
+        for obj in objects:
+            obj_metadata = get_metadata_by_object_id(image_id=image['image_id'], object_id=obj['object_id'])
+            objects[idx]['metadatas'] = obj_metadata
+            idx += 1
+        image['objects'] = objects
     return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, points=points, object_links=grouped , links=links, link_types=link_types)

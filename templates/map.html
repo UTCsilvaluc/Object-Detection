@@ -34,6 +34,15 @@
                             <input type="date" id="end-date" name="end-date">
                         </label>
                     </div>
+                    <h3 class="showFilter-text" onclick="toggleFilter('metadata-filter')">Select Metadata ↓</h3>
+                    <div class="filter-class" id="metadata-filter" hidden>
+                        {% for items in metadata_keys %}
+                        <label class="class-list">
+                            <input type="checkbox" name="metadata" value="{{ items.key }}" onchange="refreshFilteredImages()">
+                            <span class="class-label">{{ items.key }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
                     <br><br>
                     <button type="button" onclick="clearFilters()">Clear Filters</button>
                     <button type="button" onclick="applyFilters()">Apply Filters</button>
@@ -143,6 +152,10 @@
             <label>
                 <input type="checkbox" id="toggle-show-links" checked>
                 <span>Show Links</span>
+            </label>
+            <label>
+                <input type="checkbox" id="toggle-only-images-with-links">
+                <span>Show Only Images With Links</span>
             </label>
         </div>
 
