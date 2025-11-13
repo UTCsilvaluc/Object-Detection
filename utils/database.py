@@ -893,7 +893,7 @@ def get_link_between_objects():
     try:
         cur = conn.cursor()
         query = """
-        SELECT I.image_id , I.latitude , I.longitude  , OBI.object_id
+        SELECT I.image_id , I.latitude , I.longitude  , OBI.object_id 
         FROM Image AS I
         JOIN ObjectInstance AS OBI ON I.image_id = OBI.image_id
         WHERE (
@@ -908,7 +908,6 @@ def get_link_between_objects():
         """
         cur.execute(query)
         rows = cur.fetchall()
-        print(rows)
         links = []
         for row in rows:
             links.append({

@@ -17,6 +17,7 @@ const images = window.appConfig.images;
 const classes = window.appConfig.classes;
 const links = window.appConfig.links || [];
 const linkTypes = window.appConfig.link_types || [];
+const objectsData = window.appConfig.object_datas || {};
 let objectLinks = window.appConfig.objects_linked || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
@@ -173,7 +174,7 @@ function refreshVisualization() {
         addLinksToMap(linesLayer, map, links , markers , L);
     }
     if (document.getElementById('toggle-object-links').checked) {
-        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
     }
 }
 window.applyFilters = applyFilters;
@@ -281,7 +282,7 @@ function enableZoomClustering(map) {
 function updateLinkOnZoom(map) {
     map.on('zoomend', () => {
         if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
-        if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+        if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
     });
 }
 
@@ -302,7 +303,7 @@ function enableMapStorageListener(map) {
                 if (dataReq.status === 'success') {
                     objectLinks = dataReq.links;
                     if (document.getElementById('toggle-object-links').checked) {
-                        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+                        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
                     }
                 }
                 if (tempMarker) {
@@ -415,7 +416,7 @@ document.getElementById('toggle-timeline').addEventListener('change', (e) => {
 });
 
 document.getElementById('toggle-object-links').addEventListener('change', (e) => {
-    if (e.target.checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+    if (e.target.checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
     else hideObjectLinks(map , objectLinesLayer);
 });
 

@@ -1,6 +1,6 @@
 import { clusterPoints, centerCluster , getMaxPixelRadius , destinationPoint , metersFromPixels} from './math.js';
 import { getCenterMarker } from './math.js';
-import { createPopupHTML } from './popup.js';
+import { createPopupHTML , createPopUpForObjectLinks} from './popup.js';
 import { getMarkerByLatLng } from './utils.js';
 window.expandedMarkers = [];
 window.hiddenClusters = [];
@@ -104,12 +104,12 @@ function expandCluster(cluster, map, center, markers) {
     window.isExpanding = false;
 }
 
-export function showObjectLinks(markers , L , objectLinks , map , objectLinesLayer) {
+export function showObjectLinks(markers , L , objectLinks , map , objectLinesLayer , objectsData) {
     objectLinesLayer.clearLayers();
-    Object.values(objectLinks).forEach(key => {
+    Object.entries(objectLinks).forEach(([key, value]) => {
         const latlngs = [];
         const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-        key.forEach(point => {
+        value.forEach(point => {
             if (point.latitude && point.longitude) {
                 const marker = getMarkerByLatLng(markers , point.latitude , point.longitude);
                 if (!marker) return;
@@ -117,7 +117,12 @@ export function showObjectLinks(markers , L , objectLinks , map , objectLinesLay
                 latlngs.push([center.centerLatLng.lat, center.centerLatLng.lng]);
             }
         });
+        const popupContent = createPopUpForObjectLinks(objectsData[key] , window.appConfig.URL_for_images);
         var polyline = L.polyline(latlngs, {color: randomColor}).addTo(objectLinesLayer);
+        polyline.bindPopup(popupContent);
+        polyline.on('click', function(e) { 
+            this.openPopup();
+        });
     });
     map.addLayer(objectLinesLayer);
 }

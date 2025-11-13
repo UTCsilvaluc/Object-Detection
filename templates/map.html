@@ -177,6 +177,7 @@
             metadata_keys: {{ metadata_keys|tojson }},
             icons: {{ icons|tojson }},
             points : {{ points|tojson }},
+            object_datas : {{ object_datas|tojson }},
             URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
             URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
             crossIcon: "{{ url_for('static', filename='img/svg/cross.png') }}",

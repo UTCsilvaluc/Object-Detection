@@ -19,7 +19,8 @@ from utils.database import (
     get_all_link_types,
     get_link_endpoints,
     get_link_metadata,
-    get_link_geometry
+    get_link_geometry,
+    get_instance_object_by_object_id
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -87,12 +88,14 @@ def map_view():
     object_links = get_link_between_objects()
     link_types = get_all_link_types()
     links = get_all_links()
+    object_datas = {}
     for link in links:
         link['endpoints'] = get_link_endpoints(link['link_id'])
         link['metadata'] = get_link_metadata(link['link_id'])
         link['geometry'] = get_link_geometry(link['link_id'])
     for object_link in object_links:
         if object_link['object_id'] not in grouped:
+            object_datas[object_link['object_id']] = get_instance_object_by_object_id(object_link['object_id'])
             grouped[object_link['object_id']] = []
         grouped[object_link['object_id']].append({
             'latitude': object_link['latitude'],
@@ -110,4 +113,5 @@ def map_view():
             objects[idx]['metadatas'] = obj_metadata
             idx += 1
         image['objects'] = objects
-    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, points=points, object_links=grouped , links=links, link_types=link_types)
+    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, 
+                           points=points, object_links=grouped , links=links, link_types=link_types, object_datas=object_datas)

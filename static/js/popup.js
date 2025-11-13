@@ -151,3 +151,100 @@ export function getHTMLForSVGIcon(iconURL, color) {
                 `;
     return html;
 }
+/*
+[
+    {
+        "class": "Person",
+        "confidence_score": "1.000",
+        "coords_x": 5,
+        "coords_y": 3,
+        "cropped_file_path": "Joconde_obj1.jpg",
+        "height": 637,
+        "image_id": 54,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 484
+    },
+    {
+        "class": "Artifact",
+        "confidence_score": "0.758",
+        "coords_x": 44,
+        "coords_y": 48,
+        "cropped_file_path": "qsdsqdqsdqsdqs_obj0.jpg",
+        "height": 220,
+        "image_id": 70,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 162
+    },
+    {
+        "class": "Person",
+        "confidence_score": "1.000",
+        "coords_x": 5,
+        "coords_y": 3,
+        "cropped_file_path": "jocondetest_obj1.jpg",
+        "height": 637,
+        "image_id": 57,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 484
+    },
+    {
+        "class": "Book",
+        "confidence_score": "1.000",
+        "coords_x": 5,
+        "coords_y": 3,
+        "cropped_file_path": "qsdqsdqsdqsdsqdsqdsq_obj1.jpg",
+        "height": 637,
+        "image_id": 71,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 484
+    },
+    {
+        "class": "Person",
+        "confidence_score": "0.860",
+        "coords_x": 104,
+        "coords_y": 187,
+        "cropped_file_path": "joconde2_obj0.jpg",
+        "height": 2860,
+        "image_id": 55,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 2103
+    },
+    {
+        "class": "Person",
+        "confidence_score": "0.758",
+        "coords_x": 44,
+        "coords_y": 48,
+        "cropped_file_path": "joconde3_obj0.jpg",
+        "height": 220,
+        "image_id": 56,
+        "metadata_key": null,
+        "metadata_value": null,
+        "version_number": 1,
+        "width": 162
+    }
+]
+*/
+
+export function createPopUpForObjectLinks(objectData, URL_for_image) {
+    return Object.values(objectData)
+        .map(obj => `
+            <div class="popup-content">
+                <img src="${URL_for_image + obj.cropped_file_path}" width="100" />
+                <h3>Class: ${obj.class || 'Unknown'}</h3>
+                <p><strong>Confidence Score:</strong> ${obj.confidence_score ?? 'N/A'}</p>
+                <p><strong>Dimensions:</strong> ${obj.width ?? 'N/A'} x ${obj.height ?? 'N/A'}</p>
+                <p><strong>Coordinates in Image:</strong> (${obj.coords_x ?? 'N/A'}, ${obj.coords_y ?? 'N/A'})</p>
+            </div>
+        `)
+        .join('');
+}
+
