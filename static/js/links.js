@@ -71,8 +71,12 @@ export function addLinksToMap(linesLayer , map, links , markers , L) {
             }
         } else {
             const latlngs = link.endpoints.map(item => [item.latitude , item.longitude]);
-            centerLatLngsWithAnchor(latlngs, markers, map, L);
-            const polyline = createPolylineWithText(linesLayer,latlngs, map, link);
+            const validLatlngs = latlngs.filter(latlng => {
+                return getMarkerByLatLng(markers, latlng[0], latlng[1]);
+            });
+            if (validLatlngs.length < 2) return;
+            centerLatLngsWithAnchor(validLatlngs, markers, map, L);
+            const polyline = createPolylineWithText(linesLayer,validLatlngs, map, link);
             linesLayer.addLayer(polyline);
             linesLayer.addTo(map);
         }

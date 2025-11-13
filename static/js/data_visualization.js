@@ -6,6 +6,7 @@ window.expandedMarkers = [];
 window.hiddenClusters = [];
 window.isExpanding = false;
 export function enableClustering(map, clusters, markers, filteredImages) {
+    clusters.clearLayers();
     const zoomLevel = map.getZoom();
     const findCluster = clusterPoints(filteredImages, 0.5, zoomLevel);
     findCluster.forEach(cluster => {
@@ -111,6 +112,7 @@ export function showObjectLinks(markers , L , objectLinks , map , objectLinesLay
         key.forEach(point => {
             if (point.latitude && point.longitude) {
                 const marker = getMarkerByLatLng(markers , point.latitude , point.longitude);
+                if (!marker) return;
                 const center = getCenterMarker(marker , map , L);
                 latlngs.push([center.centerLatLng.lat, center.centerLatLng.lng]);
             }

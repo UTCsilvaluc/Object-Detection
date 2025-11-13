@@ -73,7 +73,7 @@ function initMap(position) {
     // Add points to the map based on filtered images
     applyFilters();
     addPoints(pointsLayer, points);
-    addLinksToMap(linesLayer, map, links , markers , L);
+    addLinksToMap(linesLayer, map, links , markers , L , filteredImages);
     enableZoomClustering(map);
     updateLinkOnZoom(map);
     enableClustering(map, clusters, markers, filteredImages);
@@ -161,8 +161,21 @@ function applyFilters() {
                 }   
             });
     });
+    refreshVisualization();
     buildTimelineFromFilteredImages(filteredImages , URL_for_images);
-}   
+}
+
+function refreshVisualization() {
+    if (document.getElementById('toggle-cluster').checked) {
+        enableClustering(map, clusters, markers, filteredImages);
+    }
+    if (document.getElementById('toggle-show-links').checked) {
+        addLinksToMap(linesLayer, map, links , markers , L);
+    }
+    if (document.getElementById('toggle-object-links').checked) {
+        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer);
+    }
+}
 window.applyFilters = applyFilters;
 function clearFilters() {
     checkClasses = [...classes];
@@ -197,6 +210,7 @@ function checkAllFilters(image) {
 function filterByMetadata(image) {
     const metadatasRequired = Array.from(document.querySelectorAll('#metadata-filter input[type="checkbox"]:checked')).map(cb => cb.value);
     const metadatasContainingInImages = {}; //This is a dictionnary of lists : 1: image_id -> set of metadatas keys contained in this image
+    if (image.objects === undefined || image.objects.length === 0) return metadatasRequired.length === 0;
     image.objects.forEach((obj) => {
         metadatasContainingInImages[image.image_id] = metadatasContainingInImages[image.image_id] || new Set();
         Object.keys(obj.metadatas).forEach((key) => {
