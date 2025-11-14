@@ -2,7 +2,8 @@
 
 import { degOfPente, getCenterMarker } from "./math.js";
 import { getMarkerByLatLng } from "./utils.js";
-import { popupPolylineLink } from "./popup.js";
+import { createPopUpForObjectLinks, popupPolylineLink } from "./popup.js";
+
 export function createPolylineWithText(linesLayer , latlngs, map, link) {
     const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
     const polyline = L.polyline(latlngs, { color: randomColor , weight: 4 , opacity: 0.7});
@@ -229,4 +230,56 @@ export function clearLinkCreationForm(markers , pointsLayer) {
     window.enableLinkCreation = false;
     document.body.style.cursor = 'default';
     document.getElementById('link-panel').classList.toggle('hidden');
+}
+
+
+export function showObjectLinks(markers , L , objectLinks , map , objectLinesLayer , objectsData) {
+    objectLinesLayer.clearLayers();
+    Object.entries(objectLinks).forEach(([key, value]) => {
+        const latlngs = [];
+        const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+        value.forEach(point => {
+            if (point.latitude && point.longitude) {
+                const marker = getMarkerByLatLng(markers , point.latitude , point.longitude);
+                if (!marker) return;
+                const center = getCenterMarker(marker , map , L);
+                latlngs.push([center.centerLatLng.lat, center.centerLatLng.lng]);
+            }
+        });
+        const popupContent = createPopUpForObjectLinks(objectsData[key] , window.appConfig.URL_for_images);
+        var polyline = L.polyline(latlngs, {color: randomColor}).addTo(objectLinesLayer);
+        polyline.bindPopup(popupContent);
+        polyline.on('click', function(e) { 
+            this.openPopup();
+        });
+    });
+    map.addLayer(objectLinesLayer);
+}
+/* Shared Objects between images part */
+
+export function addSharedLinksToMap(sharedObjectsLayer , map, sharedLinks , markers , L , objectsData) {
+    sharedObjectsLayer.clearLayers();
+    sharedLinks.forEach(link => {
+        const marker1 = getMarkerByLatLng(markers, link.lat1, link.lon1);
+        const marker2 = getMarkerByLatLng(markers, link.lat2, link.lon2);
+        if (!marker1 || !marker2) return;
+        const center1 = getCenterMarker(marker1 , map , L);
+        const center2 = getCenterMarker(marker2 , map , L);
+        const latlngs = [
+            [center1.centerLatLng.lat , center1.centerLatLng.lng],
+            [center2.centerLatLng.lat , center2.centerLatLng.lng]
+        ];
+        if (link.object_ids) {
+            let HTML = "";
+            link.object_ids.forEach(object_id => {
+                HTML += createPopUpForObjectLinks(objectsData[object_id] , window.appConfig.URL_for_images);
+            });
+            const polyline = L.polyline(latlngs, {color: 'blue', weight: 4 , opacity: 0.7}).addTo(sharedObjectsLayer);
+            polyline.bindPopup(HTML);
+            polyline.on('click', function(e) { 
+                this.openPopup();
+            });
+            sharedObjectsLayer.addTo(map);
+        }
+    });
 }

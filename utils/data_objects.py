@@ -9,7 +9,8 @@ from utils.database import (
     get_objects_by_image_version,
     get_link_endpoints,
     get_link_metadata,
-    get_link_geometry
+    get_link_geometry,
+    find_shared_objects_between_images
 )
 
 def build_object_links():
@@ -19,6 +20,7 @@ def build_object_links():
         object_datas: dict {object_id: {...instance data...}}
     """
     object_links = get_link_between_objects()
+    shared_objects = find_shared_objects_between_images()
     grouped = {}
     object_datas = {}
 
@@ -37,7 +39,7 @@ def build_object_links():
             'image_id': link['image_id']
         })
 
-    return grouped, object_datas
+    return grouped, object_datas , shared_objects
 
 
 

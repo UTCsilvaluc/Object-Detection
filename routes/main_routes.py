@@ -88,7 +88,7 @@ def map_view():
     links = enrich_links(get_all_links())
     link_types = get_all_link_types()
 
-    object_links, object_datas = build_object_links()
+    object_links, object_datas , shared_objects = build_object_links()
 
     return render_template(
         'map.html',
@@ -100,5 +100,6 @@ def map_view():
         object_links=object_links,
         links=links,
         link_types=link_types,
-        object_datas=object_datas
+        object_datas=object_datas,
+        shared_objects=shared_objects
     )

@@ -142,6 +142,10 @@
                 <span>Show Object Links</span>
             </label>
             <label>
+                <input type="checkbox" id="toggle-shared-objects">
+                <span>Show Shared Objects Between Images (Links)</span>
+            </label>
+            <label>
                 <input type="checkbox" id="toggle-filters" checked>
                 <span>Show Filters</span>
             </label>
@@ -178,6 +182,7 @@
             icons: {{ icons|tojson }},
             points : {{ points|tojson }},
             object_datas : {{ object_datas|tojson }},
+            shared_objects : {{ shared_objects|tojson }},
             URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
             URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
             crossIcon: "{{ url_for('static', filename='img/svg/cross.png') }}",

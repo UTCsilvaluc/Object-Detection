@@ -102,10 +102,11 @@ def remove_object():
 
 @object_bp.route('/link_between_objects', methods=['POST'])
 def link_between_objects():
-    grouped, object_datas = build_object_links()
+    grouped, object_datas , shared_objects = build_object_links()
     return {
         "status": "success",
         "success": True,
         "links": grouped,
-        "object_datas": object_datas
+        "object_datas": object_datas,
+        "shared_objects": shared_objects
     }, 200

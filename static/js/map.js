@@ -6,7 +6,7 @@ import { setTrashIcon , getMetadataFromFields , controlInputValues , getGeoJSONF
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage , saveData} from './api.js';
 import { createPopupHTML , createPopupPoint , createPopupAddPoint , addPoint , getHTMLForSVGIcon} from './popup.js';
-import {addLinksToMap , handleLinkCreationClick , clearLinkCreationForm , createPolylineWithText} from './links.js';
+import {addLinksToMap , handleLinkCreationClick , clearLinkCreationForm , addSharedLinksToMap} from './links.js';
 // Main variables and map initialization
 
 const $ = window.jQuery;
@@ -19,6 +19,7 @@ const links = window.appConfig.links || [];
 const linkTypes = window.appConfig.link_types || [];
 let objectsData = window.appConfig.object_datas || {};
 let objectLinks = window.appConfig.objects_linked || [];
+let sharedObjects = window.appConfig.shared_objects || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
 const crossIcon = window.appConfig.crossIcon;
@@ -33,6 +34,7 @@ let markers = L.layerGroup();
 let clusters = L.layerGroup();
 let linesLayer = L.layerGroup();
 let objectLinesLayer = L.layerGroup();
+let sharedObjectsLayer = L.layerGroup();
 window.circle = L.layerGroup();
 let checkClasses = [...classes];
 let filteredImages = [...images];
@@ -287,6 +289,7 @@ function updateLinkOnZoom(map) {
         if (window.ClusterExpandActive) return;
         if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
         if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
+        if (document.getElementById('toggle-shared-objects').checked) addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
     });
 }
 
@@ -307,8 +310,12 @@ function enableMapStorageListener(map) {
                 if (dataReq.status === 'success') {
                     objectLinks = dataReq.links;
                     objectsData = dataReq.object_datas;
+                    sharedObjects = dataReq.shared_objects;
                     if (document.getElementById('toggle-object-links').checked) {
                         showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
+                    }
+                    if (document.getElementById('toggle-shared-objects').checked) {
+                        addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
                     }
                 }
                 if (tempMarker) {
@@ -627,4 +634,12 @@ document.getElementById('toggle-only-images-with-links').addEventListener('chang
         filteredImages = images.filter(checkAllFilters);
     }
     applyFilters();
+});
+
+document.getElementById('toggle-shared-objects').addEventListener('change', (e) => {
+    if (e.target.checked) {
+        addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
+    } else {
+        map.removeLayer(sharedObjectsLayer);
+    }
 });

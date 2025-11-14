@@ -216,7 +216,6 @@
                                             <button type="button" onclick="addMetadataField('{{ obj.id }}')">+ Add metadata</button>
                                         </div>
                                     </div>
-                                    {% if obj.similar_objects and obj.similar_objects|length > 0 %}
                                     <div class="similar-container">
                                         <button type="button" onclick="researchSimilar(this)">Research Similar Objects</button>
                                         <div id="research-similar" class="research-similar">
@@ -247,6 +246,7 @@
                                             <div class="search-results"></div>
                                         </div>
                                         <button type="button" onclick="showSimilar(this)">Show similar objects</button>
+                                        {% if obj.similar_objects and obj.similar_objects|length > 0 %}
                                         <div class="similar-objects" style="display: none;">
                                             {% for sim_obj in obj.similar_objects %}
                                                 <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">

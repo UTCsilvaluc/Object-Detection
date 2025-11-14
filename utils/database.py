@@ -918,7 +918,6 @@ def get_link_between_objects():
                 "object_id": row[3]
             })
         cur.close()
-        print(links)
         return links
     except Exception as e:
         print(f"Error fetching link between objects: {e}")
@@ -1178,6 +1177,38 @@ def find_similar_objects_by_metadatas(metadatas: list[dict[str, str]]):
         return []
     finally:
         close_db_connection(conn)
+
+def find_shared_objects_between_images():
+    """
+    This function identifies all objects that are linked between two images.
+    If one picture as (A,B,C,D) and another (A,D,F,G), it will return (A,D) as linked object.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """SELECT oi1.image_id AS image1, img1.latitude AS lat1, img1.longitude AS lon1, oi2.image_id AS image2, img2.latitude AS lat2, img2.longitude AS lon2, ARRAY_AGG(oi1.object_id) AS object_ids
+        FROM ObjectInstance oi1
+        JOIN ObjectInstance oi2 ON oi1.object_id = oi2.object_id AND oi1.image_id < oi2.image_id
+        JOIN Image img1 ON oi1.image_id = img1.image_id
+        JOIN Image img2 ON oi2.image_id = img2.image_id
+        GROUP BY oi1.image_id, img1.latitude, img1.longitude, oi2.image_id, img2.latitude, img2.longitude;
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        linked_objects = [
+            {"image1": row[0], "lat1": row[1], "lon1": row[2], "image2": row[3], "lat2": row[4], "lon2": row[5], "object_ids": row[6]}
+            for row in rows
+        ]
+        cur.close()
+        return linked_objects
+    except Exception as e:
+        print(f"Error finding object link images: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
 
 def find_similar_objects_by_value(value: str):
     conn = get_db_connection()
