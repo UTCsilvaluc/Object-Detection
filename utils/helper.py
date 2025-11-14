@@ -11,6 +11,8 @@ from PIL import Image , ExifTags, ImageOps
 import regex
 import numpy as np
 
+from models.object_embedding import generate_embedding_from_crop
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
 
@@ -535,3 +537,62 @@ def get_similar_objects_by_metadatas(similar_objects: list):
             results.append(data_sim_obj)
 
     return results
+
+def create_new_object(obj_img, bbox, contour, new_id, score=1.0):
+    # Save crop
+    abs_path, crop_name = save_temp_img(obj_img, new_id)
+
+    # Embedding
+    crop_full_path = abs_path  # necessary for embedding function
+    embedding = generate_embedding_from_crop(crop_full_path).tolist()
+
+    # JSON must store ONLY the filename, not full path
+    new_obj = {
+        "class_id": 0,
+        "id": new_id,
+        "score": score,
+        "bbox": bbox,
+        "contour": contour,
+        "obj_crop_path": crop_name,  
+        "embedding": embedding,
+    }
+
+    similar = get_similar_objects([new_obj], top_k=5)
+    new_obj["similar_objects"] = similar[0]["similar_objects"]
+
+    return new_obj
+
+def load_analysis_context(img_name, original_path, annotated_path, require_json=True):
+    img_original = build_img_temp_path(original_path)
+    img_annotated = build_img_temp_path(annotated_path)
+
+    # Load JSON data
+    data, json_path = load_analysis_json(img_name, required=require_json)
+    if require_json and data is None:
+        return None, f"JSON file not found: {json_path}", None, None, None
+
+    # Load image
+    img = cv2.imread(img_original)
+    if img is None:
+        return None, f"Failed to read image at {img_original}", None, None, None
+
+    return data, None, img, img_original, img_annotated
+
+def add_new_detected_object(result_data, obj_img, bbox, contour, score):
+    new_id = int(get_next_id_available(result_data["objects"]))
+
+    new_object = create_new_object(
+        obj_img=obj_img,
+        bbox=bbox,
+        contour=contour,
+        new_id=new_id,
+        score=score
+    )
+
+    similar = get_similar_objects([new_object])
+    new_object["similar_objects"] = similar[0]["similar_objects"]
+
+    result_data["objects"].append(new_object)
+    result_data["num_objects"] = len(result_data["objects"])
+
+    return new_object, new_id

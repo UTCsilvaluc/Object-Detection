@@ -11,13 +11,11 @@ from utils.helper import (
     handle_detected_objects,
     build_json,
     empty_to_none,
-    build_json_temp_path,
     load_analysis_json
 )
 from utils.database import (
     insert_point,
     insert_metadata_point,
-    get_all_metadata_keys ,
     insert_link_type,
     insert_link,
     insert_link_endpoint,

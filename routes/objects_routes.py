@@ -11,9 +11,9 @@ from utils.helper import (
     save_json,
     save_temp_img,
     draw_annotations,
-    get_next_id_available,
-    get_similar_objects,
-    load_analysis_json
+    load_analysis_json,
+    load_analysis_context,
+    add_new_detected_object
 )
 
 from utils.data_objects import build_object_links
@@ -26,14 +26,15 @@ def merge_objects():
     data = request.get_json()
     img_name = data.get('img_name')
     object_ids = data.get('obj_ids', [])
-    if not img_name or not object_ids:
-        return {"error": "Image name and object IDs are required."}, 400
-    img_original_path = build_img_temp_path(data.get('img_original_path'))
-    img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
-    json_file_path = build_json_temp_path(f"{img_name}.json")
-    if not os.path.exists(json_file_path):
-        return {"error": "JSON file not found"}, 404
-    result_data , json_path = load_analysis_json(img_name)
+    result_data, error, image, img_original_path, img_annotated_path = load_analysis_context(
+        img_name,
+        data.get("img_original_path", ""),
+        data.get("img_annotated_path", ""),
+        require_json=True
+    )
+    if error:
+        return {"error": error}, 404
+    result_data , json_file_path = load_analysis_json(img_name)
     objects = result_data.get("objects", [])
     # Convert object_ids to integers for comparison
     object_ids = [int(oid) for oid in object_ids if str(oid).isdigit()]
@@ -43,7 +44,6 @@ def merge_objects():
     if len(objects_to_merge) < 2:
         return {"error": "At least two valid objects are required for merging."}, 400
     model = ModelFactory.get_model("sam")
-    image = cv2.imread(img_original_path)
     merged_data = model.merge_objects(image , *objects_to_merge)
     if not merged_data:
         return {"error": "Object merging failed."}, 500 
@@ -58,39 +58,27 @@ def merge_objects():
             objects.remove(obj_to_delete)
             if normalize_path and os.path.exists(normalize_path):
                 os.remove(normalize_path)
-    #Suppression des anciens objets dans le JSON (later)
-    #Ajout du nouvel objet
-    new_id = int(get_next_id_available(objects))
+    new_object, new_id = add_new_detected_object(result_data=result_data, obj_img=obj_img, bbox=bbox, contour=contours , score=1.0)
     object_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
     _ , temp_object_name = save_temp_img(object_img_rgb, new_id)
-    path = build_img_temp_path(temp_object_name)
-    new_object = {
-        "class_id": 0,
-        "id": new_id,
-        "score": 1.0,
-        "bbox": bbox,
-        "contour": contours,
-        "obj_crop_path": temp_object_name,
-    }
-    embedding = model.generate_embedding(build_img_temp_path(temp_object_name)).tolist()
-    new_object["embedding"] = embedding
-    newObject = get_similar_objects([new_object])
-    new_object["similar_objects"] = newObject[0]["similar_objects"]
-    result_data["objects"].append(new_object)
-    result_data["num_objects"] = len(result_data["objects"])
     save_json(result_data, build_json_temp_path(), img_name)
-    #Réannotation de l'image
     image = draw_annotations(image, result_data["objects"])
     cv2.imwrite(img_annotated_path, image)
-    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_name) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"])) , "simObj": newObject[0]["similar_objects"]}, 200
+    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_name) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"])) , "simObj": new_object}, 200
 
 @object_bp.route('/remove_object', methods=['POST'])
 def remove_object():
     data = request.get_json()
     id = int(data.get('id'))
     img_name = data.get('img_name')
-    img_original_path = build_img_temp_path(data.get('img_original_path'))
-    img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
+    result_data, error, image, img_original_path, img_annotated_path = load_analysis_context(
+        img_name,
+        data.get("img_original_path", ""),
+        data.get("img_annotated_path", ""),
+        require_json=True
+    )
+    if error:
+        return {"error": error}, 404
     result_data , json_path = load_analysis_json(img_name)
     objects = result_data.get("objects", [])
     obj_to_delete = next((obj for obj in objects if obj.get("id") == id), None)
@@ -103,7 +91,6 @@ def remove_object():
         return {"error": "Object not found in JSON"}, 404
 
     save_json(result_data, build_json_temp_path(), img_name)
-    image = cv2.imread(img_original_path)
     image = draw_annotations(image, objects)
     if os.path.exists(img_annotated_path):
         os.remove(img_annotated_path)

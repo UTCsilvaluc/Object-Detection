@@ -1,6 +1,6 @@
 import cv2
 import numpy as np  
-from utils.helper import save_temp_img , build_img_temp_path
+from utils.helper import save_temp_img , build_img_temp_path , create_new_object
 from .object_embedding import generate_embedding_from_crop
 from .pretrained_models import SAMModel
 import numpy as np
@@ -73,25 +73,18 @@ def process_SAM(self,masks , img):
             """Automatic calcilation of bounding box"""
             x_min , x_max = xs.min() , xs.max()
             y_min , y_max = ys.min() , ys.max()
-            obj_crop = obj_img[y_min:y_max , x_min:x_max]
-        else:
-            obj_crop = obj_img
-        _ , obj_crop_path = save_temp_img(obj_crop, idx)
-        embedding_vector = self.generate_embedding(build_img_temp_path(obj_crop_path)).tolist()
         contours , _ = cv2.findContours(segment , cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             contour_points = [[int(x) , int(y)] for x , y in contours[0].squeeze().tolist()]
         else:
             contour_points = []
-        objects.append({
-            "class_id": int(idx),
-            "id": int(idx),
-            "score": float(mask.get("score", 1.0)),
-            "bbox": [float(x_min), float(y_min), float(x_max), float(y_max)],
-            "contour": contour_points,
-            "obj_crop_path": obj_crop_path,
-            "embedding": embedding_vector
-        })
+        objects.append(create_new_object(
+            obj_img=obj_img,
+            bbox=[float(x_min), float(y_min), float(x_max), float(y_max)],
+            contour=contour_points,
+            new_id=idx,
+            score=1.0
+        ))
 
     return {
         "num_objects": len(objects),

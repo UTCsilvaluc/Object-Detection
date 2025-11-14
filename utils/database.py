@@ -1,6 +1,7 @@
 import psycopg2
 from dotenv import load_dotenv
 import os
+from dateutil import parser
 
 load_dotenv()
 
@@ -1120,8 +1121,6 @@ def find_similar_objects(embedding: list, top_k: int = 5):
         return []
     finally:
         close_db_connection(conn)
-
-from dateutil import parser
 
 def normalize_value(value: str):
     if not value:

@@ -17,11 +17,11 @@ from utils.helper import (
     fileStorage_to_image,
     control_coordinate_format,
     get_similar_objects, 
-    load_analysis_json
+    load_analysis_json,
+    add_new_detected_object
 )
 
 from .main_routes import clear_temp
-from models.object_embedding import generate_embedding_from_crop
 from models.factory import ModelFactory
 from models.pretrained_models import (
     SAM_GLOBAL_INSTANCE,
@@ -34,24 +34,60 @@ from utils.database import (
     get_all_metadatas_values
 )
 
+def run_detection_pipeline(img_path, img_cv, force_sam=False, sam_params=None, tiled=False):
+    # YOLO → default
+    if not force_sam:
+        yolo = ModelFactory.get_model("yolo")
+        raw_results, _, img_result = yolo.run(img_path)
+        result_data = yolo.process_results(raw_results, img_cv, img_result)
+
+        if result_data["num_objects"] > 0:
+            return result_data, img_result, "YOLOv8"
+
+    # Fallback SAM
+    sam = ModelFactory.get_model("sam")
+    raw, _, img_result = sam.run(
+        img_path,
+        tiled=tiled,
+        defaultParameters=sam_params
+    )
+    result_data = sam.process_results(raw, img_cv)
+
+    return result_data, img_result, "SAM"
+
+
 analysis_bp = Blueprint("analysis", __name__)
 
+def load_analysis_context(img_name, original_path, annotated_path, require_json=True):
+    img_original = build_img_temp_path(original_path)
+    img_annotated = build_img_temp_path(annotated_path)
+
+    # Load JSON data
+    data, json_path = load_analysis_json(img_name, required=require_json)
+    if require_json and data is None:
+        return None, f"JSON file not found: {json_path}", None, None, None
+
+    # Load image
+    img = cv2.imread(img_original)
+    if img is None:
+        return None, f"Failed to read image at {img_original}", None, None, None
+
+    return data, None, img, img_original, img_annotated
 
 @analysis_bp.route('/analyse_point', methods=['POST'])
 def analyse_point():
     from models.pretrained_models import safe_predict_point
     data = request.get_json() or {}
     img_name = data.get("img_name", "")
-    img_annotated_path = build_img_temp_path(data.get("img_annotated_path", "")) #For annotated image path
-    img_original_path = build_img_temp_path(data.get("img_original_path", ""))
-    result_data , json_path = load_analysis_json(img_name)  # Ensure JSON exists
-    if result_data is None:
-        return {"error": f"JSON file not found: {json_path}"}, 404
-
+    result_data, error, img, _ , img_annotated_path = load_analysis_context(
+        img_name,
+        data.get("img_original_path", ""),
+        data.get("img_annotated_path", ""),
+        require_json=True
+    )
+    if error:
+        return {"error": error}, 404
     x, y = int(data.get("x", 0)), int(data.get("y", 0))
-    img = cv2.imread(img_original_path)
-    if img is None:
-        return {"error": "Failed to read image"}, 500
     masks , scores , logits = safe_predict_point(img, x, y)
     if masks is None or masks.shape[0] == 0:
         bbox = [x - 100, y - 100, x + 100, y + 100]
@@ -81,7 +117,6 @@ def analyse_point():
             bbox = [x - 100, y - 100, x + 100, y + 100]
             contour_points = []
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-
     try:
         result_data , json_path = load_analysis_json(img_name , required=False)
         if result_data is None:
@@ -91,34 +126,23 @@ def analyse_point():
     new_id = int(get_next_id_available(result_data["objects"]))
     obj_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
     _ , temp_object_name = save_temp_img(obj_img_rgb , new_id)
-    path = build_img_temp_path(temp_object_name)
-    new_object = {
-        "class_id": 0,
-        "id": new_id,
-        "score": float(scores[0]) if masks is not None and scores is not None else 1.0,
-        "bbox": bbox,
-        "contour": contour_points,
-        "obj_crop_path": path,
-    }
-    embedding = generate_embedding_from_crop(path)
-    new_object["embedding"] = embedding.tolist()
-    newObject = get_similar_objects([new_object] , top_k=5)
-    result_data["objects"].append(new_object)
-    result_data["num_objects"] = len(result_data["objects"])
-    result_data = result_data
+    new_object = add_new_detected_object(result_data=result_data, obj_img=obj_img, bbox=bbox, contour=contour_points , score=float(scores[0]) if masks is not None and scores is not None else 1.0)
     new_annotated_img = draw_annotations(img, result_data["objects"])
     cv2.imwrite(img_annotated_path, new_annotated_img)
     save_json(result_data, build_json_temp_path(), img_name)
-    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_name), "bbox": bbox , "tmpName": temp_object_name , "simObj": newObject[0]["similar_objects"]}, 200
-
+    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_name), "bbox": bbox , "tmpName": temp_object_name , "simObj": new_object}, 200
 @analysis_bp.route('/re_run_analysis', methods=['POST'])
 def re_run_analysis():
     img_name = request.form.get("img_name", "")
-    img_annotated_path = request.form.get("img_annotated_path", "")
-    img_original_path = request.form.get("img_original_path", "")
+    result_data, error, _, img_original_path, img_annotated_path = load_analysis_context(
+        img_name,
+        request.form.get("img_original_path", ""),
+        request.form.get("img_annotated_path", ""),
+        require_json=True
+    )
+    if error:
+        return {"error": error}, 404
     csrf_token = request.form.get("csrf_token", "")
-    img_original_path = build_img_temp_path(img_original_path)
-    img_annotated_path = build_img_temp_path(img_annotated_path)
     tile = request.form.get("tile-based-analysis", "off") == "on"
     if not os.path.exists(img_original_path):
         return {"error": "Image not found"}, 404
@@ -127,10 +151,12 @@ def re_run_analysis():
                   for k, v in DEFAULT_SAM_PARAMS.items()}
     #Sauvegarder une nouvelle image localement
     img_cv = cv2.imread(img_original_path)
-    model = ModelFactory.get_model("sam")
-    results , img_original , img_result  = model.run(img_original_path , tiled=tile , defaultParameters=sam_parameters)
-    img_rgb = cv2.cvtColor(img_original , cv2.COLOR_BGR2RGB)
-    result_data = model.process_results(results , img_rgb)
+    result_data, img_result, model_name = run_detection_pipeline(
+        img_original_path, img_cv,
+        force_sam=True,
+        sam_params=sam_parameters,
+        tiled=tile
+    )
     old_data , json_path = load_analysis_json(img_name , required=False)
     img_data = {}
     if os.path.exists(json_path):
@@ -196,19 +222,7 @@ def upload():
     if not success:
         return "Failed to save image", 500
 
-    # Chargement image + YOLO
-    model_name = "yolo"
-    model = ModelFactory.get_model(model_name)
-    raw_results , _ , img_result  = model.run(img_path)
-    result_data = model.process_results(raw_results , img_cv , img_result)
-
-    # Traitement des résultats YOLO
-    model = "YOLOv8"
-    if result_data["num_objects"] == 0:
-        model = ModelFactory.get_model("sam")
-        raw_results , _ , img_result  = model.run(img_path)
-        result_data = model.process_results(raw_results , img_cv)
-        model = "SAM"
+    result_data, img_result, model = run_detection_pipeline(img_path, img_cv)
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
     _ , original_rel_path = save_temp_img(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), "original")
 
