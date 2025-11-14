@@ -96,6 +96,13 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     shutil.move(temp_path, dest_path)
     return dest_path
 
+def load_analysis_json(img_name, required=True):
+    json_path = build_json_temp_path(f"{img_name}.json")
+    data = load_json(json_path)
+    if required and data is None:
+        raise FileNotFoundError(f"JSON file not found: {json_path}")
+    return data, json_path
+
 def load_json(json_path):
     """
     Load JSON data from a file.

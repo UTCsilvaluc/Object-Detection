@@ -5,7 +5,7 @@ import { getMarkerByLatLng } from './utils.js';
 window.expandedMarkers = [];
 window.hiddenClusters = [];
 window.isExpanding = false;
-export function enableClustering(map, clusters, markers, filteredImages) {
+export function enableClustering(map, clusters, markers, filteredImages, objectLinesLayer , linesLayer) {
     clusters.clearLayers();
     const zoomLevel = map.getZoom();
     const findCluster = clusterPoints(filteredImages, 0.5, zoomLevel);
@@ -20,8 +20,10 @@ export function enableClustering(map, clusters, markers, filteredImages) {
         clusterMarker.on('click', () => {
             if (window.isExpanding) return;
             if (cluster.length <= 1) return;
-            window.isExpanding = true;
+            window.ClusterExpandActive = true;
             expandCluster(cluster, map , center , markers);
+            hideObjectLinks(map , objectLinesLayer);
+            map.removeLayer(linesLayer);
         });
     });
 }

@@ -1,3 +1,5 @@
+# routes/analysis_routes.py
+
 from flask import Blueprint, request, jsonify, render_template, current_app , url_for
 import os
 import cv2
@@ -7,7 +9,6 @@ from segment_anything import SamAutomaticMaskGenerator
 from utils.helper import (
     build_img_temp_path,
     build_json_temp_path,
-    load_json,
     save_json,
     save_temp_img,
     draw_annotations,
@@ -15,7 +16,8 @@ from utils.helper import (
     get_form_metadata,
     fileStorage_to_image,
     control_coordinate_format,
-    get_similar_objects
+    get_similar_objects, 
+    load_analysis_json
 )
 
 from .main_routes import clear_temp
@@ -42,10 +44,7 @@ def analyse_point():
     img_name = data.get("img_name", "")
     img_annotated_path = build_img_temp_path(data.get("img_annotated_path", "")) #For annotated image path
     img_original_path = build_img_temp_path(data.get("img_original_path", ""))
-    json_path = build_json_temp_path(f"{img_name}.json")
-    if not os.path.exists(img_original_path):
-        return {"error": f"Image not found: {img_original_path}"}, 404
-    result_data = load_json(json_path)
+    result_data , json_path = load_analysis_json(img_name)  # Ensure JSON exists
     if result_data is None:
         return {"error": f"JSON file not found: {json_path}"}, 404
 
@@ -84,7 +83,7 @@ def analyse_point():
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
 
     try:
-        result_data = load_json(json_path)
+        result_data , json_path = load_analysis_json(img_name , required=False)
         if result_data is None:
             return {"error": f"JSON file not found: {json_path}"}, 404
     except Exception as e:
@@ -132,12 +131,11 @@ def re_run_analysis():
     results , img_original , img_result  = model.run(img_original_path , tiled=tile , defaultParameters=sam_parameters)
     img_rgb = cv2.cvtColor(img_original , cv2.COLOR_BGR2RGB)
     result_data = model.process_results(results , img_rgb)
-    read_json = build_json_temp_path(f"{img_name}.json")
+    old_data , json_path = load_analysis_json(img_name , required=False)
     img_data = {}
-    if os.path.exists(read_json):
-        old_data = load_json(read_json)
+    if os.path.exists(json_path):
         if old_data is None:
-            return {"error": f"JSON file not found: {read_json}"}, 404
+            return {"error": f"JSON file not found: {json_path}"}, 404
         for key in ["description", "date", "location", "latitude", "longitude", "source"]:
             if key in old_data:
                 img_data[key] = old_data[key]

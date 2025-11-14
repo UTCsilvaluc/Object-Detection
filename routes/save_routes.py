@@ -1,3 +1,5 @@
+# routes/save_routes.py
+
 from flask import Blueprint, request, redirect, url_for, current_app , render_template
 import os
 import json
@@ -9,8 +11,8 @@ from utils.helper import (
     handle_detected_objects,
     build_json,
     empty_to_none,
-    load_json,
-    build_json_temp_path
+    build_json_temp_path,
+    load_analysis_json
 )
 from utils.database import (
     insert_point,
@@ -32,7 +34,7 @@ def save_metadata():
     model = empty_to_none(request.form.get("model"))
     num_objects = int(request.form.get("num_objects", 0))
     max_objects_detected = int(request.form.get("max_object_detected", num_objects))
-    json_data = load_json(build_json_temp_path(f"{img_name}.json"))
+    json_data , json_path = load_analysis_json(img_name)
     image_id, version_number , img_path = handle_save_images(
         metadata,
         img_name,

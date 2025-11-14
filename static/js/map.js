@@ -17,7 +17,7 @@ const images = window.appConfig.images;
 const classes = window.appConfig.classes;
 const links = window.appConfig.links || [];
 const linkTypes = window.appConfig.link_types || [];
-const objectsData = window.appConfig.object_datas || {};
+let objectsData = window.appConfig.object_datas || {};
 let objectLinks = window.appConfig.objects_linked || [];
 const icons = window.appConfig.icons;
 const points = window.appConfig.points;
@@ -43,6 +43,7 @@ let tempMarker = null;
 window.filteredImages = filteredImages;
 window.checkClasses = checkClasses;
 window.enableLinkCreation = false;
+window.ClusterExpandActive = false;
 
 // Initialize the map after getting the user's location
 
@@ -77,7 +78,7 @@ function initMap(position) {
     addLinksToMap(linesLayer, map, links , markers , L , filteredImages);
     enableZoomClustering(map);
     updateLinkOnZoom(map);
-    enableClustering(map, clusters, markers, filteredImages);
+    enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     enableMapStorageListener(map);
     enablePointAdding(map);
     buildTimelineFromFilteredImages(filteredImages , URL_for_images);
@@ -167,8 +168,9 @@ function applyFilters() {
 }
 
 function refreshVisualization() {
+    if (window.ClusterExpandActive) return;
     if (document.getElementById('toggle-cluster').checked) {
-        enableClustering(map, clusters, markers, filteredImages);
+        enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     }
     if (document.getElementById('toggle-show-links').checked) {
         addLinksToMap(linesLayer, map, links , markers , L);
@@ -274,13 +276,15 @@ function addMetaData(id) {
 function enableZoomClustering(map) {
     map.on('zoomend', () => {
         if (!document.getElementById('toggle-cluster').checked) return;
+        if (window.ClusterExpandActive) return;
         clusters.clearLayers();
-        enableClustering(map, clusters, markers, filteredImages);
+        enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     });
 }
 
 function updateLinkOnZoom(map) {
     map.on('zoomend', () => {
+        if (window.ClusterExpandActive) return;
         if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
         if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
     });
@@ -302,6 +306,7 @@ function enableMapStorageListener(map) {
                 const dataReq = await apiPost('objects/link_between_objects', {});
                 if (dataReq.status === 'success') {
                     objectLinks = dataReq.links;
+                    objectsData = dataReq.object_datas;
                     if (document.getElementById('toggle-object-links').checked) {
                         showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
                     }
@@ -330,6 +335,7 @@ function enablePointAdding(map) {
             return;
         }   
         if (window.expandedMarkers.length > 0) {
+            window.ClusterExpandActive = false;
             disableClustering(map, clusters, markers, filteredImages);
             return;   
         }
@@ -400,7 +406,7 @@ function enablePointAdding(map) {
 }
 
 document.getElementById('toggle-cluster').addEventListener('change', (e) => {
-    if (e.target.checked) enableClustering(map, clusters, markers, filteredImages);
+    if (e.target.checked) enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     else {
         disableClustering(map, clusters, markers, filteredImages);
     }
@@ -616,7 +622,7 @@ document.getElementById('toggle-only-images-with-links').addEventListener('chang
             });
         });
         filteredImages = images.filter(img => keepImagesIDs.has(img.image_id));
-        enableClustering(map, clusters, markers, filteredImages);
+        enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     } else {
         filteredImages = images.filter(checkAllFilters);
     }

@@ -290,14 +290,13 @@
                                                                                     </li>
                                                                                 {% endfor %}
                                                                             </ul>
+                                                                            <button type="button" class="import-btn"
+                                                                                onclick="importMetadata(this , '{{ obj.id }}')">
+                                                                                Import metadata from this object
+                                                                            </button>
                                                                         </div>
                                                                     {% endfor %}
                                                                 </div>
-
-                                                                <button type="button" class="import-btn"
-                                                                    onclick="importMetadata(this , '{{ obj.id }}')">
-                                                                    Import metadata from this object
-                                                                </button>
 
                                                             {% else %}
                                                                 <p class="no-metadata">No metadata available for this object.</p>

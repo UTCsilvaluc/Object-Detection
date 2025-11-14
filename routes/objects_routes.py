@@ -1,3 +1,5 @@
+# routes/objects_routes.py
+
 from flask import Blueprint, request, jsonify , url_for
 import os
 import cv2
@@ -6,17 +8,16 @@ import numpy as np
 from utils.helper import (
     build_img_temp_path,
     build_json_temp_path,
-    load_json,
     save_json,
     save_temp_img,
     draw_annotations,
     get_next_id_available,
-    get_similar_objects
+    get_similar_objects,
+    load_analysis_json
 )
 
-from utils.database import (
-    get_link_between_objects
-)
+from utils.data_objects import build_object_links
+
 from models.factory import ModelFactory
 object_bp = Blueprint("objects", __name__)
 
@@ -32,9 +33,7 @@ def merge_objects():
     json_file_path = build_json_temp_path(f"{img_name}.json")
     if not os.path.exists(json_file_path):
         return {"error": "JSON file not found"}, 404
-    result_data = load_json(json_file_path)
-    if result_data is None:
-        return {"error": f"Failed to load JSON file: {json_file_path}"}, 404
+    result_data , json_path = load_analysis_json(img_name)
     objects = result_data.get("objects", [])
     # Convert object_ids to integers for comparison
     object_ids = [int(oid) for oid in object_ids if str(oid).isdigit()]
@@ -92,10 +91,7 @@ def remove_object():
     img_name = data.get('img_name')
     img_original_path = build_img_temp_path(data.get('img_original_path'))
     img_annotated_path = build_img_temp_path(data.get('img_annotated_path'))
-    json_file_path = build_json_temp_path(f"{img_name}.json")
-    result_data = load_json(json_file_path)
-    if result_data is None:
-        return {"error": f"Failed to load JSON file: {json_file_path}"}, 404
+    result_data , json_path = load_analysis_json(img_name)
     objects = result_data.get("objects", [])
     obj_to_delete = next((obj for obj in objects if obj.get("id") == id), None)
     if obj_to_delete:
@@ -116,18 +112,13 @@ def remove_object():
 
     return {"success": True, "num_objects": len(objects)}, 200
 
+
 @object_bp.route('/link_between_objects', methods=['POST'])
 def link_between_objects():
-    object_links = get_link_between_objects()
-    grouped = {}
-    if object_links is None:
-        return {"status": 'error' ,"success": False, "message": "Failed to retrieve links"}, 500
-    for object_link in object_links:
-        if object_link['object_id'] not in grouped:
-            grouped[object_link['object_id']] = []
-        grouped[object_link['object_id']].append({
-            'latitude': object_link['latitude'],
-            'longitude': object_link['longitude'],
-            'image_id': object_link['image_id']
-        })
-    return {"status": 'success' ,"success": True, "links": grouped}, 200
+    grouped, object_datas = build_object_links()
+    return {
+        "status": "success",
+        "success": True,
+        "links": grouped,
+        "object_datas": object_datas
+    }, 200

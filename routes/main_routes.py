@@ -1,7 +1,9 @@
+# routes/main_routes.py
+
 from flask import Blueprint, render_template, request, send_from_directory
 import os
 
-from utils.helper import build_json_temp_path, build_img_temp_path, load_json
+from utils.helper import build_json_temp_path, build_img_temp_path, load_analysis_json
 from utils.database import (
     get_all_images,
     get_image_by_id,
@@ -13,14 +15,15 @@ from utils.database import (
     get_all_metadata_keys,
     get_all_icons,
     get_all_points,
-    get_metadata_by_point_id,
-    get_link_between_objects,
     get_all_links,
-    get_all_link_types,
-    get_link_endpoints,
-    get_link_metadata,
-    get_link_geometry,
-    get_instance_object_by_object_id
+    get_all_link_types
+)
+
+from utils.data_objects import (
+    build_object_links,
+    enrich_points_with_metadata,
+    enrich_images_with_objects,
+    enrich_links
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -61,9 +64,7 @@ def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None
     json_dir = build_json_temp_path(f"{json_name}.json")
     img_original_path = data.get("img_original_path", "") if not img_original_path else img_original_path
     img_annotated_path = data.get("img_annotated_path", "") if not img_annotated_path else img_annotated_path
-    result_data = load_json(json_dir)
-    if result_data is None:
-        return {"error": f"Failed to load JSON file: {json_dir}"}, 404
+    result_data , json_path = load_analysis_json(json_name , required=False)
     for obj in result_data.get("objects", []):
         crop_path = obj.get("obj_crop_abs_path")
         if crop_path and os.path.exists(crop_path):
@@ -79,39 +80,25 @@ def temp_img(filename):
 
 @main_routes_bp.route('/map')
 def map_view():
-    images = get_all_images()
+    images = enrich_images_with_objects(get_all_images())
     classes = get_all_classes()
     metadata_keys = get_all_metadata_keys()
     icons = get_all_icons()
-    points = get_all_points()
-    grouped = {}
-    object_links = get_link_between_objects()
+    points = enrich_points_with_metadata(get_all_points())
+    links = enrich_links(get_all_links())
     link_types = get_all_link_types()
-    links = get_all_links()
-    object_datas = {}
-    for link in links:
-        link['endpoints'] = get_link_endpoints(link['link_id'])
-        link['metadata'] = get_link_metadata(link['link_id'])
-        link['geometry'] = get_link_geometry(link['link_id'])
-    for object_link in object_links:
-        if object_link['object_id'] not in grouped:
-            object_datas[object_link['object_id']] = get_instance_object_by_object_id(object_link['object_id'])
-            grouped[object_link['object_id']] = []
-        grouped[object_link['object_id']].append({
-            'latitude': object_link['latitude'],
-            'longitude': object_link['longitude'],
-            'image_id': object_link['image_id']
-        })
-    for point in points:
-        point['metadata'] = get_metadata_by_point_id(point['point_id'])
-    for image in images:
-        versionedImages = get_versions_by_image_id(image['image_id'])
-        objects = get_objects_by_image_version(image['image_id'] , versionedImages[0]['version_number']) if versionedImages else []
-        idx = 0
-        for obj in objects:
-            obj_metadata = get_metadata_by_object_id(image_id=image['image_id'], object_id=obj['object_id'])
-            objects[idx]['metadatas'] = obj_metadata
-            idx += 1
-        image['objects'] = objects
-    return render_template('map.html', images=images, classes=classes, metadata_keys=metadata_keys, icons=icons, 
-                           points=points, object_links=grouped , links=links, link_types=link_types, object_datas=object_datas)
+
+    object_links, object_datas = build_object_links()
+
+    return render_template(
+        'map.html',
+        images=images,
+        classes=classes,
+        metadata_keys=metadata_keys,
+        icons=icons,
+        points=points,
+        object_links=object_links,
+        links=links,
+        link_types=link_types,
+        object_datas=object_datas
+    )
