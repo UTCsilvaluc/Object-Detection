@@ -674,6 +674,284 @@ def get_all_images():
     finally:
         close_db_connection(conn)
 
+def get_all_full_images():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+            SELECT 
+                img.image_id, img.file_path, img.title, img.description, img.capture_date,
+                img.location_name, img.latitude, img.longitude, img.upload_date, img.source_type, img.type,
+                    -- objects regrouped per image
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'object_id', obj.object_id,
+                                'width', obj.width,
+                                'height', obj.height,
+                                'cropped_file_path', obj.cropped_file_path,
+                                'class', obj.class,
+                                'confidence', obj.confidence_score,
+                                'metadatas', obj.metadata_list
+                            )
+                        ) FILTER (WHERE obj.object_id IS NOT NULL),
+                        '[]'
+                    ) AS objects
+            FROM Image img
+
+            -- join version
+            LEFT JOIN LATERAL (
+                SELECT *
+                FROM VersionedImage v
+                WHERE v.image_id = img.image_id
+                ORDER BY v.version_number DESC
+                LIMIT 1
+            ) ver ON TRUE
+
+            -- join objects and their metadata
+            LEFT JOIN LATERAL (
+                SELECT 
+                    oi.object_id,
+                    oi.width,
+                    oi.height,
+                    oi.cropped_file_path,
+                    oi.class,
+                    oi.confidence_score,
+                    COALESCE(
+                        json_agg(
+                            json_build_object('key', md.key, 'value', md.value)
+                        ) FILTER (WHERE md.key IS NOT NULL),
+                        '[]'
+                    ) AS metadata_list
+                FROM ObjectInstance oi
+                LEFT JOIN Metadata md
+                    ON md.object_id = oi.object_id
+                    AND md.image_id = oi.image_id
+                    AND md.version_number = oi.version_number
+                WHERE oi.image_id = img.image_id
+                AND oi.version_number = ver.version_number
+                GROUP BY oi.object_id, oi.width, oi.height, oi.cropped_file_path, oi.class, oi.confidence_score
+            ) obj ON TRUE
+
+            GROUP BY img.image_id
+            ORDER BY img.image_id DESC;
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        full_images = []
+        for row in rows:
+            full_images.append({
+                "image_id": row[0],
+                "file_path": row[1],
+                "title": row[2],
+                "description": row[3],
+                "capture_date": row[4],
+                "location_name": row[5],
+                "latitude": row[6],
+                "longitude": row[7],
+                "upload_date": row[8],
+                "source_type": row[9],
+                "type": row[10],
+                "objects": row[11]
+            })
+        cur.close()
+        return full_images
+    except Exception as e:
+        print(f"Error fetching full images: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_full_points():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT P.point_id , P.name , P.description , P.location_name , P.latitude , P.longitude , 
+                    P.icon_key , P.color_hex , 
+                    I.svg_path ,
+                    COALESCE(
+                        json_agg(
+                            json_build_object('key', MDP.key, 'value', MDP.value)
+                        ) FILTER (WHERE MDP.key IS NOT NULL),
+                        '[]'
+                    ) AS metadata
+        FROM Point AS P
+        LEFT JOIN Icon AS I ON P.icon_key = I.key
+        LEFT JOIN MetaDataPoint AS MDP ON P.point_id = MDP.point_id
+        GROUP BY P.point_id , I.svg_path;
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        full_points = []
+        for row in rows:
+            full_points.append({
+                "point_id": row[0],
+                "name": row[1],
+                "description": row[2],
+                "location_name": row[3],
+                "latitude": row[4],
+                "longitude": row[5],
+                "icon_key": row[6],
+                "color_hex": row[7],
+                "icon_svg_path": row[8],
+                "metadata": row[9]
+            })
+        cur.close()
+        return full_points
+    except Exception as e:
+        print(f"Error fetching full points: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_full_links():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT L.link_id , L.title , L.description , L.link_type , L.created_at , LG.geojson , LG.source ,
+                endpoints.endpoints ,
+                metadata.metadata
+        FROM Link AS L
+        LEFT JOIN LinkGeometry LG ON LG.link_id = L.link_id
+        LEFT JOIN LATERAL (
+            SELECT json_agg(
+                json_build_object(
+                    'entity_type' , LEP.entity_type ,
+                    'image_id' , LEP.image_id ,
+                    'point_id' , LEP.point_id ,
+                    'role' , LEP.role ,
+                    'order_index' , LEP.order_index ,
+                    'latitude' , COALESCE(img.latitude , pt.latitude) ,
+                    'longitude' , COALESCE(img.longitude , pt.longitude)
+                ) ORDER BY LEP.order_index ASC 
+            ) AS endpoints
+            FROM LinkEndPoint AS LEP
+            LEFT JOIN Image AS img ON LEP.image_id = img.image_id
+            LEFT JOIN Point AS pt ON LEP.point_id = pt.point_id
+            WHERE LEP.link_id = L.link_id
+        ) endpoints ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT json_agg(
+                json_build_object(
+                    'key' , LM.key,
+                    'value' , LM.value 
+                )
+            ) AS metadata
+            FROM LinkMetaData LM
+            WHERE LM.link_id = L.link_id
+        ) metadata ON TRUE
+        ORDER BY L.link_id DESC;
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        full_links = []
+        for row in rows:
+            full_links.append({
+                "link_id": row[0],
+                "title": row[1],
+                "description": row[2],
+                "link_type": row[3],
+                "created_at": row[4],
+                "geojson": row[5],
+                "source": row[6],
+                "endpoints": row[7],
+                "metadata": row[8]
+            })
+        cur.close()
+        return full_links
+    except Exception as e:
+        print(f"Error fetching full links: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+"""
+SELECT object_id, name, embedding <-> %s::vector AS distance
+        FROM Object
+        WHERE embedding IS NOT NULL
+        ORDER BY distance ASC
+        LIMIT %s;
+SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
+        FROM ObjectInstance OBJ
+        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
+        WHERE OBJ.object_id = %s;
+        
+"""
+def get_all_full_instances_from_embedding(embedding: list , limit: int = 5 , min_distance: float = 0.0):
+    conn = get_db_connection()
+    if conn is None:    
+        return []
+    try:
+        cur  = conn.cursor()
+        query = """
+        WITH nearest AS (
+            SELECT object_id, name, embedding <-> %s::vector AS distance
+            FROM Object
+            WHERE embedding IS NOT NULL AND (embedding <-> %s::vector) >= %s
+            ORDER BY distance ASC
+            LIMIT %s
+        )
+        SELECT 
+            n.object_id,
+            n.name,
+            n.distance,
+            COALESCE(
+                json_agg(
+                    json_build_object(
+                        'image_id', oi.image_id,
+                        'version_number', oi.version_number,
+                        'coords_x', oi.coords_x,
+                        'coords_y', oi.coords_y,
+                        'width', oi.width,
+                        'height', oi.height,
+                        'confidence_score', oi.confidence_score,
+                        'cropped_file_path', oi.cropped_file_path,
+                        'class', oi.class,
+                        'metadata', meta.metadata
+                    )
+                ) FILTER (WHERE oi.image_id IS NOT NULL),
+                '[]'
+            ) AS instances
+        FROM nearest n
+        LEFT JOIN ObjectInstance oi ON oi.object_id = n.object_id
+        LEFT JOIN LATERAL (
+            SELECT json_agg(
+                json_build_object('key', md.key, 'value', md.value)
+            ) AS metadata
+            FROM Metadata md
+            WHERE md.object_id = oi.object_id
+            AND md.image_id  = oi.image_id
+            AND md.version_number = oi.version_number
+        ) meta ON TRUE
+        GROUP BY n.object_id, n.name, n.distance
+        ORDER BY n.distance ASC;
+        """
+        cur.execute(query, (embedding, limit))
+        rows = cur.fetchall()
+        results = []
+        for row in rows:
+            results.append({
+                "object_id": row[0],
+                "name": row[1],
+                "distance": row[2],
+                "instances": row[3]
+            })
+        cur.close()
+        return results
+    except Exception as e:
+        print(f"Error fetching instances from embedding: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
 def get_all_classes():
     """
     Get all class names from the Class table.
@@ -841,28 +1119,30 @@ def get_metadata_by_point_id(point_id: int):
     finally:
         close_db_connection(conn)
 
-def get_instance_object_by_object_id(object_id: int):
-    """
-    Get all object instances for a specific object ID.
-    :param object_id: int ; must be a valid object_id in the ObjectInstance table
-    :return: list of dicts or empty list
-    """
+def get_all_full_objects_instances():
     conn = get_db_connection()
     if conn is None:
         return []
     try:
         cur = conn.cursor()
         query = """
-        SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
-        FROM ObjectInstance OBJ
-        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
-        WHERE OBJ.object_id = %s;
-        """
-        cur.execute(query, (object_id,))
+            SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, 
+                    OBJ.cropped_file_path, OBJ.class , 
+                    COALESCE(
+                        json_agg(
+                            json_build_object('key', MD.key, 'value', MD.value)
+                        ) FILTER (WHERE MD.key IS NOT NULL),
+                        '[]'
+                    ) AS metadata
+            FROM ObjectInstance OBJ
+            LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
+            GROUP BY OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class;
+            """
+        cur.execute(query)
         rows = cur.fetchall()
-        instances = []
+        full_objects_instances = []
         for row in rows:
-            instances.append({
+            full_objects_instances.append({
                 "image_id": row[0],
                 "version_number": row[1],
                 "coords_x": row[2],
@@ -872,59 +1152,16 @@ def get_instance_object_by_object_id(object_id: int):
                 "confidence_score": row[6],
                 "cropped_file_path": row[7],
                 "class": row[8],
-                "metadata_key": row[9],
-                "metadata_value": row[10],
+                "metadata": row[9]
             })
         cur.close()
-        return instances
+        return full_objects_instances
     except Exception as e:
-        print(f"Error fetching object instances by object ID: {e}")
+        print(f"Error fetching full object instances: {e}")
         return []
     finally:
         close_db_connection(conn)
-
-def get_link_between_objects():
-    """
-    Allows to find images where the same object appears multiple times.
-    :return: list of dicts or empty list
-    """
-    conn = get_db_connection()
-    if conn is None:
-        return []
-    try:
-        cur = conn.cursor()
-        query = """
-        SELECT I.image_id , I.latitude , I.longitude  , OBI.object_id 
-        FROM Image AS I
-        JOIN ObjectInstance AS OBI ON I.image_id = OBI.image_id
-        WHERE (
-            OBI.object_id IN (
-                SELECT OBJ.object_id 
-                FROM Object AS OBJ
-                JOIN ObjectInstance AS OBI ON OBJ.object_id = OBI.object_id
-                GROUP BY OBJ.object_id
-                HAVING COUNT(DISTINCT OBI.image_id) > 1
-            )
-        );
-        """
-        cur.execute(query)
-        rows = cur.fetchall()
-        links = []
-        for row in rows:
-            links.append({
-                "image_id": row[0],
-                "latitude": row[1],
-                "longitude": row[2],
-                "object_id": row[3]
-            })
-        cur.close()
-        return links
-    except Exception as e:
-        print(f"Error fetching link between objects: {e}")
-        return []
-    finally:
-        close_db_connection(conn)
-
+    
 def get_all_link_types():
     conn = get_db_connection()
     if conn is None:
@@ -1087,7 +1324,49 @@ def get_all_metadatas_values():
         return []
     finally:        
         close_db_connection(conn)
-        
+
+def get_instance_object_by_object_id(object_id: int):
+    """
+    Get all object instances for a specific object ID.
+    :param object_id: int ; must be a valid object_id in the ObjectInstance table
+    :return: list of dicts or empty list
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
+        FROM ObjectInstance OBJ
+        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
+        WHERE OBJ.object_id = %s;
+        """
+        cur.execute(query, (object_id,))
+        rows = cur.fetchall()
+        instances = []
+        for row in rows:
+            instances.append({
+                "image_id": row[0],
+                "version_number": row[1],
+                "coords_x": row[2],
+                "coords_y": row[3],
+                "width": row[4],
+                "height": row[5],
+                "confidence_score": row[6],
+                "cropped_file_path": row[7],
+                "class": row[8],
+                "metadata_key": row[9],
+                "metadata_value": row[10],
+            })
+        cur.close()
+        return instances
+    except Exception as e:
+        print(f"Error fetching object instances by object ID: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
 def find_similar_objects(embedding: list, top_k: int = 5):
     """
     Find similar objects based on the provided embedding using cosine similarity.
@@ -1208,7 +1487,6 @@ def find_shared_objects_between_images():
         return []
     finally:
         close_db_connection(conn)
-
 
 def find_similar_objects_by_value(value: str):
     conn = get_db_connection()

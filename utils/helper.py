@@ -7,12 +7,12 @@ import json
 from utils.database import *
 from ultralytics.utils.plotting import colors
 import io
-from PIL import Image , ExifTags, ImageOps
+from PIL import Image , ImageOps
 import regex
 import numpy as np
 
 from models.object_embedding import generate_embedding_from_crop
-
+from utils.database import get_instance_object_by_object_id , find_similar_objects
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
 
@@ -442,12 +442,7 @@ def fileStorage_to_image(file_storage):
     return img
 
 def get_similar_objects(objects, top_k=5):
-    """
-    :param objects: List of objects with embeddings. From JSON . Format : [{"object_id": int , "embedding": [float, float, ...]}]
-    :param top_k: Maximum number of similar objects to retrieve for each object.
-    :return: Updates the objects list by adding a 'similar_objects' key to each object, containing a list of similar objects with their distances.
-    The list is sorted by distance in ascending order. The first obj similar object is the most similar one : obj["similar_objects"][0]
-    """
+
     similarity_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
 
     for idx, obj in enumerate(objects):
@@ -496,7 +491,6 @@ def get_similar_objects(objects, top_k=5):
                 break
 
         objects[idx]['similar_objects'] = similar_object_details
-
     return objects
 
 def get_similar_objects_by_metadatas(similar_objects: list):
@@ -559,7 +553,7 @@ def create_new_object(obj_img, bbox, contour, new_id, score=1.0):
 
     similar = get_similar_objects([new_obj], top_k=5)
     new_obj["similar_objects"] = similar[0]["similar_objects"]
-
+    print("similars : ", new_obj["similar_objects"])
     return new_obj
 
 def load_analysis_context(img_name, original_path, annotated_path, require_json=True):

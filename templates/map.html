@@ -10,7 +10,7 @@
 </head>
 <body> 
     <div class="map-controller">
-        <div id="map" style="width: 100%; height: 600px;">
+        <div id="map">
             <div id="sidebar" class="filter visible">
                 <h2>Filter Images</h2>
                 <form id="filter-form">
@@ -138,10 +138,6 @@
                 <span>Show Timeline</span>
             </label>
             <label>
-                <input type="checkbox" id="toggle-object-links">
-                <span>Show Object Links</span>
-            </label>
-            <label>
                 <input type="checkbox" id="toggle-shared-objects">
                 <span>Show Shared Objects Between Images (Links)</span>
             </label>
@@ -173,16 +169,10 @@
     </div>
     <script>
         window.appConfig = {
-            images: {{ images|tojson }},
             classes: {{ classes|tojson }},
-            objects_linked: {{ object_links|tojson }},
             links: {{ links|tojson }},
             link_types: {{ link_types|tojson }},
             metadata_keys: {{ metadata_keys|tojson }},
-            icons: {{ icons|tojson }},
-            points : {{ points|tojson }},
-            object_datas : {{ object_datas|tojson }},
-            shared_objects : {{ shared_objects|tojson }},
             URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
             URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
             crossIcon: "{{ url_for('static', filename='img/svg/cross.png') }}",

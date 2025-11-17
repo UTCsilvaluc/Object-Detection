@@ -1,12 +1,11 @@
 # routes/objects_routes.py
 
-from flask import Blueprint, request, jsonify , url_for
+from flask import Blueprint, request , url_for
 import os
 import cv2
 import numpy as np
 
 from utils.helper import (
-    build_img_temp_path,
     build_json_temp_path,
     save_json,
     save_temp_img,
@@ -102,11 +101,10 @@ def remove_object():
 
 @object_bp.route('/link_between_objects', methods=['POST'])
 def link_between_objects():
-    grouped, object_datas , shared_objects = build_object_links()
+    object_datas , shared_objects = build_object_links()
     return {
         "status": "success",
         "success": True,
-        "links": grouped,
         "object_datas": object_datas,
         "shared_objects": shared_objects
     }, 200

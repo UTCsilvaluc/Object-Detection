@@ -139,7 +139,7 @@
         </div>
         <div class="similar-container">
             <button disabled type="button" onclick="researchSimilar(this)">Research Similar Objects</button>
-            <div id="research-similar" class="research-similar">
+            <div class="research-similar">
                 <h4 style="text-align: center;">Search similar objects by metadata</h4>
                 <div class="search-metadata-container">
                     <div class="search-row" style="display: flex; flex-direction: column; gap: 5px;">
@@ -218,7 +218,7 @@
                                     </div>
                                     <div class="similar-container">
                                         <button type="button" onclick="researchSimilar(this)">Research Similar Objects</button>
-                                        <div id="research-similar" class="research-similar">
+                                        <div class="research-similar">
                                             <h4 style="text-align: center;">Search similar objects by metadata</h4>
                                             <div class="search-metadata-container">
                                                 <div class="search-row" style="display: flex; flex-direction: column; gap: 5px;">
@@ -245,8 +245,8 @@
 
                                             <div class="search-results"></div>
                                         </div>
-                                        <button type="button" onclick="showSimilar(this)">Show similar objects</button>
                                         {% if obj.similar_objects and obj.similar_objects|length > 0 %}
+                                        <button type="button" onclick="showSimilar(this)">Show similar objects</button>
                                         <div class="similar-objects" style="display: none;">
                                             {% for sim_obj in obj.similar_objects %}
                                                 <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">

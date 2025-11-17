@@ -20,7 +20,6 @@ DROP TABLE IF EXISTS LinkMetadata CASCADE;
 DROP TABLE IF EXISTS Link CASCADE;
 DROP TABLE IF EXISTS LinkType CASCADE;
 
-
 -- ==============================================
 -- 2. Enum Types
 -- ==============================================

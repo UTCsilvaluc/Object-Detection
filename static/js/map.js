@@ -1,7 +1,7 @@
 // static/js/map.js
 
 // Imports 
-import { enableClustering , showObjectLinks , hideObjectLinks , disableClustering} from './data_visualization.js';
+import { enableClustering , disableClustering} from './data_visualization.js';
 import { setTrashIcon , getMetadataFromFields , controlInputValues , getGeoJSONFileInput , showGeoStatus} from './utils.js';
 import {addMetadataField , setCrossIcon} from './metadata.js';
 import { apiPost , uploadAIImage , saveData} from './api.js';
@@ -13,15 +13,14 @@ const $ = window.jQuery;
 const URL_for_images = window.appConfig.URL_for_images;
 const URL_for_view_image = window.appConfig.URL_for_view_image;
 const URL_for_icons = window.appConfig.icons_path;
-const images = window.appConfig.images;
+const images = [];
 const classes = window.appConfig.classes;
 const links = window.appConfig.links || [];
 const linkTypes = window.appConfig.link_types || [];
-let objectsData = window.appConfig.object_datas || {};
-let objectLinks = window.appConfig.objects_linked || [];
-let sharedObjects = window.appConfig.shared_objects || [];
-const icons = window.appConfig.icons;
-const points = window.appConfig.points;
+let objectsData = {};
+let sharedObjects = [];
+const icons = [];
+const points = [];
 const crossIcon = window.appConfig.crossIcon;
 const trashIcon = window.appConfig.trashIcon;
 
@@ -37,7 +36,7 @@ let objectLinesLayer = L.layerGroup();
 let sharedObjectsLayer = L.layerGroup();
 window.circle = L.layerGroup();
 let checkClasses = [...classes];
-let filteredImages = [...images];
+let filteredImages = [];
 let metadata_keys = window.appConfig.metadata_keys || [];
 let metadata_keys_available = metadata_keys.slice();
 let tempMarker = null;
@@ -47,24 +46,46 @@ window.checkClasses = checkClasses;
 window.enableLinkCreation = false;
 window.ClusterExpandActive = false;
 
-// Initialize the map after getting the user's location
+window.addEventListener("DOMContentLoaded", () => {
+    navigator.geolocation.getCurrentPosition(initMap, handleLocationError);
+    loadMapData();
+});
 
-navigator.geolocation.getCurrentPosition(initMap , handleLocationError);
+async function loadMapData() {
+    const datas = await apiPost('/api/map-data', {});
+
+    if (!datas || !datas.status) {
+        alert("Failed to load map data");
+        return;
+    }
+
+    images.push(...datas.images);
+    filteredImages = [...images];
+
+    icons.push(...datas.icons);
+    points.push(...datas.points);
+
+    objectsData = datas.object_datas || {};
+    sharedObjects = datas.shared_objects || {};
+
+    addPoints(pointsLayer, points);
+    applyFilters();
+    buildTimelineFromFilteredImages(filteredImages, URL_for_images);
+    enableMapStorageListener(map);
+
+    addLinksToMap(linesLayer, map, links, markers, L, filteredImages);
+}
 
 function initMap(position) {
-    var userLat = position.coords.latitude || 34.33; 
-    var userLon = position.coords.longitude || 134.05; 
+    const userLat = position.coords.latitude || 34.33; 
+    const userLon = position.coords.longitude || 134.05; 
 
     map = L.map('map', { dragging: true }).setView([userLat, userLon], 13);
 
-    // Set up the OpenStreetMap layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; OSM'
     }).addTo(map);
 
-    handleActionPropagation(L);
-
-    // Add a marker at the user's location
     L.marker([userLat, userLon])
         .addTo(map)
         .bindPopup('You are here!')
@@ -74,17 +95,12 @@ function initMap(position) {
     clusters.addTo(map);
     pointsLayer.addTo(map);
 
-    // Add points to the map based on filtered images
-    applyFilters();
-    addPoints(pointsLayer, points);
-    addLinksToMap(linesLayer, map, links , markers , L , filteredImages);
     enableZoomClustering(map);
     updateLinkOnZoom(map);
-    enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
-    enableMapStorageListener(map);
     enablePointAdding(map);
-    buildTimelineFromFilteredImages(filteredImages , URL_for_images);
+    handleActionPropagation(L);
 }
+
 
 function handleLocationError(error) {
     console.warn(`ERROR(${error.code}): ${error.message}`);
@@ -177,9 +193,6 @@ function refreshVisualization() {
     if (document.getElementById('toggle-show-links').checked) {
         addLinksToMap(linesLayer, map, links , markers , L);
     }
-    if (document.getElementById('toggle-object-links').checked) {
-        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
-    }
 }
 window.applyFilters = applyFilters;
 function clearFilters() {
@@ -237,7 +250,6 @@ window.filterByMetadata = filterByMetadata;
 function refreshFilteredImages() {
     filteredImages = images.filter(checkAllFilters);
     applyFilters();
-    // Update all global links and object links based on filtered images (Next step implementation)
 }
 window.refreshFilteredImages = refreshFilteredImages;
 
@@ -288,7 +300,6 @@ function updateLinkOnZoom(map) {
     map.on('zoomend', () => {
         if (window.ClusterExpandActive) return;
         if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
-        if (document.getElementById('toggle-object-links').checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
         if (document.getElementById('toggle-shared-objects').checked) addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
     });
 }
@@ -308,12 +319,8 @@ function enableMapStorageListener(map) {
                 alert("AI Image uploaded and added to the map successfully.");
                 const dataReq = await apiPost('objects/link_between_objects', {});
                 if (dataReq.status === 'success') {
-                    objectLinks = dataReq.links;
                     objectsData = dataReq.object_datas;
                     sharedObjects = dataReq.shared_objects;
-                    if (document.getElementById('toggle-object-links').checked) {
-                        showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
-                    }
                     if (document.getElementById('toggle-shared-objects').checked) {
                         addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
                     }
@@ -428,11 +435,6 @@ document.getElementById('toggle-timeline').addEventListener('change', (e) => {
     }
 });
 
-document.getElementById('toggle-object-links').addEventListener('change', (e) => {
-    if (e.target.checked) showObjectLinks(markers, L, objectLinks, map, objectLinesLayer , objectsData);
-    else hideObjectLinks(map , objectLinesLayer);
-});
-
 document.getElementById('import-geojson').addEventListener('click', () => {
     alert("Feature to import GeoJSON coming soon!");
 });
@@ -485,7 +487,6 @@ document.getElementById('toggle-add-links').addEventListener('change', (e) => {
         document.getElementById('toggle-filters').checked = false;
         document.querySelector('.filter').classList.remove('visible');
         document.getElementById('link-panel').classList.toggle('hidden');
-        //alert("Link creation enabled. Click on two points or more to create a link between them.");
     } else {
         clearLinkCreationForm(markers , pointsLayer);
     }
@@ -621,12 +622,9 @@ document.getElementById('toggle-only-images-with-links').addEventListener('chang
                 }
             });
         });
-        Object.values(objectLinks).forEach(arrayOfLinks => {
-            arrayOfLinks.forEach(link => {
-                if (link.image_id && !(keepImagesIDs.has(link.image_id))) {
-                    keepImagesIDs.add(link.image_id);
-                }
-            });
+        Object.values(sharedObjects).forEach(arrayOfLinks => {
+            keepImagesIDs.add(arrayOfLinks.image1);
+            keepImagesIDs.add(arrayOfLinks.image2);
         });
         filteredImages = images.filter(img => keepImagesIDs.has(img.image_id));
         enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);

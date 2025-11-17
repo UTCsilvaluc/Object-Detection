@@ -1,9 +1,8 @@
 // data_visualization.js
 
 import { clusterPoints, centerCluster , getMaxPixelRadius , destinationPoint , metersFromPixels} from './math.js';
-import { getCenterMarker } from './math.js';
-import { createPopupHTML , createPopUpForObjectLinks} from './popup.js';
-import { getMarkerByLatLng } from './utils.js';
+import { createPopupHTML } from './popup.js';
+
 window.expandedMarkers = [];
 window.hiddenClusters = [];
 window.isExpanding = false;
@@ -24,7 +23,6 @@ export function enableClustering(map, clusters, markers, filteredImages, objectL
             if (cluster.length <= 1) return;
             window.ClusterExpandActive = true;
             expandCluster(cluster, map , center , markers);
-            hideObjectLinks(map , objectLinesLayer);
             map.removeLayer(linesLayer);
         });
     });
@@ -106,34 +104,6 @@ function expandCluster(cluster, map, center, markers) {
         });
     });
     window.isExpanding = false;
-}
-
-export function showObjectLinks(markers , L , objectLinks , map , objectLinesLayer , objectsData) {
-    objectLinesLayer.clearLayers();
-    Object.entries(objectLinks).forEach(([key, value]) => {
-        const latlngs = [];
-        const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-        value.forEach(point => {
-            if (point.latitude && point.longitude) {
-                const marker = getMarkerByLatLng(markers , point.latitude , point.longitude);
-                if (!marker) return;
-                const center = getCenterMarker(marker , map , L);
-                latlngs.push([center.centerLatLng.lat, center.centerLatLng.lng]);
-            }
-        });
-        const popupContent = createPopUpForObjectLinks(objectsData[key] , window.appConfig.URL_for_images);
-        var polyline = L.polyline(latlngs, {color: randomColor}).addTo(objectLinesLayer);
-        polyline.bindPopup(popupContent);
-        polyline.on('click', function(e) { 
-            this.openPopup();
-        });
-    });
-    map.addLayer(objectLinesLayer);
-}
-
-export function hideObjectLinks(map , objectLinesLayer) {
-    objectLinesLayer.clearLayers();
-    map.removeLayer(objectLinesLayer);
 }
 
 export function disableClustering(map, clusters, markers, filteredImages) {

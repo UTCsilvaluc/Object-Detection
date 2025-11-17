@@ -1,6 +1,6 @@
 # routes/main_routes.py
 
-from flask import Blueprint, render_template, request, send_from_directory
+from flask import Blueprint, render_template, request, send_from_directory , jsonify
 import os
 
 from utils.helper import build_json_temp_path, build_img_temp_path, load_analysis_json
@@ -14,16 +14,14 @@ from utils.database import (
     get_all_classes,
     get_all_metadata_keys,
     get_all_icons,
-    get_all_points,
-    get_all_links,
-    get_all_link_types
+    get_all_link_types,
+    get_all_full_images,
+    get_all_full_points,
+    get_all_full_links  
 )
 
 from utils.data_objects import (
-    build_object_links,
-    enrich_points_with_metadata,
-    enrich_images_with_objects,
-    enrich_links
+    build_object_links
 )
 
 main_routes_bp = Blueprint("main_routes", __name__)
@@ -80,26 +78,26 @@ def temp_img(filename):
 
 @main_routes_bp.route('/map')
 def map_view():
-    images = enrich_images_with_objects(get_all_images())
-    classes = get_all_classes()
-    metadata_keys = get_all_metadata_keys()
-    icons = get_all_icons()
-    points = enrich_points_with_metadata(get_all_points())
-    links = enrich_links(get_all_links())
-    link_types = get_all_link_types()
-
-    object_links, object_datas , shared_objects = build_object_links()
-
+    classes = get_all_classes() 
+    metadata_keys = get_all_metadata_keys() 
+    link_types = get_all_link_types() 
     return render_template(
         'map.html',
-        images=images,
         classes=classes,
         metadata_keys=metadata_keys,
-        icons=icons,
-        points=points,
-        object_links=object_links,
-        links=links,
-        link_types=link_types,
-        object_datas=object_datas,
-        shared_objects=shared_objects
+        links=get_all_full_links(),
+        link_types=link_types
     )
+
+@main_routes_bp.route("/api/map-data" , methods=["POST"])
+def map_data():
+    object_datas , shared_objects = build_object_links()
+    return jsonify({
+        "status": True,
+        "success": True,
+        "images": get_all_full_images(),
+        "icons": get_all_icons(),
+        "points": get_all_full_points(),
+        "shared_objects": shared_objects,
+        "object_datas": object_datas
+    })

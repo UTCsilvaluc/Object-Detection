@@ -4,7 +4,6 @@ from flask import Blueprint, request, jsonify, render_template, current_app , ur
 import os
 import cv2
 import numpy as np
-from segment_anything import SamAutomaticMaskGenerator
 
 from utils.helper import (
     build_img_temp_path,
@@ -235,6 +234,7 @@ def upload():
     # Getting similar objects of detected objects :
     objects = result_data.get("objects", [])
     get_similar_objects(objects , top_k=5)
+    print("Objects with similars : ", objects)
     JSON_data = {
         "image_name": img_name,
         "description": metadata.get("desc"),
