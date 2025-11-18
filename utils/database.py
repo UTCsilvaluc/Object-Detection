@@ -873,18 +873,6 @@ def get_all_full_links():
     finally:
         close_db_connection(conn)
 
-"""
-SELECT object_id, name, embedding <-> %s::vector AS distance
-        FROM Object
-        WHERE embedding IS NOT NULL
-        ORDER BY distance ASC
-        LIMIT %s;
-SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class, MD.key, MD.value
-        FROM ObjectInstance OBJ
-        LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
-        WHERE OBJ.object_id = %s;
-        
-"""
 def get_all_full_instances_from_embedding(embedding: list , limit: int = 5 , min_distance: float = 0.0):
     conn = get_db_connection()
     if conn is None:    
@@ -901,48 +889,46 @@ def get_all_full_instances_from_embedding(embedding: list , limit: int = 5 , min
         )
         SELECT 
             n.object_id,
-            n.name,
             n.distance,
+            oi.class,
+            oi.cropped_file_path,
             COALESCE(
                 json_agg(
                     json_build_object(
-                        'image_id', oi.image_id,
-                        'version_number', oi.version_number,
-                        'coords_x', oi.coords_x,
-                        'coords_y', oi.coords_y,
-                        'width', oi.width,
-                        'height', oi.height,
-                        'confidence_score', oi.confidence_score,
-                        'cropped_file_path', oi.cropped_file_path,
-                        'class', oi.class,
-                        'metadata', meta.metadata
+                        'key', meta.key,
+                        'value', meta.value,
+                        'obj_imagge_id', meta.image_id,
+                        'obj_version_number', meta.version_number
                     )
-                ) FILTER (WHERE oi.image_id IS NOT NULL),
+                ) FILTER (WHERE meta.key IS NOT NULL),
                 '[]'
-            ) AS instances
-        FROM nearest n
-        LEFT JOIN ObjectInstance oi ON oi.object_id = n.object_id
-        LEFT JOIN LATERAL (
-            SELECT json_agg(
-                json_build_object('key', md.key, 'value', md.value)
             ) AS metadata
+        FROM nearest n
+        LEFT JOIN LATERAL (
+            SELECT * 
+            FROM ObjectInstance oi
+            WHERE oi.object_id = n.object_id
+            ORDER BY oi.version_number DESC
+            LIMIT 1
+        ) AS oi ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT md.key, md.value, md.image_id, md.version_number
             FROM Metadata md
-            WHERE md.object_id = oi.object_id
-            AND md.image_id  = oi.image_id
-            AND md.version_number = oi.version_number
-        ) meta ON TRUE
-        GROUP BY n.object_id, n.name, n.distance
+            WHERE md.object_id = n.object_id
+        ) AS meta ON TRUE
+        GROUP BY n.object_id, n.distance , oi.class , oi.cropped_file_path
         ORDER BY n.distance ASC;
         """
-        cur.execute(query, (embedding, limit))
+        cur.execute(query, (embedding, embedding, min_distance, limit))
         rows = cur.fetchall()
         results = []
         for row in rows:
             results.append({
                 "object_id": row[0],
-                "name": row[1],
-                "distance": row[2],
-                "instances": row[3]
+                "distance": row[1],
+                "class": row[2],
+                "cropped_file_path": row[3],
+                "metadata": row[4]
             })
         cur.close()
         return results

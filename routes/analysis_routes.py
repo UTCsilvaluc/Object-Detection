@@ -234,7 +234,6 @@ def upload():
     # Getting similar objects of detected objects :
     objects = result_data.get("objects", [])
     get_similar_objects(objects , top_k=5)
-    print("Objects with similars : ", objects)
     JSON_data = {
         "image_name": img_name,
         "description": metadata.get("desc"),

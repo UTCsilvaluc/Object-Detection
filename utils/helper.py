@@ -442,55 +442,12 @@ def fileStorage_to_image(file_storage):
     return img
 
 def get_similar_objects(objects, top_k=5):
-
-    similarity_thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
-
+    import time 
+    start = time.perf_counter()
     for idx, obj in enumerate(objects):
-        similar_object_details = []
-        similar_objects = find_similar_objects(obj["embedding"], top_k)
-        if not similar_objects:
-            objects[idx]['similar_objects'] = []
-            continue
-
-        for threshold in similarity_thresholds:
-            found = False
-
-            for sim_obj in similar_objects:
-                if sim_obj["distance"] >= threshold:
-                    continue  
-                instance = get_instance_object_by_object_id(sim_obj['object_id'])
-                data_sim_obj = {
-                    "object_id": sim_obj['object_id'],
-                    "distance": sim_obj['distance'],
-                    "class": None,
-                    "cropped_file_path": None,
-                    "metadata": []
-                }
-
-                # --- Cas 1 : get_instance return a dict ---
-                if isinstance(instance, dict):
-                    data_sim_obj["class"] = instance.get("class")
-                    data_sim_obj["cropped_file_path"] = instance.get("cropped_file_path")
-                    if "metadata" in instance:
-                        data_sim_obj["metadata"] = instance["metadata"]
-
-                # --- Cas 2 : get_instance return a list of items ---
-                elif isinstance(instance, list):
-                    for item in instance:
-                        if "class" in item:
-                            data_sim_obj["class"] = item["class"]
-                        if "cropped_file_path" in item:
-                            data_sim_obj["cropped_file_path"] = item["cropped_file_path"]
-                        if "metadata_key" in item and "metadata_value" in item and item["metadata_key"] and item["metadata_value"]:
-                            data_sim_obj["metadata"].append({ "key": item["metadata_key"], "value": item["metadata_value"] , "obj_image_id": item.get("image_id" , None) , "obj_version_number": item.get("version_number" , None)})
-                if data_sim_obj["class"] and data_sim_obj["cropped_file_path"]:
-                    similar_object_details.append(data_sim_obj)
-                    found = True
-
-            if found:
-                break
-
-        objects[idx]['similar_objects'] = similar_object_details
+        objects[idx]['similar_objects'] = get_all_full_instances_from_embedding(obj["embedding"] , limit=top_k)
+    end = time.perf_counter()
+    print(f"Time to get similar objects: {end - start} seconds")
     return objects
 
 def get_similar_objects_by_metadatas(similar_objects: list):
