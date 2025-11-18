@@ -1112,7 +1112,8 @@ def get_all_full_objects_instances():
     try:
         cur = conn.cursor()
         query = """
-            SELECT OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, 
+            SELECT OBJ.object_id, OBJ.version_number, OBJ.image_id,
+                    OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score,
                     OBJ.cropped_file_path, OBJ.class , 
                     COALESCE(
                         json_agg(
@@ -1122,24 +1123,27 @@ def get_all_full_objects_instances():
                     ) AS metadata
             FROM ObjectInstance OBJ
             LEFT JOIN Metadata MD ON OBJ.object_id = MD.object_id and OBJ.version_number = MD.version_number AND OBJ.image_id = MD.image_id
-            GROUP BY OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class;
+            GROUP BY OBJ.object_id, OBJ.image_id, OBJ.version_number, OBJ.coords_x, OBJ.coords_y, OBJ.width, OBJ.height, OBJ.confidence_score, OBJ.cropped_file_path, OBJ.class;
             """
         cur.execute(query)
         rows = cur.fetchall()
-        full_objects_instances = []
+        full_objects_instances = {}
         for row in rows:
-            full_objects_instances.append({
-                "image_id": row[0],
+            object_id = row[0]
+            if object_id not in full_objects_instances:
+                full_objects_instances[object_id] = []
+            full_objects_instances[object_id].append({
                 "version_number": row[1],
-                "coords_x": row[2],
-                "coords_y": row[3],
-                "width": row[4],
-                "height": row[5],
-                "confidence_score": row[6],
-                "cropped_file_path": row[7],
-                "class": row[8],
-                "metadata": row[9]
-            })
+                "image_id": row[2],
+                "coords_x": row[3],
+                "coords_y": row[4],
+                "width": row[5],
+                "height": row[6],  
+                "confidence_score": row[7],
+                "cropped_file_path": row[8],
+                "class": row[9],
+                "metadata": row[10]
+            })            
         cur.close()
         return full_objects_instances
     except Exception as e:
@@ -1455,7 +1459,7 @@ def find_shared_objects_between_images():
         cur = conn.cursor()
         query = """SELECT oi1.image_id AS image1, img1.latitude AS lat1, img1.longitude AS lon1, oi2.image_id AS image2, img2.latitude AS lat2, img2.longitude AS lon2, ARRAY_AGG(oi1.object_id) AS object_ids
         FROM ObjectInstance oi1
-        JOIN ObjectInstance oi2 ON oi1.object_id = oi2.object_id AND oi1.image_id < oi2.image_id
+        JOIN ObjectInstance oi2 ON oi1.object_id = oi2.object_id AND oi1.image_id <> oi2.image_id
         JOIN Image img1 ON oi1.image_id = img1.image_id
         JOIN Image img2 ON oi2.image_id = img2.image_id
         GROUP BY oi1.image_id, img1.latitude, img1.longitude, oi2.image_id, img2.latitude, img2.longitude;

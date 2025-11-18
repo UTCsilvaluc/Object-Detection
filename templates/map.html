@@ -71,7 +71,11 @@
 
                     <label>Link Type:</label>
                     <select id="link-type">
+                        {% if link_types|length > 0 %}
                         {% set firstKey = link_types[0].key %}
+                        {% else %}
+                        {% set firstKey = '' %}
+                        {% endif %}
                         {% for type in link_types %}
                         <option value="{{ type.key }}">{{ type.label }}</option>
                         {% endfor %}

@@ -432,6 +432,7 @@ button:hover {
 }
 
 .similar-image {
+    min-width: none;
     width: 100%;
     max-height: 120px;
     object-fit: contain;

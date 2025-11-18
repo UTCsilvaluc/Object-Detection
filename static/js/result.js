@@ -1,4 +1,7 @@
-import { $ , setTrashIcon } from './utils.js';
+import { $ , $$ , toggleAccordion , refreshImage , refreshCount , resetMetaForm , addOrUpdateObjectSection , writeClassMetaField , writeAccordionHeader , removeSelectOptionFromAll , createOptionElement , showSimilar , defaultObjectSelection, setTrashIcon } from './utils.js';
+import { apiPost } from './api.js';
+import { returnRegexByName , returnInputTypeByName , writeMetaDataField , addMetadataField , handleNewType , createNewMetadata , handleNewMetadataType , createNewMetadataKey , importMetadata , removeMetadataField , changeKey , changeValue , changeType } from './metadata.js';
+import { removeObject , mergeObjects , addPointToAnalyse , runAnalysis } from './objects.js';
 
 const AppState = {
     analyzing: false,

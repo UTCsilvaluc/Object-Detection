@@ -47,9 +47,15 @@ window.enableLinkCreation = false;
 window.ClusterExpandActive = false;
 
 window.addEventListener("DOMContentLoaded", () => {
-    navigator.geolocation.getCurrentPosition(initMap, handleLocationError);
-    loadMapData();
+    navigator.geolocation.getCurrentPosition(async position => {
+        initMap(position);
+        await loadMapData();  
+    }, async error => {
+        handleLocationError(error);
+        await loadMapData();
+    });
 });
+
 
 async function loadMapData() {
     const datas = await apiPost('/api/map-data', {});
@@ -192,6 +198,9 @@ function refreshVisualization() {
     }
     if (document.getElementById('toggle-show-links').checked) {
         addLinksToMap(linesLayer, map, links , markers , L);
+    }
+    if (document.getElementById('toggle-shared-objects').checked) {
+        addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
     }
 }
 window.applyFilters = applyFilters;
@@ -630,6 +639,14 @@ document.getElementById('toggle-only-images-with-links').addEventListener('chang
         enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     } else {
         filteredImages = images.filter(checkAllFilters);
+        if (document.getElementById('toggle-shared-objects').checked) {
+            const keep = new Set(filteredImages.map(i => i.image_id));
+            Object.values(sharedObjects).forEach(s => {
+                keep.add(s.image1);
+                keep.add(s.image2);
+            });
+            filteredImages = images.filter(img => keep.has(img.image_id));
+        }
     }
     applyFilters();
 });
