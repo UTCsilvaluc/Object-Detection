@@ -72,7 +72,8 @@
             <div class="info">
                 <p><strong>Name:</strong> {{ img_name }}</p>
                 <p><strong>Description:</strong> {{ desc }}</p>
-                <p><strong>Date:</strong> {{ date }}</p>
+                <p><strong>Event Date:</strong> {{ event_date }}</p>
+                <p><strong>Picture Date:</strong> {{ picture_date }}</p>
                 <p><strong>Location:</strong> {{ location }} ({{ latitude }}, {{ longitude }})</p>
                 <p><strong>Source:</strong> {{ source }}</p>
                 <p id="num-objects"><strong>Objects detected:</strong> {{ result.num_objects }}</p>
@@ -95,7 +96,8 @@
                 <form action="{{url_for('save.save_metadata')}}" id="data_form" method="post">
                     <input type="hidden" name="img_name" value="{{ img_name }}">
                     <input type="hidden" name="img_desc" value="{{ desc }}">
-                    <input type="hidden" name="img_date" value="{{ date }}">
+                    <input type="hidden" name="img_event_date" value="{{ event_date }}">
+                    <input type="hidden" name="img_picture_date" value="{{ picture_date }}">
                     <input type="hidden" name="img_location" value="{{ location }}">
                     <input type="hidden" name="img_latitude" value="{{ latitude }}">
                     <input type="hidden" name="img_longitude" value="{{ longitude }}">
@@ -249,6 +251,7 @@
                                         <button type="button" onclick="showSimilar(this)">Show similar objects</button>
                                         <div class="similar-objects" style="display: none;">
                                             {% for sim_obj in obj.similar_objects %}
+                                            {% if sim_obj.cropped_file_path != None %}
                                                 <div class="obj-wrapper-similar" style="display: flex; flex-direction: row; gap: 5px;">
                                                     <div class="left-similar">
                                                         <div class="similar-info">
@@ -313,6 +316,7 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                            {% endif %}
                                             {% endfor %}
                                         </div>
                                     </div>

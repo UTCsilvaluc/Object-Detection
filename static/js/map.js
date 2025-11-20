@@ -79,7 +79,7 @@ async function loadMapData() {
     buildTimelineFromFilteredImages(filteredImages, URL_for_images);
     enableMapStorageListener(map);
 
-    addLinksToMap(linesLayer, map, links, markers, L, filteredImages);
+    addLinksToMap(linesLayer, pointsLayer , map, links, markers, L, filteredImages);
 }
 
 function initMap(position) {
@@ -197,7 +197,7 @@ function refreshVisualization() {
         enableClustering(map, clusters, markers, filteredImages , objectLinesLayer , linesLayer);
     }
     if (document.getElementById('toggle-show-links').checked) {
-        addLinksToMap(linesLayer, map, links , markers , L);
+        addLinksToMap(linesLayer, pointsLayer, map, links , markers , L);
     }
     if (document.getElementById('toggle-shared-objects').checked) {
         addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
@@ -308,7 +308,7 @@ function enableZoomClustering(map) {
 function updateLinkOnZoom(map) {
     map.on('zoomend', () => {
         if (window.ClusterExpandActive) return;
-        if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, map, links , markers , L);
+        if (document.getElementById('toggle-show-links').checked) addLinksToMap(linesLayer, pointsLayer, map, links , markers , L);
         if (document.getElementById('toggle-shared-objects').checked) addSharedLinksToMap(sharedObjectsLayer , map, sharedObjects , markers , L , objectsData);
     });
 }
@@ -578,7 +578,7 @@ document.getElementById('save-link').addEventListener('click', async () => {
     if (data.status == 'success') {
         linkData.id = data.link_id;
         links.push(linkData);
-        addLinksToMap(linesLayer, map, links , markers , L);
+        addLinksToMap(linesLayer, pointsLayer , map, links , markers , L);
         clearLinkCreationForm(markers , pointsLayer);
     } else {
         alert('Failed to save link: ' + data.error);
@@ -614,7 +614,7 @@ document.getElementById('geojson-input').addEventListener('change', async (e) =>
 
 document.getElementById('toggle-show-links').addEventListener('change', (e) => {
     if (e.target.checked) {
-        addLinksToMap(linesLayer, map, links , markers , L);
+        addLinksToMap(linesLayer, pointsLayer , map, links , markers , L);
         linesLayer.addTo(map);
     } else {
         map.removeLayer(linesLayer);

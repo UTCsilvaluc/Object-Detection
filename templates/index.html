@@ -18,11 +18,26 @@
             <label for="img_name">Image Name (画像名)</label>
             <input type="text" id="img_name" name="img_name" placeholder="Enter image name / 画像名を入力" onchange="checkTitleAvailability(this)" required>
 
-            <label for="img_desc">Description (説明)</label>
+            <label for="img_desc">Description (説明)</label> 
             <input type="text" id="img_desc" name="img_desc" placeholder="Enter description / 説明を入力">
 
-            <label for="img_date">Date (日付)</label>
-            <input type="datetime-local" id="img_date" name="img_date">
+            <div class="date-row">
+                <label for="img_event_date">Event Date (イベント日付)</label>
+                <div style="display: inline-flex; gap: 10px;">
+                    <label for="event_date_time_toggle" style="font-size: 8px; text-align: center; margin-bottom: 0;"> Use Time (時間を使用) </label>
+                    <input type="checkbox" id="event_date_time_toggle" name="event_date_time_toggle" title="Enable time" onclick="toggleDateTime('img_event_date', this)">
+                </div>
+            </div>
+            <input type="date" id="img_event_date" name="img_event_date">
+
+            <div class="date-row">
+                <label for="img_picture_date">Picture Date (写真日付)</label>
+                <div style="display: inline-flex; gap: 10px;">
+                    <label for="picture_date_time_toggle" style="font-size: 8px; text-align: center; margin-bottom: 0;"> Use Time (時間を使用) </label>
+                    <input type="checkbox" id="picture_date_time_toggle" name="picture_date_time_toggle" title="Enable time" onclick="toggleDateTime('img_picture_date', this)">
+                </div>
+            </div>
+            <input type="date" id="img_picture_date" name="img_picture_date">
 
             <label for="img_location">Location (場所)</label>
             <input type="text" id="img_location" name="img_location" placeholder="City / Place / 都市・場所">
@@ -99,6 +114,30 @@
         window.onload = () => {
             getDataFromURL();
         };
+        function toggleDateTime(inputId, checkbox) {
+            const input = document.getElementById(inputId);
+
+            if (checkbox.checked) {
+                // Swap to datetime-local
+                const oldVal = input.value;
+                input.type = "datetime-local";
+
+                // If value exists but without time, append 00:00
+                if (oldVal && oldVal.length === 10) {
+                    input.value = oldVal + "T00:00";
+                }
+            } else {
+                // Swap back to date only
+                const oldVal = input.value;
+                input.type = "date";
+
+                // If value exists remove the time part
+                if (oldVal && oldVal.includes("T")) {
+                    input.value = oldVal.split("T")[0];
+                }
+            }
+        }
+
     </script>
 </body>
 </html>

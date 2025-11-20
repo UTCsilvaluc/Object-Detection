@@ -55,6 +55,7 @@ CREATE TABLE Image (
     file_path TEXT NOT NULL,
     title TEXT,
     description TEXT,
+    event_date TIMESTAMP,
     capture_date TIMESTAMP,
     location_name TEXT,
     latitude DOUBLE PRECISION,

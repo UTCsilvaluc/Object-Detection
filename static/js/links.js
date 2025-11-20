@@ -14,8 +14,13 @@ export function createPolylineWithText(linesLayer , latlngs, map, link) {
         const offset = 0.0005;
         const midPoint = [ (xCenter / 2) + offset , (yCenter / 2) + offset];
         const angle = degOfPente(map , latlngs[index][0], latlngs[index][1], latlngs[index + 1][0], latlngs[index + 1][1]);
+        let displayAngle = angle;
+        if (displayAngle > 90) displayAngle -= 180;
+        if (displayAngle < -90) displayAngle += 180;
         const labelHtml = `
-            <div class="polyline-label" style="transform: rotate(${angle}deg)">${link.title}</div>
+            <div class="polyline-label" style="transform: rotate(${displayAngle}deg); display:inline-block; white-space:nowrap; width:auto; max-width:none; overflow:visible; transform-origin:center center; pointer-events:none;">
+                ${link.title}
+            </div>
         `;
         const labelIcon = L.divIcon({
             className: 'polyline-label-icon',
@@ -30,7 +35,7 @@ export function createPolylineWithText(linesLayer , latlngs, map, link) {
     return polyline;
 }
 
-export function addLinksToMap(linesLayer , map, links , markers , L) {
+export function addLinksToMap(linesLayer , pointsLayer , map, links , markers , L) {
     linesLayer.clearLayers();
     links.forEach(link => {
         if (link.geometry) {
@@ -75,7 +80,7 @@ export function addLinksToMap(linesLayer , map, links , markers , L) {
         } else {
             const latlngs = link.endpoints.map(item => [item.latitude , item.longitude]);
             const validLatlngs = latlngs.filter(latlng => {
-                return getMarkerByLatLng(markers, latlng[0], latlng[1]);
+                return getMarkerByLatLng(markers, latlng[0], latlng[1]) || getMarkerByLatLng(pointsLayer, latlng[0], latlng[1]);
             });
             if (validLatlngs.length < 2) return;
             centerLatLngsWithAnchor(validLatlngs, markers, map, L);

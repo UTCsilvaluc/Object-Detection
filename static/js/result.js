@@ -27,3 +27,5 @@ window.addEventListener("beforeunload", function () {
     fetch("/clear_temp", { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img_name: window.AppConfig.name, img_annotated_path: window.AppConfig.annotated_image_path, img_original_path: window.AppConfig.original_image_path }) });
 });
 
+
+

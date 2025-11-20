@@ -166,7 +166,7 @@ async function handleNewType(selectedItem){
             AppState.classNames.push(typeName);
         } else {
             alert("Failed to add new type: " + data.error);
-            selectElem.selectedIndex = 0;
+            selectedItem.selectedIndex = 0;
         }
     }
 }

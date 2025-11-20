@@ -34,12 +34,13 @@ def close_db_connection(conn):
     except Exception as e:
         print(f"Error closing database connection: {e}")    
 
-def insert_image(file_path, title, description=None, capture_date=None, location_name=None, latitude:float=None, longitude:float=None, source_type=None, type=None):
+def insert_image(file_path, title, description=None, event_date=None ,capture_date=None, location_name=None, latitude:float=None, longitude:float=None, source_type=None, type=None):
     """
     Insert a new image record into the Image table.
     :param file_path: str , only the name of the file, not the full path , it is managed by the system.
     :param title: str
     :param description: str
+    :param event_date: date
     :param capture_date: date
     :param location_name: str
     :param latitude: float
@@ -54,11 +55,11 @@ def insert_image(file_path, title, description=None, capture_date=None, location
     try:
         cur = conn.cursor()
         insert_query = """
-        INSERT INTO Image (file_path, title, description, capture_date, location_name, latitude, longitude, source_type, type)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO Image (file_path, title, description, event_date, capture_date, location_name, latitude, longitude, source_type, type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING image_id;
         """
-        cur.execute(insert_query, (file_path, title, description, capture_date, location_name, latitude, longitude, source_type, type))
+        cur.execute(insert_query, (file_path, title, description, event_date, capture_date, location_name, latitude, longitude, source_type, type))
         image_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
@@ -509,7 +510,7 @@ def get_image_by_id(image_id):
     try:
         cur = conn.cursor()
         select_query = """
-        SELECT * FROM Image WHERE image_id = %s;
+        SELECT image_id, file_path, title, description, event_date, capture_date, location_name, latitude, longitude, upload_date, source_type, type FROM Image WHERE image_id = %s;
         """
         cur.execute(select_query, (image_id,))
         row = cur.fetchone()
@@ -519,13 +520,14 @@ def get_image_by_id(image_id):
                 "file_path": row[1],
                 "title": row[2],
                 "description": row[3],
-                "capture_date": row[4],
-                "location_name": row[5],
-                "latitude": row[6],
-                "longitude": row[7],
-                "upload_date": row[8],
-                "source_type": row[9],
-                "type": row[10]
+                "event_date": row[4],
+                "capture_date": row[5],
+                "location_name": row[6],
+                "latitude": row[7],
+                "longitude": row[8],
+                "upload_date": row[9],
+                "source_type": row[10],
+                "type": row[11]
             }
             return image_data
         cur.close()
@@ -670,6 +672,71 @@ def get_all_images():
         return images
     except Exception as e:
         print(f"Error fetching images: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_all_full_objets_from_value(value: str):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cursor = conn.cursor()
+        query = """
+        SELECT OBJ.object_id , 
+                COALESCE(
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'image_id', OI.image_id,
+                            'version_number', OI.version_number,
+                            'cropped_path', OI.cropped_file_path
+                        ) ORDER BY OI.image_id
+                    ) FILTER (WHERE OI.image_id IS NOT NULL), '[]'
+                ) AS instances,
+                COALESCE(
+                    json_object_agg(
+                        MD.key, MD.values
+                    ) FILTER (WHERE MD.key IS NOT NULL), '{}'::json
+                ) AS metadata
+        FROM Object OBJ
+        LEFT JOIN LATERAL (
+            SELECT OI.object_id, OI.image_id , OI.cropped_file_path , OI.version_number
+            FROM ObjectInstance OI
+            LEFT JOIN LATERAL (
+                SELECT * FROM VersionedImage VI
+                WHERE VI.image_id = OI.image_id
+                ORDER BY VI.version_number DESC
+                LIMIT 1
+            ) VI ON TRUE
+            WHERE OI.object_id = OBJ.object_id AND OI.version_number = VI.version_number
+        ) OI ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT md.key AS key, json_agg(DISTINCT md.value) AS values
+            FROM Metadata md
+            WHERE md.object_id = OBJ.object_id 
+            GROUP BY md.key
+        ) MD ON TRUE
+
+        WHERE EXISTS (
+            SELECT 1 
+            FROM Metadata md2
+            WHERE md2.object_id = OBJ.object_id AND LOWER(md2.value) ILIKE LOWER(%s)
+        )
+        GROUP BY OBJ.object_id;
+        """
+        cursor.execute(query, (f"%{value}%",))
+        rows = cursor.fetchall()
+        objects = []
+        for row in rows:
+            objects.append({
+                "object_id": row[0],
+                "instances": row[1],
+                "metadata": row[2]
+            })
+        cursor.close()
+        return objects
+    except Exception as e:
+        print(f"Error fetching objects by value: {e}")
         return []
     finally:
         close_db_connection(conn)

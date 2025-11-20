@@ -43,11 +43,25 @@ label {
     color: #444;
     font-weight: bold;
 }
+/* Row containing label + checkbox */
+.date-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px; /* spacing above input */
+}
+
+/* Style checkbox */
+.date-row input[type="checkbox"] {
+    transform: scale(1.2);
+    cursor: pointer;
+}
 
 /* Champs de saisie */
 input[type="text"],
 input[type="number"],
 input[type="datetime-local"],
+input[type="date"],
 input[type="file"] {
     padding: 10px;
     margin-bottom: 15px;
