@@ -1,0 +1,376 @@
+/************************************************************
+ * GLOBAL STYLE
+ ************************************************************/
+body {
+    font-family: sans-serif;
+    background: #f5f7fa;
+    margin: 0;
+}
+
+h1, h2, h3 {
+    margin-bottom: 10px;
+}
+
+label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+select,
+input {
+    padding: 9px;
+    border: 1px solid #dcdcdc;
+    border-radius: 8px;
+}
+
+button {
+    cursor: pointer;
+}
+
+
+/************************************************************
+ * SEARCH CONTAINER
+ ************************************************************/
+.tos-container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 40px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+}
+
+.subtitle {
+    color: #777;
+    margin-bottom: 20px;
+}
+
+/* Search box */
+.search-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.search-box input {
+    flex: 1;
+}
+
+.search-box button {
+    padding: 10px 20px;
+    background: #2463eb;
+    color: white;
+    border-radius: 8px;
+}
+
+.search-box button:hover {
+    background: #1a4cb7;
+}
+
+
+
+/************************************************************
+ * RESULTS LIST
+ ************************************************************/
+.results-container {
+    margin-top: 20px;
+}
+
+.object-block {
+    padding: 20px;
+    background: #fdfdfd;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+    margin-bottom: 25px;
+}
+
+.instance-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.obj-instance {
+    width: 80px;
+    height: 80px;
+    border-radius: 6px;
+    border: 1px solid #dcdcdc;
+    object-fit: cover;
+}
+
+.select-btn {
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: #34a853;
+    color: white;
+    border-radius: 8px;
+}
+
+.select-btn:hover {
+    background: #2c8b45;
+}
+
+.selected-object {
+    border: 2px solid #007bff;
+    background: #f4f9ff;
+    border-radius: 8px;
+}
+
+/************************************************************
+ * THREAD PANEL
+ ************************************************************/
+.thread-container {
+    max-width: 900px;
+    margin: 40px auto;
+    border-radius: 12px;
+    background: white;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+}
+
+
+
+/************************************************************
+ * TABS
+ ************************************************************/
+.tabs-container {
+    display: flex;
+    justify-content: center;
+    border-bottom: 1px solid #e2e2e2;
+    background: #f8f9fc;
+}
+
+.tab {
+    padding: 15px 25px;
+    font-weight: bold;
+    color: #555;
+    cursor: pointer;
+    transition: 0.2s;
+    border-bottom: 3px solid transparent;
+}
+
+.tab:hover {
+    background: #eef3ff;
+}
+
+.tab.selected {
+    color: #2463eb;
+    border-bottom: 3px solid #2463eb;
+    background: #fff;
+}
+
+
+
+/************************************************************
+ * TAB CONTENT SECTIONS
+ ************************************************************/
+.thread-content {
+    padding: 30px;
+}
+
+.hidden {
+    display: none;
+}
+
+
+
+/************************************************************
+ * THREAD BUILDER (Inside thread tab)
+ ************************************************************/
+.thread-builder-right {
+    max-width: 700px;
+    margin: auto;
+    text-align: left;
+}
+
+/* Wrapper for better separation */
+.thread-builder-wrapper {
+    background: #fbfbfb;
+    padding: 25px;
+    border-radius: 10px;
+    border: 1px solid #eee;
+}
+
+.thread-subtitle {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.thread-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.thread-row-label {
+    width: 160px;
+    font-weight: bold;
+}
+
+.thread-select {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+}
+
+
+/************************************************************
+ * THREAD BUTTONS & FOOTER
+ ************************************************************/
+.thread-bottom {
+    padding: 25px;
+    border-top: 1px solid #e6e6e6;
+    background: #fafafa;
+}
+
+.thread-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.thread-action-btn {
+    padding: 12px 20px;
+    background: #2563eb;
+    color: white;
+    border-radius: 10px;
+}
+
+.thread-action-btn:hover {
+    background: #1b4fb8;
+}
+
+.thread-action-btn.secondary {
+    background: #475569;
+}
+
+.thread-action-btn.secondary:hover {
+    background: #334155;
+}
+
+
+
+/************************************************************
+ * THREAD RESULTS & GENERATIONS
+ ************************************************************/
+.generations-container,
+.thread-results {
+    margin-top: 35px;
+    padding: 20px;
+    background: #fafafa;
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+}
+
+.generation-block {
+    padding: 15px;
+    margin-bottom: 20px;
+    background: white;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+}
+
+.thread-result-item {
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    border: 1px solid #e1e1e1;
+    background: #fff;
+}
+
+/* --- Image block wrapper --- */
+.image-block {
+    margin-bottom: 30px;
+    padding: 15px;
+    border-radius: 10px;
+    background: #fafafa;
+    border: 1px solid #ddd;
+}
+
+.image-header-row {
+    display: flex;
+    gap: 20px;
+    align-items: stretch; 
+}
+
+.thread-image-thumb {
+    width: 220px;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+}
+
+/* --- Info panel --- */
+.image-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;     
+}
+
+.image-info p {
+    margin: 4px 0;
+}
+
+/* --- Metadata toggle button --- */
+.metadata-toggle-btn {
+    margin-top: 10px;
+    background: #eee;
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+}
+
+.metadata-toggle-btn:hover {
+    background: #ddd;
+}
+
+.metadata-block {
+    margin-top: 12px;
+}
+
+/* --- Object metadata groups displayed side-by-side --- */
+.object-meta-group {
+    background: white;
+    border: 1px solid #ccc;
+    padding: 10px 12px;
+    border-radius: 8px;
+    display: inline-block;
+    margin: 5px;
+    min-width: 220px;
+}
+
+/* Title inside each group */
+.object-meta-group h4 {
+    margin: 0 0 5px;
+    font-size: 15px;
+    color: #444;
+}
+
+/* Metadata table displayed inline */
+.object-meta-group table {
+    width: auto;
+}
+
+.object-meta-group tr {
+    display: flex;
+    justify-content: space-between;
+}
+
+.meta-key {
+    font-weight: bold;
+    color: #333;
+}
+
+.meta-value {
+    margin-left: 5px;
+    color: #555;
+}

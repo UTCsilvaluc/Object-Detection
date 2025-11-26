@@ -457,7 +457,7 @@ button:hover {
     margin-left: 10px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: space-around;
 }
 .similar-info p {
     margin: 3px 0;

@@ -9,7 +9,8 @@ from routes import (
     object_bp,
     metadata_bp,
     save_bp,
-    main_routes_bp
+    main_routes_bp,
+    thread_bp
 )
 
 def create_app():
@@ -24,6 +25,7 @@ def create_app():
     app.register_blueprint(object_bp, url_prefix="/objects")
     app.register_blueprint(metadata_bp, url_prefix="/metadata")
     app.register_blueprint(save_bp, url_prefix="/save")
+    app.register_blueprint(thread_bp, url_prefix="/thread")
 
     return app
 

@@ -676,7 +676,7 @@ def get_all_images():
     finally:
         close_db_connection(conn)
 
-def get_all_full_objets_from_value(value: str):
+def get_all_full_objets_from_value(value: str) -> list: 
     conn = get_db_connection()
     if conn is None:
         return []
@@ -738,6 +738,96 @@ def get_all_full_objets_from_value(value: str):
     except Exception as e:
         print(f"Error fetching objects by value: {e}")
         return []
+    finally:
+        close_db_connection(conn)
+
+def search_objects_by_metadata(identity=None, place=None, date=None):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        conditions = []
+        params = []
+
+        if identity:
+            conditions.append("EXISTS (SELECT 1 FROM Metadata m1 WHERE m1.object_id = OBJ.object_id AND LOWER(m1.value) ILIKE LOWER(%s))")
+            params.append(f"%{identity}%")
+
+        if place:
+            conditions.append("EXISTS (SELECT 1 FROM Metadata m2 WHERE m2.object_id = OBJ.object_id AND LOWER(m2.value) ILIKE LOWER(%s))")
+            params.append(f"%{place}%")
+
+        if date:
+            conditions.append("EXISTS (SELECT 1 FROM Metadata m3 WHERE m3.object_id = OBJ.object_id AND LOWER(m3.value) ILIKE LOWER(%s))")
+            params.append(f"%{date}%")
+
+        if not conditions:
+            return []
+
+        where_clause = " AND ".join(conditions)
+
+        query = f"""
+            SELECT OBJ.object_id , 
+                COALESCE(
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'image_id', OI.image_id,
+                            'version_number', OI.version_number,
+                            'cropped_path', OI.cropped_file_path
+                        ) ORDER BY OI.image_id
+                    ) FILTER (WHERE OI.image_id IS NOT NULL), '[]'
+                ) AS instances,
+                COALESCE(
+                    json_object_agg(
+                        MD.key, MD.values
+                    ) FILTER (WHERE MD.key IS NOT NULL), '{{}}'::json
+                ) AS metadata
+
+            FROM Object OBJ
+            LEFT JOIN LATERAL (
+                SELECT OI.object_id, OI.image_id , OI.cropped_file_path , OI.version_number
+                FROM ObjectInstance OI
+                LEFT JOIN LATERAL (
+                    SELECT * FROM VersionedImage VI
+                    WHERE VI.image_id = OI.image_id
+                    ORDER BY VI.version_number DESC
+                    LIMIT 1
+                ) VI ON TRUE
+                WHERE OI.object_id = OBJ.object_id AND OI.version_number = VI.version_number
+            ) OI ON TRUE
+
+            LEFT JOIN LATERAL (
+                SELECT md.key AS key, json_agg(DISTINCT md.value) AS values
+                FROM Metadata md
+                WHERE md.object_id = OBJ.object_id 
+                GROUP BY md.key
+            ) MD ON TRUE
+
+            WHERE {where_clause}
+            GROUP BY OBJ.object_id;
+        """
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        objects = []
+        for row in rows:
+            objects.append({
+                "object_id": row[0],
+                "instances": row[1],
+                "metadata": row[2]
+            })
+
+        cursor.close()
+        return objects
+
+    except Exception as e:
+        print("Error in search_objects_by_metadata:", e)
+        return []
+
     finally:
         close_db_connection(conn)
 

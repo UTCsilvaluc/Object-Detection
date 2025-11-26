@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Select Thread Object</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='thread.css') }}">
+</head>
+
+<body>
+
+<div class="tos-container" id="thread-object-selection">
+
+    <h1>Start a Thread</h1>
+    <label for="search-type">Search value type</label>
+    <select id="search-type" onchange="updateSearchField(this)" required>
+        <option value="text" selected>Text</option>
+        <option value="int">Integer</option>
+        <option value="float">Float</option>
+        <option value="short_float">Short Float</option>
+        <option value="coordinate">Coordinate</option>
+        <option value="bool">Boolean</option>
+        <option value="date">Date (YYYY-MM-DD)</option>
+        <option value="date-hr-sec">DateTime (YYYY-MM-DD HH:MM:SS)</option>
+        <option value="string">Generic string</option>
+        <option value="enum">Enum</option>
+    </select>
+    <p class="subtitle">Search for a person, place, date, or any value</p>
+
+    <!-- SEARCH BAR -->
+    <div class="search-box">
+        <input id="search-input" type="text" placeholder="Enter a value (e.g. Chujyo, Temple, 1980…)" onkeyup="handleTyping(event)">
+        <button onclick="performSearch()">Search</button>
+    </div>
+
+    <hr>
+
+    <!-- RESULTS -->
+    <div id="results-container" class="results-container">
+        <!-- Results will be loaded here -->
+    </div>
+
+</div>
+
+<div class="threads_wrapper" id="wrapper-threads"></div>
+<!-- THREAD TEMPLATE -->
+<div class="thread-container hidden" id="thread-__ID__">
+    <div class="tabs-container">
+        <div class="tab selected" data-tab="objects" onclick="selectTab('__ID__','objects')">Objects</div>
+        <div class="tab" data-tab="images" onclick="selectTab('__ID__','images')">Images</div>
+        <div class="tab" data-tab="thread" onclick="selectTab('__ID__','thread')">Threads</div>
+    </div>
+
+    <!-- CONTENT SECTIONS -->
+    <div class="thread-content" data-section="objects">…</div>
+    <div class="thread-content hidden" data-section="images"></div>
+    <div class="thread-content hidden" data-section="thread">
+
+        <!-- THREAD BUILDER RIGHT -->
+        <div class="thread-builder-right">
+            <h2>Select Your Threads</h2>
+            <p class="thread-subtitle">Choose which dimensions to use to build the story.</p>
+
+            <div class="thread-row">
+                <label class="thread-row-label">Identity Thread</label>
+                <select id="select-identity-__ID__" class="thread-select"></select>
+                <input type="checkbox" id="cb-identity-__ID__" checked>
+            </div>
+
+            <div class="thread-row">
+                <label class="thread-row-label">Place Thread</label>
+                <select id="select-place-__ID__" class="thread-select" disabled></select>
+                <input type="checkbox" id="cb-place-__ID__">
+            </div>
+
+            <div class="thread-row">
+                <label class="thread-row-label">Date Thread</label>
+                <select id="select-date-__ID__" class="thread-select" disabled></select>
+                <input type="checkbox" id="cb-date-__ID__">
+            </div>
+        </div>
+    </div>
+    <div class="thread-bottom">
+        <div>
+            <div class="thread-actions">
+                <button class="thread-action-btn">Build Thread</button>
+                <button class="thread-action-btn">Build Objects</button>
+                <button class="thread-action-btn">Build Images</button>
+                <button class="thread-action-btn secondary">Show Results</button>
+            </div>
+
+            <div id="thread-generations" class="generations-container hidden"></div>
+            <div id="thread-results" class="thread-results hidden"></div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    window.appConfig = {
+            URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
+            URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
+            icons_path: "{{ url_for('static', filename='img/svg/') }}"
+        };
+</script>
+<script type="module" src="{{url_for('static' , filename='js/thread.js')}}"></script>
+
+</body>
+</html>

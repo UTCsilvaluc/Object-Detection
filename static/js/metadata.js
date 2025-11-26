@@ -471,17 +471,16 @@ async function searchByMetadata(objID){
                             `).join('')}
                         </ul>
                     `;
+                    const importBtn = document.createElement('button');
+                    importBtn.type = 'button';
+                    importBtn.className = 'import-btn';
+                    importBtn.textContent = 'Import Metadata from this Object';
+                    importBtn.onclick = () => importMetadata(importBtn, objID);
+                    block.appendChild(importBtn);
                     metadataGrouped.appendChild(block);
                 });
 
                 metaDiv.appendChild(metadataGrouped);
-
-                const importBtn = document.createElement('button');
-                importBtn.type = 'button';
-                importBtn.className = 'import-btn';
-                importBtn.textContent = 'Import Metadata from this Object';
-                importBtn.onclick = () => importMetadata(importBtn, objID);
-                metaDiv.appendChild(importBtn);
             } else {
                 metaDiv.innerHTML += `<p class="no-metadata">No metadata available for this object.</p>`;
             }

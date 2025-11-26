@@ -345,3 +345,33 @@ export function getMarkerByLatLng(markers, lat, lng) {
     });
     return foundMarker;
 }
+
+export function normalizeValueToPostgreSQL(type, value) {
+    if (!value) return "";
+
+    switch (type) {
+        case "int":
+            return parseInt(value).toString();
+
+        case "float":
+        case "short_float":
+        case "coordinate":
+            return parseFloat(value).toString();
+
+        case "bool":
+            return value === "true" ? "true" : "false";
+
+        case "date":
+            return value; // already YYYY-MM-DD
+
+        case "date-hr-sec":
+            return value.replace("T", " "); // convert "2025-01-01T12:34" → "2025-01-01 12:34"
+
+        case "enum":
+            return value; // semicolon-separated string
+
+        default: // text, string
+            return value.trim();
+    }
+}
+window.normalizeValueToPostgreSQL = normalizeValueToPostgreSQL;
