@@ -1,251 +1,323 @@
-from utils.database import get_db_connection , close_db_connection
+from utils.database import get_db_connection , close_db_connection , get_objectsID_in_image
 
-IDENTITY_KEYS  = ["name", "full_name", "alias", "creator", "person_name", "identity" , "Name"]
-PLACE_KEYS = ["place", "location", "location_name", "birth_place", "death_place", "event_place", "birth place", "death place", "place_name"]
-DATE_KEYS  = ["date", "event_date", "date_of_birth", "creation_date", "capture_date"]
+def get_existing_threads():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:   
+        cur = conn.cursor()
+        QUERY = """
+        SELECT T.key , COALESCE(
+            JSON_AGG(DISTINCT MD.key) FILTER (WHERE MD.key IS NOT NULL), '[]'::json
+        )
+        FROM ThreadCategory T
+        LEFT JOIN MetadataDefinition MD ON MD.thread_category = T.key
+        GROUP BY T.key
+        ORDER BY T.key;
+        """
+        cur.execute(QUERY)
+        rows = cur.fetchall()
+        threads = {row[0]: row[1] for row in rows}
+        cur.close()
+        return threads
+    except Exception as e:
+        print("Error while retrieving existing threads:", e)
+        return {}
+    finally:
+        close_db_connection(conn)
 
-def build_thread_from_objectID(object_id: int):
+def build_thread_from_object_list(object_ids: list[int]):
     """
-    Builds threads from a given object ID by extracting relevant metadata.
+    Builds threads from a list of object IDs by extracting their respective threads.
     Aims to create three primary tabs: (Objects , Images , Threads)
-    Objects tab: all objects related to the same object. (Appear in same pictures OR sharing metadata)
-    Images tab: all images where the object appears.
+    Objects tab: all objects related to the objects in the list. (Appear in same pictures OR sharing metadata)
+    Images tab: all images where the objects appear.
     Threads tab: three threads based on identity, place, and date.
     Returns a dictionary with threads categorized by identity, place, and date.
     """
-    threads = {}
-    threads_obj = get_threads_from_object(object_id)
-    if threads_obj:
-        threads["threads"] = threads_obj
-    objects_same_picture = get_objects_same_picture(object_id)
-    if objects_same_picture:
-        threads["objects_same_picture"] = objects_same_picture
-    images_from_object = get_images_from_object(object_id)
-    if images_from_object:
-        threads["images_from_object"] = images_from_object
-    return threads
+    thread_def = get_existing_threads()
+    dynamic_threads = {category: [] for category in thread_def}
+    result = {
+        "threads": dynamic_threads,
+        "objects_same_picture": [],
+        "images_from_object": []
+    }
+    for obj_id in object_ids:
+        t = build_thread_from_objectID(obj_id)
+        if not t:
+            continue
+        result = merge_thread_result(result, t, thread_def)
+    return result
 
-def get_threads_from_object(object_id: int):
+def merge_thread_result(base: dict, new: dict, thread_def: dict):
     """
-    Extracts initial thread seeds from a given object:
-    - NAME thread: all metadata identifying the person/object
-    - PLACE thread: metadata or image location information
-    - DATE thread: all temporal metadata
+    Merge the result of build_thread_from_objectID into an accumulated structure.
+
+    base structure expected:
+    {
+        "threads": { category: [values...] },
+        "objects_same_picture": [...],
+        "images_from_object": [...]
+    }
+
+    new is the output of build_thread_from_objectID_sql(object_id).
+
+    thread_def is { category: [metadata keys] }
     """
+    # --- Merge threads ---
+    for category in thread_def.keys():
+        if category not in base["threads"]:
+            base["threads"][category] = []
+        for value in new.get("threads", {}).get(category, []):
+            if value not in base["threads"][category]:
+                base["threads"][category].append(value)
 
-    conn = get_db_connection()
-    if conn is None:
-        return {}
+    # --- Merge objects_same_picture ---
+    seen_obj_ids = {obj["object_id"] for obj in base["objects_same_picture"]}
+    for obj in new.get("objects_same_picture", []):
+        oid = obj.get("object_id")
+        if oid and oid not in seen_obj_ids:
+            base["objects_same_picture"].append(obj)
+            seen_obj_ids.add(oid)
 
-    try:
-        cur = conn.cursor()
-        QUERY = """
-        SELECT key, value   
-        FROM Metadata 
-        WHERE object_id = %s
-        """
-        cur.execute(QUERY, (object_id,))
-        metadata_rows = cur.fetchall()
+    # --- Merge images_from_object ---
+    seen_img_ids = {img["image_id"] for img in base["images_from_object"]}
+    for img in new.get("images_from_object", []):
+        iid = img.get("image_id")
+        if iid and iid not in seen_img_ids:
+            base["images_from_object"].append(img)
+            seen_img_ids.add(iid)
 
-        threads = {
-            "identity": [],
-            "place": [],
-            "date": []
-        }
-        for key, value in metadata_rows:
+    return base
 
-            key_l = key.lower()
-            if key_l in IDENTITY_KEYS:
-                if (value not in threads["identity"]):
-                    threads["identity"].append(value)
-
-            if key_l in PLACE_KEYS:
-                if (value not in threads["place"]):
-                    threads["place"].append(value)
-
-            if key_l in DATE_KEYS or "date" in key_l:
-                if (value not in threads["date"]):
-                    threads["date"].append(value)
-        return threads
-    except Exception as e:
-        print("Error while creating threads:", e)
-        return {}
-    finally:
-        close_db_connection(conn)
-
-def get_objects_same_picture(object_id: int):
+def build_thread_from_objectID(object_id: int):
     """
-    Retrieves all objects (including instances) that appear in the same pictures as the given object ID.
+    Version optimisée et corrigée : 1 seule requête SQL pour tout récupérer.
     """
     conn = get_db_connection()
     if conn is None:
-        return []
+        return {}
+    
     try:
         cur = conn.cursor()
+        
         QUERY = """
-        WITH images_with_obj1 AS (
-            SELECT DISTINCT image_id
-            FROM ObjectInstance
+        WITH 
+        -- Identify target images containing the object 
+        target_images AS (
+            SELECT DISTINCT image_id 
+            FROM ObjectInstance 
             WHERE object_id = %s
         ),
-        latest_instances AS (
-            SELECT DISTINCT ON (OI.object_id, OI.image_id)
-                OI.object_id,
-                OI.image_id,
-                OI.version_number,
-                OI.cropped_file_path
-            FROM ObjectInstance OI
-            ORDER BY OI.object_id, OI.image_id, OI.version_number DESC
-        )
-        SELECT
-            OBJ.object_id,
-            OBJ.name,
-            COALESCE(
-                JSON_AGG(
-                    JSON_BUILD_OBJECT(
-                        'image_id', LI.image_id,
-                        'version_number', LI.version_number,
-                        'cropped_path', LI.cropped_file_path
-                    ) ORDER BY LI.image_id
-                ) FILTER (WHERE LI.image_id IS NOT NULL),
-                '[]'
-            ) AS instances,
-            COALESCE(
-                JSON_OBJECT_AGG(MD.key, MD.values)
-                FILTER (WHERE MD.key IS NOT NULL),
-                '{}'::json
-            ) AS metadata
-        FROM Object OBJ
-        JOIN latest_instances LI ON LI.object_id = OBJ.object_id
-        JOIN images_with_obj1 IW ON IW.image_id = LI.image_id
-        LEFT JOIN LATERAL (
-            SELECT md.key, JSON_AGG(DISTINCT md.value) AS values
+
+        -- Thread data extraction : { "identity": [...], "place": [...], "date": [...] , ...}
+        thread_data_source AS (
+            SELECT 
+                md_def.thread_category,
+                json_agg(DISTINCT md.value) as values
             FROM Metadata md
-            WHERE md.object_id = OBJ.object_id
-            GROUP BY md.key
-        ) MD ON TRUE
-        WHERE OBJ.object_id <> %s
-        GROUP BY OBJ.object_id, OBJ.name;
+            JOIN MetadataDefinition md_def ON md.key = md_def.key
+            WHERE md.object_id = %s
+            GROUP BY md_def.thread_category
+        ),
+        -- Aggregate thread data into a single JSON object : 
+        thread_data AS (
+            SELECT 
+                json_object_agg(thread_category, values) as data
+            FROM thread_data_source where thread_category IS NOT NULL
+        ),
+
+        -- Objects appearing in the same pictures as the target object
+        related_objects_list AS (
+            SELECT DISTINCT oi.object_id
+            FROM ObjectInstance oi
+            JOIN target_images ti ON ti.image_id = oi.image_id
+            WHERE oi.object_id != %s
+        ),
+        
+        -- Objects built with instances and metadata
+        related_objects_built AS (
+            SELECT 
+                robj.object_id,
+                obj_table.name,
+                COALESCE(
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'image_id', li.image_id, 
+                            'version_number', li.version_number, 
+                            'cropped_path', li.cropped_file_path
+                        )
+                    ) FILTER (WHERE li.image_id IS NOT NULL), 
+                '[]'::json) AS instances,
+
+                COALESCE(
+                    json_object_agg(
+                        md.key, md.values_arr
+                    ) FILTER (WHERE md.key IS NOT NULL), 
+                '{}'::json) AS metadata
+                
+
+            FROM related_objects_list robj
+            JOIN Object obj_table ON obj_table.object_id = robj.object_id
+
+            LEFT JOIN LATERAL (
+                SELECT DISTINCT ON (oi_sub.image_id) 
+                    oi_sub.image_id, oi_sub.version_number, oi_sub.cropped_file_path
+                FROM ObjectInstance oi_sub
+                WHERE oi_sub.object_id = robj.object_id 
+                ORDER BY oi_sub.image_id, oi_sub.version_number DESC
+            ) li ON TRUE 
+
+            LEFT JOIN LATERAL (
+                SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
+                FROM Metadata m
+                WHERE m.object_id = robj.object_id 
+                GROUP BY m.key
+            ) md ON TRUE 
+            GROUP BY robj.object_id, obj_table.name
+        ),
+
+        -- Image from the target object, with ALL metadata from ALL objects in the image
+        images_built AS (
+            SELECT 
+                img.image_id,
+                img.file_path,
+                img.title,
+                img.description,
+                img.capture_date,
+                img.event_date,
+                img.location_name,
+                img.latitude,
+                img.longitude,
+                img.upload_date,
+                img.source_type,
+                img.type,
+                
+                -- Metadata flatten (Format: [{ "object_id": 1, "key": "K", "value": "V" }])
+                COALESCE(
+                    (
+                        SELECT json_agg(
+                            json_build_object(
+                                'object_id', md.object_id,
+                                'key', md.key,
+                                'value', md.value
+                            )
+                        )
+                        FROM ObjectInstance oi
+                        JOIN Metadata md 
+                            ON md.object_id = oi.object_id 
+                            AND md.image_id = oi.image_id 
+                            AND md.version_number = oi.version_number
+                        WHERE oi.image_id = img.image_id
+                    ), '[]'::json
+                ) as metadata
+
+            FROM target_images ti
+            JOIN Image img ON img.image_id = ti.image_id
+            ORDER BY img.image_id DESC
+        )
+        SELECT json_build_object(
+            'threads', COALESCE((SELECT data FROM thread_data), '{}'::json),
+            'objects_same_picture', COALESCE((SELECT json_agg(row_to_json(rob)) FROM related_objects_built rob), '[]'::json),
+            'images_from_object', COALESCE((SELECT json_agg(row_to_json(imb)) FROM images_built imb), '[]'::json)
+        );
         """
-        cur.execute(QUERY, (object_id, object_id))
-        rows = cur.fetchall()
-        objects = []
-        for row in rows:
-            objects.append({
-                "object_id": row[0],
-                "name": row[1],
-                "instances": row[2],
-                "metadata": row[3] 
-            })
-        cur.close()
-        return objects
+
+        cur.execute(QUERY, (object_id, object_id, object_id))
+        row = cur.fetchone()
+        
+        if row and row[0]:
+            return row[0]
+        else:
+            return {
+                "threads": {},
+                "objects_same_picture": [],
+                "images_from_object": []
+            }
+
     except Exception as e:
-        print("Error while retrieving objects from same picture:", e)
-        return []
+        print(f"Error in optimized build_thread_from_objectID: {e}")
+        return {
+            "threads": {},
+            "objects_same_picture": [],
+            "images_from_object": []
+        }
     finally:
         close_db_connection(conn)
 
-def get_images_from_object(object_id: int):
+def build_thread_from_imageID(image_id: int):
     """
-    Returns ALL images in which the object appears,
-    with ALL metadata from ALL objects present in the image.
+    Builds threads from a given image ID by extracting each object in the image
+    and compiling their respective threads.
+    Aims to create three primary tabs: (Objects , Images , Threads)
+    Objects tab: all objects related to the objects in the image. (Appear in same pictures OR sharing metadata)
+    Images tab: all images where the objects appear.
+    Threads tab: three threads based on identity, place, and date.
+    Returns a dictionary with threads categorized by identity, place, and date.
     """
+    object_ids = get_objectsID_in_image(image_id)
+    return build_thread_from_object_list(object_ids)
+        
+def build_thread_from_metadata(selectersValue: list[dict]):
+    """
+    Builds threads based on provided metadata selecters.
+    Each entry in selectersValue must be:
+        { key: 'identity', value: 'Sakura', enabled: True }
+    Returns a dictionary with threads categorized by identity, place, and date.
+    """
+    object_ids = get_objects_from_thread(selectersValue)
+    return build_thread_from_object_list(object_ids)
+
+def get_objects_from_thread(selectersValue: list[dict]):
+    """
+    Searches for objects matching the provided thread metadata.
+    Each entry in selectersValue must be:
+        { key: 'identity', value: 'Sakura', enabled: True }
+    Returns a list of object_ids matching AT LEAST ONE enabled condition.
+    """
+
     conn = get_db_connection()
     if conn is None:
         return []
 
     try:
-        QUERY = """
-        WITH target_images AS (
-            SELECT DISTINCT image_id
-            FROM ObjectInstance
-            WHERE object_id = %s
-        ),
-        latest_versions AS (
-            SELECT DISTINCT ON (image_id)
-                image_id,
-                version_number
-            FROM VersionedImage
-            ORDER BY image_id, version_number DESC
-        ),
-        image_objects AS (
-            SELECT 
-                OI.image_id,
-                OI.object_id,
-                OI.version_number
-            FROM ObjectInstance OI
-            JOIN target_images TI ON TI.image_id = OI.image_id
-        ),
-        all_metadata AS (
-            SELECT 
-                io.image_id,
-                io.object_id,
-                md.key,
-                md.value
-            FROM image_objects io
-            LEFT JOIN Metadata md 
-                ON md.object_id = io.object_id
-                AND md.image_id = io.image_id
-                AND md.version_number = io.version_number
-        )
-        SELECT
-            IMG.image_id,
-            IMG.file_path,
-            IMG.title,
-            IMG.description,
-            IMG.capture_date,
-            IMG.event_date,
-            IMG.location_name,
-            IMG.latitude,
-            IMG.longitude,
-            IMG.upload_date,
-            IMG.source_type,
-            IMG.type,
+        cur = conn.cursor()
 
-            COALESCE(
-                JSON_AGG(
-                    JSON_BUILD_OBJECT(
-                        'object_id', AM.object_id,
-                        'key', AM.key,
-                        'value', AM.value
-                    )
-                ) FILTER (WHERE AM.key IS NOT NULL),
-                '[]'
-            ) AS metadata
-        FROM target_images TI
-        JOIN Image IMG ON IMG.image_id = TI.image_id
-        LEFT JOIN all_metadata AM ON AM.image_id = IMG.image_id
-        GROUP BY IMG.image_id
-        ORDER BY IMG.image_id DESC;
+        conditions = []
+        params = []
+
+        for thread in selectersValue:
+            if not thread.get("enabled"):
+                continue
+
+            val = thread.get("value")
+            category = thread.get("key")
+
+            if val is None or val == "" or category is None:
+                continue
+
+            conditions.append(
+                "(md.value = %s AND md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s))"
+            )
+            params.extend([val, category])
+
+        if not conditions:
+            return []
+
+        where_clause = " OR ".join(conditions)
+
+        QUERY = f"""
+        SELECT DISTINCT md.object_id
+        FROM Metadata md
+        WHERE {where_clause}
         """
 
-        cur = conn.cursor()
-        cur.execute(QUERY, (object_id,))
+        cur.execute(QUERY, tuple(params))
         rows = cur.fetchall()
-
-        images = []
-        for row in rows:
-            images.append({
-                "image_id": row[0],
-                "file_path": row[1],
-                "title": row[2],
-                "description": row[3],
-                "capture_date": row[4],
-                "event_date": row[5],
-                "location_name": row[6],
-                "latitude": row[7],
-                "longitude": row[8],
-                "upload_date": row[9],
-                "source_type": row[10],
-                "type": row[11],
-                "metadata": row[12] 
-            })
-
-        cur.close()
-        return images
+        return [row[0] for row in rows]
 
     except Exception as e:
-        print(f"Error fetching images with full metadata: {e}")
+        print("Error while retrieving objects from thread metadata:", e)
         return []
 
     finally:

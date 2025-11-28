@@ -4,10 +4,11 @@ from utils.database import (
     get_all_full_points,
     get_all_metadata_keys,
     get_all_full_objets_from_value, 
-    search_objects_by_metadata
+    search_objects_by_metadata,
+    get_ThreadCategory
 )
 
-from utils.thread_research import get_threads_from_object , build_thread_from_objectID
+from utils.thread_research import build_thread_from_objectID , build_thread_from_imageID , build_thread_from_metadata
 
 thread_bp = Blueprint("thread", __name__)
 
@@ -16,12 +17,56 @@ def thread_view():
     images = get_all_images() 
     points = get_all_full_points()
     metadata_keys = get_all_metadata_keys()
+    thread_categories = get_ThreadCategory()
     return render_template(
         'thread.html',
         images=images,
         points=points,
-        metadata_keys=metadata_keys
+        metadata_keys=metadata_keys,
+        thread_categories=thread_categories
     )
+@thread_bp.route('/generate', methods=['POST'])
+def generate_thread():
+    data = request.get_json() or {}
+    mode = data.get("mode")
+
+    if not mode:
+        return jsonify({"success": False, "error": "Missing 'mode'"}), 400
+
+    if mode == "object":
+        object_id = data.get("object_id")
+        if not object_id:
+            return jsonify({"success": False, "error": "object_id is required"}), 400
+
+        threads = build_thread_from_objectID(object_id)
+
+        return jsonify({
+            "success": True,
+            "threads": threads
+        })
+
+    elif mode == "image":
+        image_id = data.get("image_id")
+        if not image_id:
+            return jsonify({"success": False, "error": "image_id is required"}), 400
+        threads = build_thread_from_imageID(image_id)
+        return jsonify({
+            "success": True,
+            "threads": threads
+        })
+
+    elif mode == "thread":
+        selectorsValues = data.get("threads", [])
+        if not selectorsValues:
+            return jsonify({"success": False, "error": "threads metadata is required"}), 400
+        threads = build_thread_from_metadata(selectorsValues)
+        return jsonify({
+            "success": True,
+            "threads": threads
+        })
+
+    else:
+        return jsonify({"success": False, "error": f"Unknown mode '{mode}'"}), 400
 
 @thread_bp.route('/start_thread', methods=['POST'])
 def start_thread():

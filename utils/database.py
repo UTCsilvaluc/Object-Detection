@@ -831,6 +831,54 @@ def search_objects_by_metadata(identity=None, place=None, date=None):
     finally:
         close_db_connection(conn)
 
+def get_ThreadCategory():
+    conn = get_db_connection()
+    if conn is None:
+        return []  
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT key, label 
+        FROM ThreadCategory;
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        thread_categories = [{"key": row[0], "label": row[1]} for row in rows]
+        cur.close()
+        return thread_categories
+    except Exception as e:
+        print(f"Error fetching thread categories: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
+def get_objectsID_in_image(image_id: int):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT DISTINCT object_id
+        FROM ObjectInstance
+        WHERE image_id = %s AND (version_number 
+        = (
+            SELECT MAX(version_number)
+            FROM ObjectInstance
+            WHERE image_id = %s AND object_id = ObjectInstance.object_id
+        ))
+        """
+        cur.execute(query, (image_id, image_id))
+        rows = cur.fetchall()
+        objects_ids = [row[0] for row in rows]
+        cur.close()
+        return objects_ids
+    except Exception as e:
+        print(f"Error fetching object IDs in image: {e}")
+        return []
+    finally:
+        close_db_connection(conn)
+
 def get_all_full_images():
     conn = get_db_connection()
     if conn is None:

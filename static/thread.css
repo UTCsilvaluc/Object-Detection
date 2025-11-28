@@ -85,6 +85,16 @@ button {
     margin-bottom: 25px;
 }
 
+.thread-content .object-block:hover {
+    background: #f0f6ff;
+    border-color: #bbb;
+    cursor: pointer;
+}
+.object-block.selected {
+    border: 2px solid #2463eb;
+    background: #f4f9ff;
+}
+
 .instance-row {
     display: flex;
     gap: 10px;
@@ -219,7 +229,7 @@ button {
 
 
 /************************************************************
- * THREAD BUTTONS & FOOTER
+ * THREAD BUTTONS & FOOTER (Final version)
  ************************************************************/
 .thread-bottom {
     padding: 25px;
@@ -228,10 +238,37 @@ button {
 }
 
 .thread-actions {
-    margin-top: 10px;
+    margin-top: 20px;
     display: flex;
     justify-content: center;
-    gap: 12px;
+    gap: 15px;  
+}
+
+.thread-generate-btn {
+    padding: 14px 32px;
+    font-size: 17px;
+    font-weight: bold;
+    background: #2563eb;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.thread-generate-btn:hover {
+    background: #1b4fb8;
+}
+
+.thread-show-btn {
+    padding: 12px 26px;
+    font-size: 15px;
+    background: #475569;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: 0.2s;
 }
 
 .thread-action-btn {
@@ -239,22 +276,28 @@ button {
     background: #2563eb;
     color: white;
     border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    transition: 0.2s;
+    font-weight: 600;
 }
 
 .thread-action-btn:hover {
     background: #1b4fb8;
 }
 
+.thread-show-btn:hover {
+    background: #334155;
+}
 .thread-action-btn.secondary {
-    background: #475569;
+    background: #475569;      
+    color: #fff;
 }
 
 .thread-action-btn.secondary:hover {
-    background: #334155;
+    background: #334155;      
 }
-
-
-
 /************************************************************
  * THREAD RESULTS & GENERATIONS
  ************************************************************/
@@ -290,6 +333,17 @@ button {
     border-radius: 10px;
     background: #fafafa;
     border: 1px solid #ddd;
+}
+
+.image-block:hover {
+    background: #f0f6ff;
+    border-color: #bbb;
+    cursor: pointer;
+}
+
+.image-block.selected {
+    border: 2px solid #2463eb;
+    background: #f4f9ff;
 }
 
 .image-header-row {
@@ -374,3 +428,4 @@ button {
     margin-left: 5px;
     color: #555;
 }
+

@@ -9,18 +9,8 @@ import { normalizeValueToPostgreSQL } from './utils.js';
 /************************************************************
  * 2. GLOBAL STATE (Threads, config)
  ************************************************************/
-const MainThreads = {
-    Place: [],
-    Date: [],
-    Identity: []
-};
 
-const SecondaryThreads = {};
-
-window.MainThreads = MainThreads;
-window.SecondaryThreads = SecondaryThreads;
-
-
+let threadCounter = 0;
 
 /************************************************************
  * 3. LISTENERS AND USER INTERACTIONS
@@ -48,7 +38,8 @@ function updateSearchField(select) {
 }
 window.updateSearchField = updateSearchField;
 
-function toggleMetadata(btn) {
+function toggleMetadata(btn, event) {
+    event.stopPropagation();
     const block = btn.nextElementSibling;
 
     if (block.style.display === "none") {
@@ -61,6 +52,47 @@ function toggleMetadata(btn) {
 }
 window.toggleMetadata = toggleMetadata;
 
+function closeObjectsTab(threadId) {
+    const container = document.getElementById(threadId);
+    if (!container) return;
+    container.querySelectorAll(".object-block").forEach(block => block.classList.remove("selected"));
+}
+function closeImagesTab(threadId) {
+    const container = document.getElementById(threadId);
+    if (!container) return;
+    container.querySelectorAll(".image-block").forEach(block => block.classList.remove("selected"));
+}
+
+function toggleSelectBlockImage(threadId) {
+    const container = document.getElementById(threadId);
+    if (!container) return;
+
+    container.querySelectorAll(".image-block").forEach(block => {
+        block.addEventListener("click", (e) => {
+
+            container.querySelectorAll(".image-block")
+                .forEach(b => b.classList.remove("selected"));
+
+            e.currentTarget.classList.add("selected");
+        });
+    });
+}
+
+
+function toggleSelectBlockObject(threadId) {
+    const container = document.getElementById(threadId);
+    if (!container) return;
+
+    container.querySelectorAll(".object-block").forEach(block => {
+        block.addEventListener("click", (e) => {
+
+            container.querySelectorAll(".object-block")
+                .forEach(b => b.classList.remove("selected"));
+
+            e.currentTarget.classList.add("selected");
+        });
+    });
+}
 
 /************************************************************
  * 4. CONFIG : FIELD TYPE BY DATA TYPE
@@ -109,44 +141,36 @@ async function performSearch() {
 window.performSearch = performSearch;
 
 async function selectObject(objectId) {
-    const data = await apiPost("/thread/start_thread", { object_id: objectId });
 
-    if (!data.success) {
-        alert("Failed to select object.");
-        return;
-    }
-
-    document.querySelectorAll(".object-block").forEach(block => {
-        if (parseInt(block.dataset.objectId) !== objectId) {
-            block.remove();
-        }
+    const threadsData = await requestThreadGeneration({
+        mode: "object",
+        object_id: objectId
     });
 
-    const selected = document.querySelector(`.object-block[data-object-id="${objectId}"]`);
-    if (selected) {
-        selected.classList.add("selected-object");
+    if (!threadsData) return;
+
+    const threadId = "thread-" + threadCounter;
+    
+    createThreadContainer(threadId); 
+    renderFullThread(threadId, threadsData);
+
+    threadCounter++;
+}
+window.selectObject = selectObject;
+
+
+async function requestThreadGeneration(payload) {
+    const data = await apiPost("/thread/generate", payload);
+
+    if (!data.success) {
+        alert("Thread generation failed.");
+        return null;
     }
 
-    document.getElementById("search-input").disabled = true;
-
-    const threadId = "thread-" + objectId;
-
-    // Clone du template
-    const template = document.getElementById("thread-__ID__");
-    const newThread = template.cloneNode(true);
-    newThread.classList.remove("hidden");
-    //Replace all __ID__ occurrences
-    newThread.innerHTML = newThread.innerHTML.replace(/__ID__/g, objectId);
-    newThread.id = threadId;
-
-    // Insert dans le wrapper
-    document.getElementById("wrapper-threads").appendChild(newThread);
-
-    // Inject inside tab "objects"
-    renderObjectsTab(threadId, data.threads.objects_same_picture);
-    renderThreadTab(threadId, data.threads.threads);
-    renderImagesTab(threadId, data.threads.images_from_object);
+    return data.threads;
 }
+window.requestThreadGeneration = requestThreadGeneration;
+
 
 window.selectObject = selectObject;
 /************************************************************
@@ -215,7 +239,8 @@ window.displayResultsIn = displayResultsIn;
  */
 function selectTab(threadId, targetTab) {
     // Get the thread container
-    const container = document.getElementById(`thread-${threadId}`);
+    const threadIdFull = `thread-${threadId}`;
+    const container = document.getElementById(threadIdFull);
     if (!container) return;
 
     // Get all tabs
@@ -241,6 +266,8 @@ function selectTab(threadId, targetTab) {
             section.classList.add("hidden");
         }
     });
+    closeObjectsTab(threadIdFull);
+    closeImagesTab(threadIdFull);
 }
 window.selectTab = selectTab;
 
@@ -258,6 +285,7 @@ function renderObjectsTab(threadId, objectsList) {
     objectsList.forEach(obj => {
         const block = document.createElement("div");
         block.className = "object-block";
+        block.dataset.objectId = obj.object_id;
 
         // Build HTML
         let html = `
@@ -305,7 +333,7 @@ function renderObjectsTab(threadId, objectsList) {
 /**
  * Renders the "thread" tab content , fullfiling the select options
  * @param {*} threadId 
- * @param {*} threads : Object (identity, place, date)
+ * @param {*} threads : Object (identity, place, date, ...)
  * @returns 
  */
 function renderThreadTab(threadId, threads) {
@@ -313,27 +341,25 @@ function renderThreadTab(threadId, threads) {
     if (!container) return;
     
     const selectors = container.querySelectorAll(".thread-select");
-    const selectIdentity = selectors[0];
-    const selectPlace = selectors[1];
-    const selectDate = selectors[2];
-    console.log(threads);
     const fillSelect = (select, values) => {
         values.forEach(v => {
-            console.log(select, v);
             const opt = document.createElement("option");
             opt.value = v;
             opt.textContent = v;
             select.appendChild(opt);
         });
     };
-
-    fillSelect(selectIdentity, threads.identity);
-    fillSelect(selectPlace, threads.place);
-    fillSelect(selectDate, threads.date);
-    
+    selectors.forEach(sel => {
+        fillSelect(sel, threads[sel.dataset.key] || []);
+    });    
     container.querySelectorAll(".thread-row input[type='checkbox']").forEach(checkbox => {
         checkbox.addEventListener("change", (e) => {
             const select = e.target.previousElementSibling;
+            if (select.options.length === 0) {
+                e.target.checked = false;
+                alert("No options available for this category.");
+                return;
+            }
             if (e.target.checked) {
                 select.removeAttribute("disabled");
             } else {
@@ -358,6 +384,7 @@ function renderImagesTab(threadId, imagesList) {
     imagesList.forEach(img => {
         const block = document.createElement("div");
         block.className = "image-block";
+        block.dataset.imageId = img.image_id;
 
         let html = `
             <h2>Image #${img.image_id} — ${img.title ?? "No title"}</h2>
@@ -376,7 +403,7 @@ function renderImagesTab(threadId, imagesList) {
                 </div>
             </div>
 
-            <button class="metadata-toggle-btn" onclick="toggleMetadata(this)">
+            <button class="metadata-toggle-btn" onclick="toggleMetadata(this, event)">
                 Hide metadata
             </button>
 
@@ -421,15 +448,36 @@ function renderImagesTab(threadId, imagesList) {
 }
 window.renderImagesTab = renderImagesTab;
 
+function renderFullThread(threadId, threadsData) {
+    renderObjectsTab(threadId, threadsData.objects_same_picture);
+    renderThreadTab(threadId, threadsData.threads);
+    renderImagesTab(threadId, threadsData.images_from_object);
+
+    toggleSelectBlockImage(threadId);
+    toggleSelectBlockObject(threadId);
+}
+window.renderFullThread = renderFullThread;
+
+function createThreadContainer(threadId) {
+    const template = document.getElementById("thread-__ID__");
+    const newThread = template.cloneNode(true);
+    newThread.classList.remove("hidden");
+
+    newThread.innerHTML = newThread.innerHTML.replace(/__ID__/g, threadId.split("-")[1]);
+    newThread.id = threadId;
+
+    document.getElementById("wrapper-threads").appendChild(newThread);
+}
+window.createThreadContainer = createThreadContainer;
+
 
 /************************************************************
- * 7. LOADING INITIAL THREADS
+ * 7. LOADING THREADS
  ************************************************************/
 function loadInitialThreads(threads) {
-    const selIdentity = document.getElementById("select-identity");
-    const selPlace = document.getElementById("select-place");
-    const selDate = document.getElementById("select-date");
-
+    const container = document.getElementById("thread-0");
+    if (!container) return;
+    const selectors = container.querySelectorAll(".thread-select");
     const fillSelect = (select, values) => {
         values.forEach(v => {
             const opt = document.createElement("option");
@@ -439,8 +487,70 @@ function loadInitialThreads(threads) {
         });
     };
 
-    fillSelect(selIdentity, threads.Identity);
-    fillSelect(selPlace, threads.Place);
-    fillSelect(selDate, threads.Date);
+    selectors.forEach(sel => {
+        fillSelect(sel, threads[sel.dataset.key] || []);
+    });
 }
 window.loadInitialThreads = loadInitialThreads;
+
+async function generateThread(threadId) {
+
+    // Si Objet , alors on garde la même logique des objets similaires que le premier objet.
+    //Incrémenter la logique de récuperer les données d'une image dans celle d'un objet. 
+    // Si Image, je parcours chaque objet de l'image et même logique que objet. 
+    // Si Thread, je pars des métadonnées sélectionnées et récupère les similaires. 
+
+    const tab = document.querySelector(`#thread-${threadId} .tab.selected`).dataset.tab;
+    let payload = {};
+
+    if (tab === "objects") {
+        const selected = document.querySelector(`#thread-${threadId} .object-block.selected`);
+        if (!selected) {
+            alert("Select an object first.");
+            return;
+        }
+        payload = {
+            mode: "object",
+            object_id: selected.dataset.objectId
+        };
+    }
+
+    else if (tab === "images") {
+        const selected = document.querySelector(`#thread-${threadId} .image-block.selected`);
+        if (!selected) {
+            alert("Select an image first.");
+            return;
+        }
+        payload = {
+            mode: "image",
+            image_id: selected.dataset.imageId
+        };
+    }
+
+    else if (tab === "thread") {
+        const container = document.getElementById(`thread-${threadId}`);
+        const selecters = container.querySelectorAll(".thread-select");
+        const selectersValue = Array.from(selecters).map(sel => ({
+            key: sel.dataset.key,
+            value: sel.value || null,
+            enabled: !sel.disabled 
+        }));
+        payload = {
+            mode: "thread",
+            threads: selectersValue
+        };
+    }
+
+    const newData = await requestThreadGeneration(payload);
+    if (!newData) return;
+
+    // Create a new thread panel
+    const newThreadId = "thread-" + threadCounter;
+
+    createThreadContainer(newThreadId);
+    renderFullThread(newThreadId, newData);
+
+    threadCounter++;
+}
+window.generateThread = generateThread;
+

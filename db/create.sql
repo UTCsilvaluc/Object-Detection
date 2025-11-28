@@ -99,10 +99,16 @@ CREATE TABLE ObjectInstance (
     PRIMARY KEY (object_id, image_id, version_number)
 );
 
+CREATE TABLE ThreadCategory (
+    key TEXT PRIMARY KEY, -- e.g. 'identity', 'place', 'date'
+    label TEXT NOT NULL
+);
+
 CREATE TABLE MetadataDefinition(
     key TEXT PRIMARY KEY,
     description TEXT,
     type metaType NOT NULL,
+    thread_category TEXT REFERENCES ThreadCategory(key) ON DELETE SET NULL,
     format_pattern TEXT, -- regex pattern for validation 
     enum_values TEXT, -- semicolon-separated values for enum type
     metric VARCHAR(100), -- unit of measurement if applicable

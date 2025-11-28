@@ -59,35 +59,21 @@
         <div class="thread-builder-right">
             <h2>Select Your Threads</h2>
             <p class="thread-subtitle">Choose which dimensions to use to build the story.</p>
-
+            {% for category in thread_categories %}
             <div class="thread-row">
-                <label class="thread-row-label">Identity Thread</label>
-                <select id="select-identity-__ID__" class="thread-select"></select>
-                <input type="checkbox" id="cb-identity-__ID__" checked>
+                <label class="thread-row-label">{{ category.label }} </label>
+                <select id="select-{{ category.key | lower }}-__ID__" class="thread-select" data-key="{{ category.key | lower }}" disabled></select>
+                <input type="checkbox" id="cb-{{ category.key | lower }}-__ID__">
             </div>
-
-            <div class="thread-row">
-                <label class="thread-row-label">Place Thread</label>
-                <select id="select-place-__ID__" class="thread-select" disabled></select>
-                <input type="checkbox" id="cb-place-__ID__">
-            </div>
-
-            <div class="thread-row">
-                <label class="thread-row-label">Date Thread</label>
-                <select id="select-date-__ID__" class="thread-select" disabled></select>
-                <input type="checkbox" id="cb-date-__ID__">
-            </div>
+            {% endfor %}
         </div>
     </div>
     <div class="thread-bottom">
         <div>
             <div class="thread-actions">
-                <button class="thread-action-btn">Build Thread</button>
-                <button class="thread-action-btn">Build Objects</button>
-                <button class="thread-action-btn">Build Images</button>
+                <button class="thread-generate-btn" onclick="generateThread('__ID__')">Generate Thread</button>
                 <button class="thread-action-btn secondary">Show Results</button>
             </div>
-
             <div id="thread-generations" class="generations-container hidden"></div>
             <div id="thread-results" class="thread-results hidden"></div>
         </div>
