@@ -199,11 +199,13 @@ async function createNewMetadataKey(button){
     const type = makerDiv.querySelector('select[name="new_metadata_type"]').value;
     const metric_required = makerDiv.querySelector('input[name="metric_required"]').checked;
     const enum_values = (type === "enum") ? makerDiv.querySelector('input[name="enum_values"]').value.trim() : "";
+    const threadRequired = makerDiv.querySelector('input[name="thread_categories"]').checked;
+    const threadValue = makerDiv.querySelector('select[name="thread_category_select"]').value;
     if (!key || !desc || (metric_required && !metric) || (type === "enum" && !enum_values)) {
         alert("Please fill in all required fields.");
         return;
     }
-    const data = await apiPost('/metadata/add_metadata_key', { key: key, description: desc, metric: metric, type: type, metric_required: metric_required, enum_values: enum_values });
+    const data = await apiPost('/metadata/add_metadata_key', { key: key, description: desc, metric: metric, type: type, metric_required: metric_required, enum_values: enum_values , thread_required: threadRequired, thread_category: threadValue });
     if (!data.success) {
         alert("Failed to create metadata key: " + data.error);
         return;

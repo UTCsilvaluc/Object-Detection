@@ -495,11 +495,6 @@ window.loadInitialThreads = loadInitialThreads;
 
 async function generateThread(threadId) {
 
-    // Si Objet , alors on garde la même logique des objets similaires que le premier objet.
-    //Incrémenter la logique de récuperer les données d'une image dans celle d'un objet. 
-    // Si Image, je parcours chaque objet de l'image et même logique que objet. 
-    // Si Thread, je pars des métadonnées sélectionnées et récupère les similaires. 
-
     const tab = document.querySelector(`#thread-${threadId} .tab.selected`).dataset.tab;
     let payload = {};
 

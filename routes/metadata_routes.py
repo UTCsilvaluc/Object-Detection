@@ -24,14 +24,18 @@ def add_metadata_key():
     type = data.get("type" , "text")
     required = data.get("metric_required" , False)
     enum_values = data.get("enum_values", "") if type == "enum" else None
+    thread_required = data.get("thread_required", False)
+    thread_category = data.get("thread_category", "")
     if not required:
         metric = None
+    if not thread_required:
+        thread_category = None
     if not key:
         return {"success": False, "error": "Metadata key is required."}, 400
     if (check_if_metadata_key_exist(key=key)):
         return {"success":False , "error": "Metadata key already exists."}, 409
     regex = return_regex_by_name(type , enum_values=enum_values)
-    req = create_new_metadata_key(key , desc , metric=metric , type=type , enum_values=enum_values , format_pattern=regex)
+    req = create_new_metadata_key(key , desc , metric=metric , type=type , enum_values=enum_values , format_pattern=regex, thread_category=thread_category)
     if req:
         return {"success":True , "regex": regex} , 201
     return {"success":False , "error": "insertion failed."} , 500

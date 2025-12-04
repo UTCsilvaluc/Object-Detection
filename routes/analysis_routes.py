@@ -30,7 +30,8 @@ from utils.database import (
     get_all_classes,
     get_all_metadata_keys,
     check_if_title_exist,
-    get_all_metadatas_values
+    get_all_metadatas_values,
+    get_ThreadCategory
 )
 
 def run_detection_pipeline(img_path, img_cv, force_sam=False, sam_params=None, tiled=False):
@@ -251,6 +252,7 @@ def upload():
     class_name = get_all_classes()
     metadata_keys = get_all_metadata_keys()
     metadatas_values = get_all_metadatas_values()
+    thread_categories = get_ThreadCategory()
     os.remove(img_path)
     return render_template(
         "upload.html",
@@ -263,5 +265,6 @@ def upload():
         original_image_path=original_rel_path,
         class_name=class_name,
         metadata_keys=metadata_keys,
-        metadatas_values=metadatas_values
+        metadatas_values=metadatas_values,
+        thread_categories=thread_categories,
     )

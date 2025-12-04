@@ -382,7 +382,7 @@ def create_new_class(name, desc):
     finally:
         close_db_connection(conn)
 
-def create_new_metadata_key(key, desc, metric=None, type=None, enum_values=None , format_pattern=None):
+def create_new_metadata_key(key, desc, metric=None, type=None, enum_values=None , format_pattern=None, thread_category=None):
     """
     Create a new metadata key record in the MetadataDefinition table.
     :param key: str
@@ -399,10 +399,10 @@ def create_new_metadata_key(key, desc, metric=None, type=None, enum_values=None 
     try:
         cur = conn.cursor()
         insert_query = """
-        INSERT INTO MetadataDefinition (key, description, type, format_pattern, enum_values, metric)
-        VALUES (%s, %s, %s, %s, %s, %s);
+        INSERT INTO MetadataDefinition (key, description, type, format_pattern, enum_values, metric, thread_category)
+        VALUES (%s, %s, %s, %s, %s, %s, %s);
         """
-        cur.execute(insert_query, (key, desc, type, format_pattern, enum_values, metric))
+        cur.execute(insert_query, (key, desc, type, format_pattern, enum_values, metric, thread_category))
         conn.commit()
         cur.close()
         return True

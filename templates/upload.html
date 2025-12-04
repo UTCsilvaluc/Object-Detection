@@ -350,6 +350,18 @@
                                         <label for="new_metadata_metric_required">Is a metric required?</label>
                                         <input type="checkbox" name="metric_required" id="new_metadata_metric_required" onchange="document.getElementById('new_metadata_metric').hidden = !this.checked ; document.getElementById('new_metadata_metric').required = this.checked;">
                                     </span>
+                                    <span class="metric_required_box">
+                                        <label for="thread_categories">Enable Thread Visualization?</label>
+                                        <input type="checkbox" name="thread_categories" id="thread_categories" onchange="document.getElementById('thread_list').style.display = this.checked ? 'block' : 'none'; document.getElementById('thread_category_select').required = this.checked;">
+                                    </span>
+                                    <div class="thread_list" style="display: none;" id="thread_list">
+                                        <label for="thread_category_select">Select Thread Category:</label>
+                                        <select name="thread_category_select" id="thread_category_select">
+                                            {% for category in thread_categories %}
+                                                <option value="{{ category.key }}">{{ category.label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
                                     <input type="text" name="enum_values" id="enum_values" placeholder="Enter enum values separated by ;" style="display:none;">
                                     <button type="button" value="Create this new metadata" onclick="createNewMetadataKey(this)">Create this new metadata key</button>
                                 </div>
