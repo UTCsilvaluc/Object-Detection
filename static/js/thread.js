@@ -470,7 +470,13 @@ function injectImageContextIntoThread(threadsData) {
 window.injectImageContextIntoThread = injectImageContextIntoThread;
 
 function renderFullThread(threadId, threadsData) {
-    renderObjectsTab(threadId, threadsData.objects_same_picture);
+
+    const allObjects = [
+        ...(threadsData.objects_same_picture || []),
+        ...(threadsData.objects_same_metadata || [])
+    ];
+
+    renderObjectsTab(threadId, allObjects);
 
     const threads = injectImageContextIntoThread(threadsData);
 
@@ -480,6 +486,7 @@ function renderFullThread(threadId, threadsData) {
     toggleSelectBlockImage(threadId);
     toggleSelectBlockObject(threadId);
 }
+
 window.renderFullThread = renderFullThread;
 
 function createThreadContainer(threadId) {

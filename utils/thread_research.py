@@ -92,7 +92,12 @@ def merge_thread_result(base: dict, new: dict, thread_def: dict):
 
 def build_thread_from_objectID(object_id: int):
     """
-    Version optimisée et corrigée : 1 seule requête SQL pour tout récupérer.
+    Builds threads from a given object ID by extracting related metadata and objects.
+    Aims to create three primary tabs: (Objects , Images , Threads)
+    Objects tab: all objects related to the target object (appear in same pictures).
+    Images tab: all images where the target object appears.
+    Threads tab: three threads based on identity, place, and date.
+    Returns a dictionary with threads categorized by identity, place, and date.
     """
     conn = get_db_connection()
     if conn is None:
@@ -215,15 +220,77 @@ def build_thread_from_objectID(object_id: int):
             FROM target_images ti
             JOIN Image img ON img.image_id = ti.image_id
             ORDER BY img.image_id DESC
+        ),
+
+        related_metadata_objects AS (
+            SELECT DISTINCT md2.object_id
+            FROM Metadata md1
+            JOIN Metadata md2 
+                ON md1.key = md2.key
+            AND md1.object_id = %s
+            AND md2.object_id != %s
+            AND (
+                    unaccent(LOWER(md2.value)) LIKE unaccent(LOWER(md1.value))
+                    OR
+                    unaccent(LOWER(md1.value)) LIKE unaccent(LOWER(md2.value))
+            )
+            AND md2.version_number = (
+                SELECT MAX(md3.version_number)
+                FROM Metadata md3
+                WHERE md3.object_id = md2.object_id
+                  AND md3.image_id = md2.image_id
+            )
+        ),
+        
+        related_objects_from_metadata AS (
+            SELECT 
+                rmo.object_id,
+                obj.name,
+
+                COALESCE(
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'image_id', li.image_id,
+                            'version_number', li.version_number,
+                            'cropped_path', li.cropped_file_path
+                        )
+                    ) FILTER (WHERE li.image_id IS NOT NULL),
+                '[]'::json) AS instances,
+
+                COALESCE(
+                    json_object_agg(
+                        md.key, md.values_arr
+                    ) FILTER (WHERE md.key IS NOT NULL),
+                '{}'::json) AS metadata
+
+            FROM related_metadata_objects rmo
+            JOIN Object obj ON obj.object_id = rmo.object_id
+
+            LEFT JOIN LATERAL (
+                SELECT DISTINCT ON (oi_sub.image_id)
+                    oi_sub.image_id, oi_sub.version_number, oi_sub.cropped_file_path
+                FROM ObjectInstance oi_sub
+                WHERE oi_sub.object_id = rmo.object_id
+                ORDER BY oi_sub.image_id, oi_sub.version_number DESC
+            ) li ON TRUE
+
+            LEFT JOIN LATERAL (
+                SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
+                FROM Metadata m
+                WHERE m.object_id = rmo.object_id
+                GROUP BY m.key
+            ) md ON TRUE
+
+            GROUP BY rmo.object_id, obj.name
         )
         SELECT json_build_object(
             'threads', COALESCE((SELECT data FROM thread_data), '{}'::json),
             'objects_same_picture', COALESCE((SELECT json_agg(row_to_json(rob)) FROM related_objects_built rob), '[]'::json),
+            'objects_same_metadata', COALESCE((SELECT json_agg(row_to_json(rom)) FROM related_objects_from_metadata rom), '[]'::json),
             'images_from_object', COALESCE((SELECT json_agg(row_to_json(imb)) FROM images_built imb), '[]'::json)
         );
         """
-
-        cur.execute(QUERY, (object_id, object_id, object_id))
+        cur.execute(QUERY, (object_id, object_id, object_id, object_id, object_id))
         row = cur.fetchone()
         
         if row and row[0]:
