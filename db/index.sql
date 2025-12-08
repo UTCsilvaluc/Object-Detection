@@ -4,6 +4,10 @@ WITH (lists = 100);
 
 -----
 
+CREATE INDEX ON Image (LOWER(location_name));
+CREATE INDEX ON Image ((event_date::date));
+CREATE INDEX ON Image ((capture_date::date));
+
 CREATE INDEX IF NOT EXISTS idx_versionedimage_latest
 ON VersionedImage(image_id, version_number DESC);
 

@@ -676,31 +676,41 @@ def get_all_images():
     finally:
         close_db_connection(conn)
 
-def get_all_full_objets_from_value(value: str) -> list: 
+def get_all_full_objects_from_value(value: str) -> list: 
     conn = get_db_connection()
     if conn is None:
         return []
     try:
         cursor = conn.cursor()
+
         query = """
-        SELECT OBJ.object_id , 
-                COALESCE(
-                    JSON_AGG(
-                        JSON_BUILD_OBJECT(
-                            'image_id', OI.image_id,
-                            'version_number', OI.version_number,
-                            'cropped_path', OI.cropped_file_path
-                        ) ORDER BY OI.image_id
-                    ) FILTER (WHERE OI.image_id IS NOT NULL), '[]'
-                ) AS instances,
-                COALESCE(
-                    json_object_agg(
-                        MD.key, MD.values
-                    ) FILTER (WHERE MD.key IS NOT NULL), '{}'::json
-                ) AS metadata
+        SELECT 
+            OBJ.object_id,
+            -- Instances
+            COALESCE(
+                JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'image_id', OI.image_id,
+                        'version_number', OI.version_number,
+                        'cropped_path', OI.cropped_file_path
+                    ) ORDER BY OI.image_id
+                ) FILTER (WHERE OI.image_id IS NOT NULL),
+                '[]'
+            ) AS instances,
+
+            -- Metadata
+            COALESCE(
+                json_object_agg(
+                    MD.key, MD.values
+                ) FILTER (WHERE MD.key IS NOT NULL),
+                '{}'::json
+            ) AS metadata
+
         FROM Object OBJ
+
+        -- Latest version instances
         LEFT JOIN LATERAL (
-            SELECT OI.object_id, OI.image_id , OI.cropped_file_path , OI.version_number
+            SELECT OI.object_id, OI.image_id, OI.cropped_file_path, OI.version_number
             FROM ObjectInstance OI
             LEFT JOIN LATERAL (
                 SELECT * FROM VersionedImage VI
@@ -710,31 +720,63 @@ def get_all_full_objets_from_value(value: str) -> list:
             ) VI ON TRUE
             WHERE OI.object_id = OBJ.object_id AND OI.version_number = VI.version_number
         ) OI ON TRUE
+
+        -- Group metadata
         LEFT JOIN LATERAL (
-            SELECT md.key AS key, json_agg(DISTINCT md.value) AS values
+            SELECT md.key, json_agg(DISTINCT md.value) AS values
             FROM Metadata md
             WHERE md.object_id = OBJ.object_id 
             GROUP BY md.key
         ) MD ON TRUE
 
         WHERE EXISTS (
-            SELECT 1 
+
+            -- Metadata match
+            SELECT 1
             FROM Metadata md2
-            WHERE md2.object_id = OBJ.object_id AND LOWER(md2.value) ILIKE LOWER(%s)
+            WHERE md2.object_id = OBJ.object_id
+            AND (
+                   unaccent(lower(md2.value)) LIKE unaccent(lower(%s))
+                OR unaccent(lower(%s)) LIKE unaccent(lower(md2.value))
+            )
+
+            UNION
+
+            -- Image match (location_name)
+            SELECT 1
+            FROM ObjectInstance oi2
+            JOIN Image im ON im.image_id = oi2.image_id
+            WHERE oi2.object_id = OBJ.object_id
+            AND im.location_name IS NOT NULL
+            AND (
+                   unaccent(lower(im.location_name)) LIKE unaccent(lower(%s))
+                OR unaccent(lower(%s)) LIKE unaccent(lower(im.location_name))
+            )
         )
+
         GROUP BY OBJ.object_id;
         """
-        cursor.execute(query, (f"%{value}%",))
+
+        params = [
+            f"%{value}%", f"%{value}%",
+            f"%{value}%", f"%{value}%"
+        ]
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
-        objects = []
-        for row in rows:
-            objects.append({
+
+        objects = [
+            {
                 "object_id": row[0],
                 "instances": row[1],
                 "metadata": row[2]
-            })
+            }
+            for row in rows
+        ]
+
         cursor.close()
         return objects
+
     except Exception as e:
         print(f"Error fetching objects by value: {e}")
         return []

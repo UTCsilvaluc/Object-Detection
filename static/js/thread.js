@@ -15,6 +15,14 @@ let threadCounter = 0;
 /************************************************************
  * 3. LISTENERS AND USER INTERACTIONS
  ************************************************************/
+// Merge unique values into a threads map (e.g., add places/dates)
+function mergeThreadValues(threads, key, values) {
+    if (!threads[key]) threads[key] = [];
+    values.forEach((val) => {
+        if (val === null || val === undefined || val === "") return;
+        if (!threads[key].includes(val)) threads[key].push(val);
+    });
+}
 
 // Pressing Enter triggers the search
 function handleTyping(e) {
@@ -448,9 +456,25 @@ function renderImagesTab(threadId, imagesList) {
 }
 window.renderImagesTab = renderImagesTab;
 
+function injectImageContextIntoThread(threadsData) {
+    const threads = Object.fromEntries(
+        Object.entries(threadsData.threads || {}).map(([k, v]) => [k, Array.isArray(v) ? [...v] : []])
+    );
+    const images = threadsData.images_from_object || [];
+    images.forEach((img) => {
+        mergeThreadValues(threads, "place", [img.location_name]);
+        mergeThreadValues(threads, "date", [img.event_date]);
+    });
+    return threads;
+}
+window.injectImageContextIntoThread = injectImageContextIntoThread;
+
 function renderFullThread(threadId, threadsData) {
     renderObjectsTab(threadId, threadsData.objects_same_picture);
-    renderThreadTab(threadId, threadsData.threads);
+
+    const threads = injectImageContextIntoThread(threadsData);
+
+    renderThreadTab(threadId, threads);
     renderImagesTab(threadId, threadsData.images_from_object);
 
     toggleSelectBlockImage(threadId);
@@ -548,4 +572,3 @@ async function generateThread(threadId) {
     threadCounter++;
 }
 window.generateThread = generateThread;
-

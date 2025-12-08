@@ -1,7 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS unaccent;
 -- ==============================================
 -- 1. Drop existing tables (for dev convenience)
 -- ==============================================
+
 DROP TABLE IF EXISTS Metadata CASCADE;
 DROP TABLE IF EXISTS ObjectInstance CASCADE;
 DROP TABLE IF EXISTS Object CASCADE;
@@ -19,6 +21,7 @@ DROP TABLE IF EXISTS LinkGeometry CASCADE;
 DROP TABLE IF EXISTS LinkMetadata CASCADE;
 DROP TABLE IF EXISTS Link CASCADE;
 DROP TABLE IF EXISTS LinkType CASCADE;
+DROP TABLE IF EXISTS ThreadCategory CASCADE;
 
 -- ==============================================
 -- 2. Enum Types

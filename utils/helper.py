@@ -10,7 +10,6 @@ import io
 from PIL import Image , ImageOps
 import regex
 import numpy as np
-
 from models.object_embedding import generate_embedding_from_crop
 from utils.database import get_instance_object_by_object_id , find_similar_objects
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder

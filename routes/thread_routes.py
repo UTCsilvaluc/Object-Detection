@@ -3,8 +3,7 @@ from utils.database import (
     get_all_images,
     get_all_full_points,
     get_all_metadata_keys,
-    get_all_full_objets_from_value, 
-    search_objects_by_metadata,
+    get_all_full_objects_from_value, 
     get_ThreadCategory
 )
 
@@ -86,23 +85,7 @@ def start_thread():
 def thread_search_values():
     data = request.get_json()
     query = data.get("query", "")
-    objects = get_all_full_objets_from_value(query)
-    return jsonify({
-        "status": True,
-        "success": True,
-        "objects": objects
-    })
-
-@thread_bp.route('/build_objects', methods=['POST'])
-def build_objects():
-    data = request.get_json()
-
-    identity = data.get("identity")
-    place = data.get("place")
-    date = data.get("date")
-
-    objects = search_objects_by_metadata(identity, place, date)
-    
+    objects = get_all_full_objects_from_value(query)
     return jsonify({
         "status": True,
         "success": True,

@@ -270,36 +270,62 @@ def build_thread_from_metadata(selectersValue: list[dict]):
 
 def get_objects_from_thread(selectersValue: list[dict]):
     """
-    Searches for objects matching the provided thread metadata.
-    Each entry in selectersValue must be:
-        { key: 'identity', value: 'Sakura', enabled: True }
-    Returns a list of object_ids matching AT LEAST ONE enabled condition.
+    Retrieves object IDs that match the provided thread metadata selectors.
+    Special cases:
+    - place: matches either object metadata or image.location_name (case-insensitive)
+    - date: matches object metadata or image.event_date/capture_date (date-only comparison)
     """
-
     conn = get_db_connection()
     if conn is None:
         return []
-
     try:
         cur = conn.cursor()
-
         conditions = []
         params = []
-
         for thread in selectersValue:
             if not thread.get("enabled"):
                 continue
-
             val = thread.get("value")
             category = thread.get("key")
-
-            if val is None or val == "" or category is None:
+            if not val or not category:
                 continue
+            if category == "place":
+                # Match place via object metadata OR image location_name
+                conditions.append("""
+                (
+                   (md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s)
+                    AND md.value = %s)
+                   OR
+                   (im.location_name IS NOT NULL AND 
+                        unaccent(LOWER(im.location_name)) LIKE unaccent(LOWER(%s)) 
+                                  OR
+                        unaccent(LOWER(%s)) LIKE unaccent(LOWER(im.location_name))
+                        )
+                )
+                """)
+                params.extend([category, val, val, val])
+            elif category == "date":
+                # Match date via object metadata OR image event/capture dates (date-only)
+                conditions.append("""
+                (
+                   (md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s)
+                    AND md.value::date = %s::date)
+                   OR
+                   (im.event_date IS NOT NULL AND im.event_date::date = %s::date)
+                   OR
+                   (im.capture_date IS NOT NULL AND im.capture_date::date = %s::date)
+                )
+                """)
+                params.extend([category, val, val, val])
 
-            conditions.append(
-                "(md.value = %s AND md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s))"
-            )
-            params.extend([val, category])
+            else:
+                conditions.append("""
+                (
+                   md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s)
+                   AND md.value = %s
+                )
+                """)
+                params.extend([category, val])
 
         if not conditions:
             return []
@@ -307,18 +333,21 @@ def get_objects_from_thread(selectersValue: list[dict]):
         where_clause = " OR ".join(conditions)
 
         QUERY = f"""
-        SELECT DISTINCT md.object_id
-        FROM Metadata md
+        SELECT DISTINCT oi.object_id
+        FROM ObjectInstance oi
+        JOIN Image im
+          ON im.image_id = oi.image_id
+        LEFT JOIN Metadata md
+          ON md.object_id = oi.object_id
+         AND md.version_number = oi.version_number
+         AND md.image_id = oi.image_id
         WHERE {where_clause}
         """
-
         cur.execute(QUERY, tuple(params))
         rows = cur.fetchall()
         return [row[0] for row in rows]
-
     except Exception as e:
         print("Error while retrieving objects from thread metadata:", e)
         return []
-
     finally:
         close_db_connection(conn)
