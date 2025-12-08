@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Select Thread Object</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='thread.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='leaflet/leaflet.css') }}">
+    <script src="{{ url_for('static', filename='leaflet/leaflet.js') }}"></script>
 </head>
 
 <body>
@@ -47,12 +49,22 @@
     <div class="tabs-container">
         <div class="tab selected" data-tab="objects" onclick="selectTab('__ID__','objects')">Objects</div>
         <div class="tab" data-tab="images" onclick="selectTab('__ID__','images')">Images</div>
+        <div class="tab" data-tab="map" onclick="selectTab('__ID__','map')">Map</div>
         <div class="tab" data-tab="thread" onclick="selectTab('__ID__','thread')">Threads</div>
     </div>
 
     <!-- CONTENT SECTIONS -->
     <div class="thread-content" data-section="objects">…</div>
     <div class="thread-content hidden" data-section="images"></div>
+    <div class="thread-content hidden" data-section="map">
+        <div class="map-panel">
+            <div id="map-__ID__" class="thread-map"></div>
+            <div class="map-side">
+                <h3>Moves over time</h3>
+                <div class="map-image-list"></div>
+            </div>
+        </div>
+    </div>
     <div class="thread-content hidden" data-section="thread">
 
         <!-- THREAD BUILDER RIGHT -->
@@ -72,7 +84,7 @@
         <div>
             <div class="thread-actions">
                 <button class="thread-generate-btn" onclick="generateThread('__ID__')">Generate Thread</button>
-                <button class="thread-action-btn secondary">Show Results</button>
+                <button class="thread-action-btn secondary" onclick="showResults('__ID__')">Show Results</button>
             </div>
             <div id="thread-generations" class="generations-container hidden"></div>
             <div id="thread-results" class="thread-results hidden"></div>

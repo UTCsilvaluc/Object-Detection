@@ -184,6 +184,53 @@ button {
     display: none;
 }
 
+.map-panel {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    min-height: 420px;
+}
+
+.thread-map {
+    width: 100%;
+    min-height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e2e2e2;
+}
+
+.map-side {
+    background: #f9fbff;
+    border: 1px solid #e2e2e2;
+    border-radius: 12px;
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 420px;
+}
+
+.map-image-card {
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #fff;
+}
+
+.map-image-card strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.map-image-card small {
+    color: #666;
+}
+
+.map-image-card .thumb {
+    width: 100%;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    object-fit: cover;
+}
 
 
 /************************************************************
@@ -254,6 +301,15 @@ button {
     border: none;
     cursor: pointer;
     transition: 0.2s;
+}
+
+.thread-generate-btn.disabled-btn {
+    background: #a0a0a0;
+    cursor: not-allowed;
+}
+
+.thread-generate-btn.disabled-btn:hover {
+    background: #a0a0a0;
 }
 
 .thread-generate-btn:hover {
@@ -428,4 +484,3 @@ button {
     margin-left: 5px;
     color: #555;
 }
-

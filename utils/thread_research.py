@@ -1,4 +1,5 @@
 from utils.database import get_db_connection , close_db_connection , get_objectsID_in_image
+from psycopg2.extras import RealDictCursor
 
 def get_existing_threads():
     conn = get_db_connection()
@@ -108,98 +109,194 @@ def build_thread_from_objectID(object_id: int):
         
         QUERY = """
         WITH 
-        -- Identify target images containing the object 
-        target_images AS (
-            SELECT DISTINCT image_id 
-            FROM ObjectInstance 
-            WHERE object_id = %s
-        ),
 
-        -- Thread data extraction : { "identity": [...], "place": [...], "date": [...] , ...}
-        thread_data_source AS (
-            SELECT 
-                md_def.thread_category,
-                json_agg(DISTINCT md.value) as values
-            FROM Metadata md
-            JOIN MetadataDefinition md_def ON md.key = md_def.key
-            WHERE md.object_id = %s
-            GROUP BY md_def.thread_category
-        ),
-        -- Aggregate thread data into a single JSON object : 
-        thread_data AS (
-            SELECT 
-                json_object_agg(thread_category, values) as data
-            FROM thread_data_source where thread_category IS NOT NULL
-        ),
+            -- 1. Target images containing selected object
+            target_images AS (
+                SELECT DISTINCT image_id
+                FROM ObjectInstance
+                WHERE object_id = %s
+            ),
 
-        -- Objects appearing in the same pictures as the target object
-        related_objects_list AS (
-            SELECT DISTINCT oi.object_id
-            FROM ObjectInstance oi
-            JOIN target_images ti ON ti.image_id = oi.image_id
-            WHERE oi.object_id != %s
-        ),
-        
-        -- Objects built with instances and metadata
-        related_objects_built AS (
-            SELECT 
-                robj.object_id,
-                obj_table.name,
-                COALESCE(
-                    JSON_AGG(
-                        JSON_BUILD_OBJECT(
-                            'image_id', li.image_id, 
-                            'version_number', li.version_number, 
-                            'cropped_path', li.cropped_file_path
+            -- 2. Thread data
+            thread_data_source AS (
+                SELECT 
+                    md_def.thread_category,
+                    json_agg(DISTINCT md.value) AS values
+                FROM Metadata md
+                JOIN MetadataDefinition md_def ON md.key = md_def.key
+                WHERE md.object_id = %s
+                GROUP BY md_def.thread_category
+            ),
+            thread_data AS (
+                SELECT COALESCE(json_object_agg(thread_category, values), '{}'::json) AS data
+                FROM thread_data_source
+                WHERE thread_category IS NOT NULL
+            ),
+
+            -- 3. Objects appearing on same images
+            related_objects_list AS (
+                SELECT DISTINCT oi.object_id
+                FROM ObjectInstance oi
+                JOIN target_images ti ON ti.image_id = oi.image_id
+                WHERE oi.object_id != %s
+            ),
+
+            -- 4. IMAGE CO-OCCURRENCE: list images where both objects appear
+            co_occurrence_images AS (
+                SELECT 
+                    oi2.object_id,
+                    json_agg(DISTINCT oi1.image_id) AS images
+                FROM ObjectInstance oi1
+                JOIN ObjectInstance oi2 
+                    ON oi1.image_id = oi2.image_id
+                WHERE oi1.object_id = %s
+                AND oi2.object_id != %s
+                GROUP BY oi2.object_id
+            ),
+
+            -- 5. METADATA COMPARISON (raw) between target object and each other object
+            related_metadata_raw AS (
+                SELECT 
+                    md2.object_id AS related_id,
+                    md1.key AS key,
+                    md1.value AS value1,
+                    md2.value AS value2,
+                    md1.image_id AS image1,
+                    md2.image_id AS image2
+                FROM Metadata md1
+                JOIN Metadata md2 ON md1.key = md2.key
+                WHERE md1.object_id = %s
+                AND md2.object_id != %s
+                AND (
+                        unaccent(LOWER(md2.value)) LIKE unaccent(LOWER(md1.value))
+                    OR unaccent(LOWER(md1.value)) LIKE unaccent(LOWER(md2.value))
+                )
+                AND md2.version_number = (
+                        SELECT MAX(md3.version_number)
+                        FROM Metadata md3
+                        WHERE md3.object_id = md2.object_id
+                        AND md3.image_id = md2.image_id
+                )
+            ),
+
+            -- 6. Aggregate metadata similarities per related object
+            related_metadata_objects AS (
+                SELECT 
+                    related_id AS object_id,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'key', key,
+                                'value1', value1,
+                                'value2', value2,
+                                'image1', image1,
+                                'image2', image2
+                            )
+                        ), '[]'::json
+                    ) AS shared_metadata
+                FROM related_metadata_raw
+                GROUP BY related_id
+            ),
+
+            -- 7. Build object blocks for objects related by metadata
+            related_objects_from_metadata AS (
+                SELECT 
+                    rmo.object_id,
+                    obj.name,
+
+                    -- Instances (latest version per image)
+                    
+                    COALESCE(
+                    (
+                        SELECT json_agg(
+                            json_build_object(
+                                'image_id', oi.image_id,
+                                'version_number', oi.version_number,
+                                'cropped_path', oi.cropped_file_path
+                            )
                         )
-                    ) FILTER (WHERE li.image_id IS NOT NULL), 
-                '[]'::json) AS instances,
+                        FROM (
+                            SELECT DISTINCT ON (oi_sub.image_id)
+                                oi_sub.image_id,
+                                oi_sub.version_number,
+                                oi_sub.cropped_file_path
+                            FROM ObjectInstance oi_sub
+                            WHERE oi_sub.object_id = rmo.object_id
+                            ORDER BY oi_sub.image_id, oi_sub.version_number DESC
+                        ) oi
+                    ), '[]'::json) AS instances,
 
-                COALESCE(
-                    json_object_agg(
-                        md.key, md.values_arr
-                    ) FILTER (WHERE md.key IS NOT NULL), 
-                '{}'::json) AS metadata
-                
+                    -- Metadata full
+                    COALESCE(
+                    (
+                        SELECT json_object_agg(md.key, md.values_arr)
+                        FROM (
+                            SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
+                            FROM Metadata m
+                            WHERE m.object_id = rmo.object_id
+                            GROUP BY m.key
+                        ) md
+                    ), '[]'::json) AS metadata,
 
-            FROM related_objects_list robj
-            JOIN Object obj_table ON obj_table.object_id = robj.object_id
+                    -- Shared metadata with target
+                    COALESCE(rmo2.shared_metadata, '[]'::json) AS shared_metadata
 
-            LEFT JOIN LATERAL (
-                SELECT DISTINCT ON (oi_sub.image_id) 
-                    oi_sub.image_id, oi_sub.version_number, oi_sub.cropped_file_path
-                FROM ObjectInstance oi_sub
-                WHERE oi_sub.object_id = robj.object_id 
-                ORDER BY oi_sub.image_id, oi_sub.version_number DESC
-            ) li ON TRUE 
+                FROM related_metadata_objects rmo
+                JOIN Object obj ON obj.object_id = rmo.object_id
+                LEFT JOIN related_metadata_objects rmo2 ON rmo2.object_id = rmo.object_id
+            ),
 
-            LEFT JOIN LATERAL (
-                SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
-                FROM Metadata m
-                WHERE m.object_id = robj.object_id 
-                GROUP BY m.key
-            ) md ON TRUE 
-            GROUP BY robj.object_id, obj_table.name
-        ),
+            -- 8. Build object blocks for co-occurrence objects
+            related_objects_built AS (
+                SELECT 
+                    robj.object_id,
+                    obj_table.name,
+                    -- Instances (latest version per image)
+                    COALESCE(
+                    (
+                        SELECT json_agg(
+                            json_build_object(
+                                'image_id', oi.image_id,
+                                'version_number', oi.version_number,
+                                'cropped_path', oi.cropped_file_path
+                            )
+                        )
+                        FROM (
+                            SELECT DISTINCT ON (oi_sub.image_id)
+                                oi_sub.image_id,
+                                oi_sub.version_number,
+                                oi_sub.cropped_file_path
+                            FROM ObjectInstance oi_sub
+                            WHERE oi_sub.object_id = robj.object_id
+                            ORDER BY oi_sub.image_id, oi_sub.version_number DESC
+                        ) oi
+                    ), '[]'::json) AS instances,
 
-        -- Image from the target object, with ALL metadata from ALL objects in the image
-        images_built AS (
-            SELECT 
-                img.image_id,
-                img.file_path,
-                img.title,
-                img.description,
-                img.capture_date,
-                img.event_date,
-                img.location_name,
-                img.latitude,
-                img.longitude,
-                img.upload_date,
-                img.source_type,
-                img.type,
-                
-                -- Metadata flatten (Format: [{ "object_id": 1, "key": "K", "value": "V" }])
-                COALESCE(
+                    -- Metadata full
+                    COALESCE (
+                    (
+                        SELECT json_object_agg(md.key, md.values_arr)
+                        FROM (
+                            SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
+                            FROM Metadata m
+                            WHERE m.object_id = robj.object_id
+                            GROUP BY m.key
+                        ) md
+                    ), '[]'::json) AS metadata,
+
+                    -- NEW: images of co-occurrence
+                    COALESCE(coi.images, '[]'::json) AS co_occurrence_images
+
+                FROM related_objects_list robj
+                JOIN Object obj_table ON obj_table.object_id = robj.object_id
+                LEFT JOIN co_occurrence_images coi ON coi.object_id = robj.object_id
+            ),
+
+            -- 9. Build images tab
+            images_built AS (
+                SELECT 
+                    img.*,
+                    COALESCE(
                     (
                         SELECT json_agg(
                             json_build_object(
@@ -210,95 +307,34 @@ def build_thread_from_objectID(object_id: int):
                         )
                         FROM ObjectInstance oi
                         JOIN Metadata md 
-                            ON md.object_id = oi.object_id 
-                            AND md.image_id = oi.image_id 
-                            AND md.version_number = oi.version_number
+                            ON md.object_id = oi.object_id
+                        AND md.image_id = oi.image_id
+                        AND md.version_number = oi.version_number
                         WHERE oi.image_id = img.image_id
-                    ), '[]'::json
-                ) as metadata
-
-            FROM target_images ti
-            JOIN Image img ON img.image_id = ti.image_id
-            ORDER BY img.image_id DESC
-        ),
-
-        related_metadata_objects AS (
-            SELECT DISTINCT md2.object_id
-            FROM Metadata md1
-            JOIN Metadata md2 
-                ON md1.key = md2.key
-            AND md1.object_id = %s
-            AND md2.object_id != %s
-            AND (
-                    unaccent(LOWER(md2.value)) LIKE unaccent(LOWER(md1.value))
-                    OR
-                    unaccent(LOWER(md1.value)) LIKE unaccent(LOWER(md2.value))
+                    ), '[]'::json) AS metadata
+                FROM target_images ti
+                JOIN Image img ON img.image_id = ti.image_id
             )
-            AND md2.version_number = (
-                SELECT MAX(md3.version_number)
-                FROM Metadata md3
-                WHERE md3.object_id = md2.object_id
-                  AND md3.image_id = md2.image_id
-            )
-        ),
-        
-        related_objects_from_metadata AS (
-            SELECT 
-                rmo.object_id,
-                obj.name,
 
-                COALESCE(
-                    JSON_AGG(
-                        JSON_BUILD_OBJECT(
-                            'image_id', li.image_id,
-                            'version_number', li.version_number,
-                            'cropped_path', li.cropped_file_path
-                        )
-                    ) FILTER (WHERE li.image_id IS NOT NULL),
-                '[]'::json) AS instances,
+            -- FINAL
+            SELECT json_build_object(
+                'threads', (SELECT data FROM thread_data),
+                'objects_same_picture', (SELECT json_agg(row_to_json(rob)) FROM related_objects_built rob),
+                'objects_same_metadata', (SELECT json_agg(row_to_json(rom)) FROM related_objects_from_metadata rom),
+                'images_from_object', (SELECT json_agg(row_to_json(imb)) FROM images_built imb)
+            );
 
-                COALESCE(
-                    json_object_agg(
-                        md.key, md.values_arr
-                    ) FILTER (WHERE md.key IS NOT NULL),
-                '{}'::json) AS metadata
-
-            FROM related_metadata_objects rmo
-            JOIN Object obj ON obj.object_id = rmo.object_id
-
-            LEFT JOIN LATERAL (
-                SELECT DISTINCT ON (oi_sub.image_id)
-                    oi_sub.image_id, oi_sub.version_number, oi_sub.cropped_file_path
-                FROM ObjectInstance oi_sub
-                WHERE oi_sub.object_id = rmo.object_id
-                ORDER BY oi_sub.image_id, oi_sub.version_number DESC
-            ) li ON TRUE
-
-            LEFT JOIN LATERAL (
-                SELECT m.key, json_agg(DISTINCT m.value) AS values_arr
-                FROM Metadata m
-                WHERE m.object_id = rmo.object_id
-                GROUP BY m.key
-            ) md ON TRUE
-
-            GROUP BY rmo.object_id, obj.name
-        )
-        SELECT json_build_object(
-            'threads', COALESCE((SELECT data FROM thread_data), '{}'::json),
-            'objects_same_picture', COALESCE((SELECT json_agg(row_to_json(rob)) FROM related_objects_built rob), '[]'::json),
-            'objects_same_metadata', COALESCE((SELECT json_agg(row_to_json(rom)) FROM related_objects_from_metadata rom), '[]'::json),
-            'images_from_object', COALESCE((SELECT json_agg(row_to_json(imb)) FROM images_built imb), '[]'::json)
-        );
         """
-        cur.execute(QUERY, (object_id, object_id, object_id, object_id, object_id))
+        cur.execute(QUERY, (object_id, object_id, object_id, object_id, object_id, object_id, object_id))
         row = cur.fetchone()
-        
+        print(row)
         if row and row[0]:
             return row[0]
         else:
             return {
                 "threads": {},
                 "objects_same_picture": [],
+                "objects_same_metadata": [],
                 "images_from_object": []
             }
 
@@ -416,5 +452,187 @@ def get_objects_from_thread(selectersValue: list[dict]):
     except Exception as e:
         print("Error while retrieving objects from thread metadata:", e)
         return []
+    finally:
+        close_db_connection(conn)
+
+
+# ---------- MAP RESULTS HELPERS ----------
+
+def _fetch_images_by_ids(conn, image_ids):
+    if not image_ids:
+        return []
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT 
+                image_id, file_path, title, description, capture_date, event_date,
+                location_name, latitude, longitude, type
+            FROM Image
+            WHERE image_id = ANY(%s)
+            """,
+            (list(set(image_ids)),)
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except Exception as e:
+        print("Error fetching images by ids:", e)
+        return []
+
+def _fetch_images_for_objects(conn, object_ids):
+    if not object_ids:
+        return []
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT DISTINCT 
+                im.image_id, im.file_path, im.title, im.description,
+                im.capture_date, im.event_date, im.location_name,
+                im.latitude, im.longitude, im.type
+            FROM ObjectInstance oi
+            JOIN Image im ON im.image_id = oi.image_id
+            WHERE oi.object_id = ANY(%s)
+            """,
+            (list(set(object_ids)),)
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    except Exception as e:
+        print("Error fetching images for objects:", e)
+        return []
+
+
+def get_map_results_for_object(object_id: int, relation: str = "cooccurrence"):
+    """
+    Returns map-ready images for a given object depending on the relation type.
+    - cooccurrence: images where the object appears with at least one other object.
+    - metadata: images for objects sharing metadata with the given object (links from target images to related images only),
+                along with the metadata that justify each link.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return {"images": [], "links": []}
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        if relation == "metadata":
+            # 1. Target metadata (key/value) for the object
+            cur.execute(
+                "SELECT DISTINCT key, value FROM Metadata WHERE object_id = %s",
+                (object_id,)
+            )
+            target_meta_rows = cur.fetchall()
+            target_meta_map = {row["key"]: row["value"] for row in target_meta_rows}
+
+            # 2. Images where the target object appears
+            cur.execute(
+                "SELECT DISTINCT image_id FROM ObjectInstance WHERE object_id = %s",
+                (object_id,)
+            )
+            target_image_ids = [row["image_id"] for row in cur.fetchall()]
+
+            # 3. Related images with metadata matches
+            cur.execute(
+                """
+                SELECT 
+                    m2.image_id,
+                    json_agg(DISTINCT jsonb_build_object('key', m2.key, 'value', m2.value)) AS metadata
+                FROM Metadata m2
+                JOIN Metadata tm
+                  ON tm.key = m2.key
+                 AND tm.object_id = %s
+                WHERE m2.object_id <> %s
+                  AND (
+                        unaccent(LOWER(m2.value)) LIKE unaccent(LOWER(tm.value))
+                     OR unaccent(LOWER(tm.value)) LIKE unaccent(LOWER(m2.value))
+                  )
+                GROUP BY m2.image_id;
+                """,
+                (object_id, object_id)
+            )
+            related_rows = cur.fetchall()
+            related_image_ids = [row["image_id"] for row in related_rows]
+
+            # 4. Build links target_image -> related_image with metadata reasons
+            links = []
+            for rid, rel_meta in [(row["image_id"], row["metadata"] or []) for row in related_rows]:
+                rel_meta_list = []
+                for entry in rel_meta:
+                    key = entry.get("key")
+                    rel_val = entry.get("value")
+                    rel_meta_list.append({
+                        "key": key,
+                        "target_value": target_meta_map.get(key),
+                        "related_value": rel_val
+                    })
+                for tid in target_image_ids:
+                    links.append({
+                        "from_image_id": tid,
+                        "to_image_id": rid,
+                        "metadata": rel_meta_list
+                    })
+
+            image_ids = target_image_ids + related_image_ids
+            images = _fetch_images_by_ids(conn, image_ids)
+            cur.close()
+            return {"images": images, "links": links}
+
+        # Default: cooccurrence images (object + at least another object in the same image)
+        query = """
+        WITH target_images AS (
+            SELECT DISTINCT image_id
+            FROM ObjectInstance
+            WHERE object_id = %s
+        ),
+        co_images AS (
+            SELECT ti.image_id
+            FROM target_images ti
+            JOIN ObjectInstance oi ON oi.image_id = ti.image_id
+            GROUP BY ti.image_id
+            HAVING COUNT(DISTINCT oi.object_id) > 1
+        )
+        SELECT image_id FROM co_images;
+        """
+        cur.execute(query, (object_id,))
+        image_ids = [row[0] for row in cur.fetchall()]
+        cur.close()
+        images = _fetch_images_by_ids(conn, image_ids)
+        return {"images": images, "links": []}
+
+    except Exception as e:
+        print("Error in get_map_results_for_object:", e)
+        return {"images": [], "links": []}
+    finally:
+        close_db_connection(conn)
+
+
+def get_map_results_for_image(image_id: int):
+    """
+    Returns images for all objects that appear in the given image.
+    This pulls every image where those objects appear (including the source image).
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        object_ids = get_objectsID_in_image(image_id)
+        return _fetch_images_for_objects(conn, object_ids)
+    finally:
+        close_db_connection(conn)
+
+
+def get_map_results_for_thread(selectersValue: list[dict]):
+    """
+    Returns all images corresponding to objects that match the provided thread selectors.
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        object_ids = get_objects_from_thread(selectersValue)
+        return _fetch_images_for_objects(conn, object_ids)
     finally:
         close_db_connection(conn)

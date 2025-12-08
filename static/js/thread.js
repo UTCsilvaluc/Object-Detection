@@ -3,14 +3,14 @@
  ************************************************************/
 import { apiPost } from './api.js';
 import { normalizeValueToPostgreSQL } from './utils.js';
-
-
+import { createPopupHTML } from './popup.js';
 
 /************************************************************
  * 2. GLOBAL STATE (Threads, config)
  ************************************************************/
 
 let threadCounter = 0;
+const mapStates = {}; // Keep Leaflet instances per thread
 
 /************************************************************
  * 3. LISTENERS AND USER INTERACTIONS
@@ -60,25 +60,19 @@ function toggleMetadata(btn, event) {
 }
 window.toggleMetadata = toggleMetadata;
 
-function closeObjectsTab(threadId) {
+function closeTab(threadId, tabClass) {
     const container = document.getElementById(threadId);
     if (!container) return;
-    container.querySelectorAll(".object-block").forEach(block => block.classList.remove("selected"));
-}
-function closeImagesTab(threadId) {
-    const container = document.getElementById(threadId);
-    if (!container) return;
-    container.querySelectorAll(".image-block").forEach(block => block.classList.remove("selected"));
+    container.querySelectorAll(tabClass).forEach(block => block.classList.remove("selected"));
 }
 
-function toggleSelectBlockImage(threadId) {
+function enableSingleSelect(threadId, selector) {
     const container = document.getElementById(threadId);
     if (!container) return;
 
-    container.querySelectorAll(".image-block").forEach(block => {
+    container.querySelectorAll(selector).forEach(block => {
         block.addEventListener("click", (e) => {
-
-            container.querySelectorAll(".image-block")
+            container.querySelectorAll(selector)
                 .forEach(b => b.classList.remove("selected"));
 
             e.currentTarget.classList.add("selected");
@@ -86,20 +80,116 @@ function toggleSelectBlockImage(threadId) {
     });
 }
 
-
-function toggleSelectBlockObject(threadId) {
+function clearThreadExcept(threadId, section, singleItemHTML) {
     const container = document.getElementById(threadId);
     if (!container) return;
 
-    container.querySelectorAll(".object-block").forEach(block => {
-        block.addEventListener("click", (e) => {
+    // 1. Hide all sections
+    const sections = container.querySelectorAll(".thread-content");
+    sections.forEach(sec => sec.classList.add("hidden"));
 
-            container.querySelectorAll(".object-block")
-                .forEach(b => b.classList.remove("selected"));
+    // 2. Disable all tabs EXCEPT the selected one AND the map tab
+    const tabs = container.querySelectorAll(".tab");
+    tabs.forEach(tab => {
+        const isSelected = tab.dataset.tab === section;
+        const isMap = tab.dataset.tab === "map";
 
-            e.currentTarget.classList.add("selected");
-        });
+        if (isSelected) {
+            // Selected tab stays fully enabled
+            tab.classList.add("selected");
+            tab.style.pointerEvents = "auto";
+            tab.style.opacity = "1";
+        }
+        else if (isMap) {
+            // Map stays enabled even when collapsing the thread
+            tab.classList.remove("selected");
+            tab.style.pointerEvents = "auto";
+            tab.style.opacity = "1";
+        }
+        else {
+            // All other tabs get disabled
+            tab.classList.remove("selected");
+            tab.style.pointerEvents = "none";
+            tab.style.opacity = "0.4";
+        }
     });
+
+    // 3. Show only the target section and inject the single-item content
+    const targetContainer = container.querySelector(`.thread-content[data-section="${section}"]`);
+    if (!targetContainer) return;
+    targetContainer.classList.remove("hidden");
+    targetContainer.innerHTML = singleItemHTML;
+
+    // Disable Generate Button
+    const generateBtn = container.querySelector(".thread-generate-btn");
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.classList.add("disabled-btn");
+    }
+}
+
+
+// Build ordered list of geolocated images with dates for the map tab
+function buildGeoTimeline(imagesList = []) {
+    return imagesList
+        .map(img => {
+            const lat = Number(img?.latitude);
+            const lng = Number(img?.longitude);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const dateStr = img.event_date || img.capture_date || null;
+            const date = dateStr ? new Date(dateStr) : null;
+            return {
+                raw: img,
+                lat,
+                lng,
+                date,
+                dateLabel: date ? date.toISOString().split("T")[0] : "Unknown date"
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return a.date - b.date;
+        });
+}
+
+function ensureThreadMap(threadId, center) {
+    if (!mapStates[threadId]) {
+        mapStates[threadId] = {
+            map: null,
+            layer: null,
+            bounds: null,
+            markers: new Map(),
+            plottedIds: new Set(),
+            drawnLinks: new Set(),
+            images: []
+        };
+    }
+    const state = mapStates[threadId];
+    const mapContainer = document.querySelector(`#${threadId} .thread-map`);
+    if (!mapContainer) return state;
+
+    if (!state.map) {
+        state.layer = L.layerGroup();
+        state.map = L.map(mapContainer.id, { dragging: true }).setView(center, 6);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OSM"
+        }).addTo(state.map);
+        state.layer.addTo(state.map);
+    } else {
+        // Needed when map was initialized while hidden
+        setTimeout(() => state.map.invalidateSize(), 50);
+    }
+    return state;
+}
+
+function refreshThreadMap(threadId) {
+    const state = mapStates[threadId];
+    if (!state || !state.map) return;
+    state.map.invalidateSize();
+    if (state.bounds) state.map.fitBounds(state.bounds, { padding: [20, 20] });
 }
 
 /************************************************************
@@ -117,8 +207,6 @@ const searchTypeToInput = {
     string:       { type: "text",   placeholder: "Enter a string value" },
     enum:         { type: "text",   placeholder: "Enter one of the enum values" }
 };
-
-
 
 /************************************************************
  * 5. API : SEARCH VALUES
@@ -274,8 +362,11 @@ function selectTab(threadId, targetTab) {
             section.classList.add("hidden");
         }
     });
-    closeObjectsTab(threadIdFull);
-    closeImagesTab(threadIdFull);
+    closeTab(threadIdFull, ".object-block");
+    closeTab(threadIdFull, ".image-block");
+    if (targetTab === "map") {
+        refreshThreadMap(threadIdFull);
+    }
 }
 window.selectTab = selectTab;
 
@@ -294,10 +385,12 @@ function renderObjectsTab(threadId, objectsList) {
         const block = document.createElement("div");
         block.className = "object-block";
         block.dataset.objectId = obj.object_id;
+        block.dataset.relation = obj.relation || "cooccurrence";
 
         // Build HTML
         let html = `
             <h2>Object #${obj.object_id} — ${obj.name ?? "Unnamed"}</h2>
+            <p class="object-relation">Relation: ${block.dataset.relation}</p>
 
             <div class="instance-row">
         `;
@@ -456,6 +549,138 @@ function renderImagesTab(threadId, imagesList) {
 }
 window.renderImagesTab = renderImagesTab;
 
+function renderMapTab(threadId, imagesList, focusImageId = null, relation = null, append = false, links = []) {
+    const container = document.querySelector(
+        `#${threadId} .thread-content[data-section="map"]`
+    );
+    if (!container) return;
+
+    // Ensure map-side structure exists (for safety if HTML changes)
+    if (!container.querySelector(".map-panel")) {
+        container.innerHTML = `
+            <div class="map-panel">
+                <div class="thread-map" id="map-${threadId.split("-")[1]}"></div>
+                <div class="map-side">
+                    <h3>Moves over time</h3>
+                    <div class="map-image-list"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    const listEl = container.querySelector(".map-image-list");
+    const mapEl = container.querySelector(".thread-map");
+    if (!listEl || !mapEl) return;
+
+    const defaultCenter = [34.33, 134.05];
+    const state = ensureThreadMap(threadId, defaultCenter);
+    if (!state.map) return;
+
+    // Reset map content when not appending
+    if (!append) {
+        state.layer.clearLayers();
+        state.markers = new Map();
+        state.plottedIds = new Set();
+        state.drawnLinks = new Set();
+        state.images = [];
+    }
+
+    const newImages = imagesList || [];
+    const merged = new Map();
+    state.images.forEach(img => merged.set(img.image_id, img));
+    newImages.forEach(img => merged.set(img.image_id, img));
+    state.images = Array.from(merged.values());
+
+    const timeline = buildGeoTimeline(state.images);
+    const newTimeline = buildGeoTimeline(newImages);
+
+    if (timeline.length === 0) {
+        listEl.innerHTML = `<p>No geolocated images for this selection.</p>`;
+    } else {
+        listEl.innerHTML = `
+            <p><strong>${timeline.length} result(s)</strong></p>
+            ${timeline.map(({ raw, dateLabel }) => `
+                <div class="map-image-card ${raw.image_id == focusImageId ? "primary" : ""}">
+                    <img class="thumb" src="${window.appConfig.URL_for_images + raw.file_path}" alt="${raw.title ?? "Image"}">
+                    <strong>${raw.title ?? "Untitled image"}</strong>
+                    <small>${dateLabel}</small>
+                    <div>${raw.location_name ?? "Unknown location"}</div>
+                </div>
+            `).join("")}
+        `;
+    }
+
+    // Add markers for new items only
+    const coordsAll = [];
+    state.markers.forEach(marker => {
+        coordsAll.push([marker.getLatLng().lat, marker.getLatLng().lng]);
+    });
+
+    let focusMarker = state.markers.get(Number(focusImageId)) || null;
+    let focusLatLng = focusMarker ? focusMarker.getLatLng() : null;
+
+    newTimeline.forEach(item => {
+        if (state.plottedIds.has(item.raw.image_id)) return;
+        const popupImage = { ...item.raw, latitude: item.lat, longitude: item.lng };
+        const popupHTML = createPopupHTML(popupImage, window.appConfig.URL_for_images, window.appConfig.URL_for_view_image);
+        const marker = L.marker([item.lat, item.lng]).bindPopup(popupHTML).addTo(state.layer);
+        state.markers.set(item.raw.image_id, marker);
+        state.plottedIds.add(item.raw.image_id);
+        coordsAll.push([item.lat, item.lng]);
+        if (item.raw.image_id == focusImageId) {
+            focusMarker = marker;
+            focusLatLng = marker.getLatLng();
+        }
+    });
+
+    // Polyline for this batch (maintain prior lines)
+    const newCoords = newTimeline.map(item => [item.lat, item.lng]);
+    if (newCoords.length > 1) {
+        L.polyline(newCoords, { color: "#2463eb", weight: 3, opacity: 0.8 }).addTo(state.layer);
+    }
+
+    // Metadata links: only between focus and newly related images, with reasons
+    if (relation === "metadata" && links && links.length > 0) {
+        links.forEach(link => {
+            const fromMarker = state.markers.get(Number(link.from_image_id));
+            const toMarker = state.markers.get(Number(link.to_image_id));
+            if (!fromMarker || !toMarker) return;
+            const key = `${link.from_image_id}->${link.to_image_id}`;
+            if (state.drawnLinks && state.drawnLinks.has(key)) return;
+            const reasons = (link.metadata || []).map(md => {
+                const tgt = md.target_value ?? "N/A";
+                const rel = md.related_value ?? "N/A";
+                return `<li><strong>${md.key}:</strong> ${tgt} ⇄ ${rel}</li>`;
+            }).join("");
+            const popupHtml = `
+                <div style="font-size:12px;">
+                    <strong>Link by metadata</strong>
+                    <ul style="padding-left:16px; margin:6px 0;">
+                        ${reasons || "<li>No details</li>"}
+                    </ul>
+                </div>
+            `;
+            L.polyline([fromMarker.getLatLng(), toMarker.getLatLng()], { color: "#e3342f", weight: 3, opacity: 0.9 })
+                .bindPopup(popupHtml)
+                .addTo(state.layer);
+            if (state.drawnLinks) state.drawnLinks.add(key);
+        });
+    }
+
+    if (focusMarker) {
+        state.map.setView(focusMarker.getLatLng(), 12);
+        focusMarker.openPopup();
+    }
+
+    if (coordsAll.length > 0) {
+        state.bounds = L.latLngBounds(coordsAll);
+        state.map.fitBounds(state.bounds, { padding: [20, 20] });
+    } else {
+        state.bounds = null;
+        state.map.setView(defaultCenter, 2);
+    }
+}
+
 function injectImageContextIntoThread(threadsData) {
     const threads = Object.fromEntries(
         Object.entries(threadsData.threads || {}).map(([k, v]) => [k, Array.isArray(v) ? [...v] : []])
@@ -472,8 +697,8 @@ window.injectImageContextIntoThread = injectImageContextIntoThread;
 function renderFullThread(threadId, threadsData) {
 
     const allObjects = [
-        ...(threadsData.objects_same_picture || []),
-        ...(threadsData.objects_same_metadata || [])
+        ...(threadsData.objects_same_picture || []).map(obj => ({ ...obj, relation: "cooccurrence" })),
+        ...(threadsData.objects_same_metadata || []).map(obj => ({ ...obj, relation: "metadata" }))
     ];
 
     renderObjectsTab(threadId, allObjects);
@@ -482,9 +707,9 @@ function renderFullThread(threadId, threadsData) {
 
     renderThreadTab(threadId, threads);
     renderImagesTab(threadId, threadsData.images_from_object);
-
-    toggleSelectBlockImage(threadId);
-    toggleSelectBlockObject(threadId);
+    renderMapTab(threadId, threadsData.images_from_object);
+    enableSingleSelect(threadId, ".object-block");
+    enableSingleSelect(threadId, ".image-block");
 }
 
 window.renderFullThread = renderFullThread;
@@ -526,11 +751,13 @@ window.loadInitialThreads = loadInitialThreads;
 
 async function generateThread(threadId) {
 
-    const tab = document.querySelector(`#thread-${threadId} .tab.selected`).dataset.tab;
+    const threadDomId = `thread-${threadId}`;
+    const tab = document.querySelector(`#${threadDomId} .tab.selected`).dataset.tab;
+    let cleanupSelectedView = null;
     let payload = {};
 
     if (tab === "objects") {
-        const selected = document.querySelector(`#thread-${threadId} .object-block.selected`);
+        const selected = document.querySelector(`#${threadDomId} .object-block.selected`);
         if (!selected) {
             alert("Select an object first.");
             return;
@@ -539,10 +766,12 @@ async function generateThread(threadId) {
             mode: "object",
             object_id: selected.dataset.objectId
         };
+        const singleObjectHTML = selected.outerHTML;
+        cleanupSelectedView = () => clearThreadExcept(threadDomId, "objects", singleObjectHTML);
     }
 
     else if (tab === "images") {
-        const selected = document.querySelector(`#thread-${threadId} .image-block.selected`);
+        const selected = document.querySelector(`#${threadDomId} .image-block.selected`);
         if (!selected) {
             alert("Select an image first.");
             return;
@@ -551,24 +780,57 @@ async function generateThread(threadId) {
             mode: "image",
             image_id: selected.dataset.imageId
         };
+        const singleImageHTML = selected.outerHTML;
+        cleanupSelectedView = () => clearThreadExcept(threadDomId, "images", singleImageHTML);
+    }
+
+    else if (tab === "map") {
+        alert("Select an Object, Image, or configure Threads to generate a new thread.");
+        return;
     }
 
     else if (tab === "thread") {
-        const container = document.getElementById(`thread-${threadId}`);
+        const container = document.getElementById(threadDomId);
         const selecters = container.querySelectorAll(".thread-select");
+        const summarySelections = [];
         const selectersValue = Array.from(selecters).map(sel => ({
             key: sel.dataset.key,
             value: sel.value || null,
             enabled: !sel.disabled 
         }));
+
+        // Build a compact summary to keep only the chosen thread values visible
+        selecters.forEach(sel => {
+            const row = sel.closest(".thread-row");
+            const checkbox = row ? row.querySelector("input[type='checkbox']") : null;
+            const label = row ? row.querySelector(".thread-row-label")?.textContent.trim() : null;
+            const enabled = checkbox ? checkbox.checked && !sel.disabled : !sel.disabled;
+            if (enabled && sel.value) {
+                summarySelections.push({
+                    label: label || sel.dataset.key,
+                    value: sel.value
+                });
+            }
+        });
+
+        const summaryHTML = summarySelections.length
+            ? summarySelections.map(
+                ({ label, value }) =>
+                    `<div class="thread-row"><span class="meta-key">${label}</span>: <span class="meta-value">${value}</span></div>`
+            ).join("")
+            : "<p>No thread filters selected.</p>";
+
         payload = {
             mode: "thread",
             threads: selectersValue
         };
+        cleanupSelectedView = () => clearThreadExcept(threadDomId, "thread", summaryHTML);
     }
 
     const newData = await requestThreadGeneration(payload);
     if (!newData) return;
+
+    if (cleanupSelectedView) cleanupSelectedView();
 
     // Create a new thread panel
     const newThreadId = "thread-" + threadCounter;
@@ -579,3 +841,72 @@ async function generateThread(threadId) {
     threadCounter++;
 }
 window.generateThread = generateThread;
+
+async function showResults(threadId) {
+    const threadDomId = `thread-${threadId}`;
+    const tabEl = document.querySelector(`#${threadDomId} .tab.selected`);
+    const tab = tabEl ? tabEl.dataset.tab : null;
+    if (!tab) {
+        alert("Select a tab first.");
+        return;
+    }
+
+    let payload = null;
+
+    if (tab === "objects") {
+        const selected = document.querySelector(`#${threadDomId} .object-block.selected`);
+        if (!selected) {
+            alert("Select an object first.");
+            return;
+        }
+        payload = {
+            mode: "object",
+            object_id: selected.dataset.objectId,
+            relation: selected.dataset.relation || "cooccurrence"
+        };
+    } else if (tab === "images") {
+        const selected = document.querySelector(`#${threadDomId} .image-block.selected`);
+        if (!selected) {
+            alert("Select an image first.");
+            return;
+        }
+        payload = {
+            mode: "image",
+            image_id: selected.dataset.imageId
+        };
+    } else if (tab === "thread") {
+        const container = document.getElementById(threadDomId);
+        const selecters = container.querySelectorAll(".thread-select");
+        const selectersValue = Array.from(selecters).map(sel => ({
+            key: sel.dataset.key,
+            value: sel.value || null,
+            enabled: !sel.disabled
+        }));
+        payload = {
+            mode: "thread",
+            threads: selectersValue
+        };
+    } else if (tab === "map") {
+        alert("Switch to Objects, Images, or Threads to fetch results.");
+        return;
+    }
+
+    if (!payload) return;
+
+    const data = await apiPost("/thread/show_results", payload);
+    if (!data.success) {
+        alert("Failed to fetch map results.");
+        return;
+    }
+
+    renderMapTab(
+        threadDomId,
+        data.images || [],
+        data.focus_image_id || null,
+        data.relation || payload.relation || null,
+        true,
+        data.links || []
+    );
+    selectTab(threadId, "map");
+}
+window.showResults = showResults;

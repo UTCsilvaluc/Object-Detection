@@ -7,7 +7,14 @@ from utils.database import (
     get_ThreadCategory
 )
 
-from utils.thread_research import build_thread_from_objectID , build_thread_from_imageID , build_thread_from_metadata
+from utils.thread_research import (
+    build_thread_from_objectID,
+    build_thread_from_imageID,
+    build_thread_from_metadata,
+    get_map_results_for_object,
+    get_map_results_for_image,
+    get_map_results_for_thread
+)
 
 thread_bp = Blueprint("thread", __name__)
 
@@ -91,3 +98,37 @@ def thread_search_values():
         "success": True,
         "objects": objects
     })
+
+
+@thread_bp.route('/show_results', methods=['POST'])
+def show_results():
+    data = request.get_json() or {}
+    mode = data.get("mode")
+
+    if mode == "object":
+        object_id = data.get("object_id")
+        relation = data.get("relation", "cooccurrence")
+        if not object_id:
+            return jsonify({"success": False, "error": "object_id is required"}), 400
+        results = get_map_results_for_object(object_id, relation)
+        images = results.get("images", []) if isinstance(results, dict) else results
+        links = results.get("links", []) if isinstance(results, dict) else []
+        focus_id = images[0]["image_id"] if images else None
+        return jsonify({"success": True, "images": images, "links": links, "focus_image_id": focus_id, "relation": relation})
+
+    if mode == "image":
+        image_id = data.get("image_id")
+        if not image_id:
+            return jsonify({"success": False, "error": "image_id is required"}), 400
+        images = get_map_results_for_image(image_id)
+        return jsonify({"success": True, "images": images, "focus_image_id": image_id, "relation": "image"})
+
+    if mode == "thread":
+        selectors = data.get("threads", [])
+        if not selectors:
+            return jsonify({"success": False, "error": "threads metadata is required"}), 400
+        images = get_map_results_for_thread(selectors)
+        focus_id = images[0]["image_id"] if images else None
+        return jsonify({"success": True, "images": images, "focus_image_id": focus_id, "relation": "thread"})
+
+    return jsonify({"success": False, "error": "Unknown mode"}), 400
