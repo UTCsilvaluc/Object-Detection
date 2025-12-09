@@ -164,6 +164,8 @@ function ensureThreadMap(threadId, center) {
             markers: new Map(),
             plottedIds: new Set(),
             drawnLinks: new Set(),
+            previousIds: new Set(),
+            colors: new Object(),
             images: []
         };
     }
@@ -386,6 +388,7 @@ function renderObjectsTab(threadId, objectsList) {
         block.className = "object-block";
         block.dataset.objectId = obj.object_id;
         block.dataset.relation = obj.relation || "cooccurrence";
+        block.dataset.co_occurrence_images = obj.co_occurrence_images ? obj.co_occurrence_images.join(",") : "";
 
         // Build HTML
         let html = `
@@ -575,7 +578,6 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
     const defaultCenter = [34.33, 134.05];
     const state = ensureThreadMap(threadId, defaultCenter);
     if (!state.map) return;
-
     // Reset map content when not appending
     if (!append) {
         state.layer.clearLayers();
@@ -583,6 +585,8 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
         state.plottedIds = new Set();
         state.drawnLinks = new Set();
         state.images = [];
+        state.previousIds = new Set();
+        state.colors = new Object();
     }
 
     const newImages = imagesList || [];
@@ -634,7 +638,11 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
     });
 
     // Polyline for this batch (maintain prior lines)
-    const newCoords = newTimeline.map(item => [item.lat, item.lng]);
+    //Filter newTimeline to keep only items that are the main object of the thread.
+    const filteredTimeline = newTimeline.filter(item => {
+        return state.previousIds.has(item.raw.image_id);
+    });
+    const newCoords = filteredTimeline.map(item => [item.lat, item.lng]);
     if (newCoords.length > 1) {
         L.polyline(newCoords, { color: "#2463eb", weight: 3, opacity: 0.8 }).addTo(state.layer);
     }
@@ -667,11 +675,6 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
         });
     }
 
-    if (focusMarker) {
-        state.map.setView(focusMarker.getLatLng(), 12);
-        focusMarker.openPopup();
-    }
-
     if (coordsAll.length > 0) {
         state.bounds = L.latLngBounds(coordsAll);
         state.map.fitBounds(state.bounds, { padding: [20, 20] });
@@ -679,6 +682,16 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
         state.bounds = null;
         state.map.setView(defaultCenter, 2);
     }
+    if (state.previousIds && state.previousIds.size === 0) {
+        state.previousIds = new Set(state.plottedIds);
+    }
+
+    if (focusMarker) {
+        setTimeout(() => {
+            state.map.setView(focusLatLng, 15);
+            focusMarker.openPopup();
+        }, 300);
+    } 
 }
 
 function injectImageContextIntoThread(threadsData) {
@@ -862,6 +875,7 @@ async function showResults(threadId) {
         payload = {
             mode: "object",
             object_id: selected.dataset.objectId,
+            co_occurrence_images: selected.dataset.co_occurrence_images ? selected.dataset.co_occurrence_images.split(",") : [],
             relation: selected.dataset.relation || "cooccurrence"
         };
     } else if (tab === "images") {
@@ -898,7 +912,6 @@ async function showResults(threadId) {
         alert("Failed to fetch map results.");
         return;
     }
-
     renderMapTab(
         threadDomId,
         data.images || [],

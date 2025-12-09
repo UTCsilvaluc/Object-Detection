@@ -168,9 +168,12 @@ def build_thread_from_objectID(object_id: int):
                 WHERE md1.object_id = %s
                 AND md2.object_id != %s
                 AND (
-                        unaccent(LOWER(md2.value)) LIKE unaccent(LOWER(md1.value))
-                    OR unaccent(LOWER(md1.value)) LIKE unaccent(LOWER(md2.value))
-                )
+                        -- Check if target value is inside related value (e.g. Paris in Paris, France)
+                        unaccent(LOWER(md2.value::text)) LIKE ('%%' || unaccent(LOWER(md1.value::text)) || '%%')
+                        OR
+                        -- Check if related value is inside target value (e.g. Saku in Sakura)
+                        unaccent(LOWER(md1.value::text)) LIKE ('%%' || unaccent(LOWER(md2.value::text)) || '%%')
+                  )
                 AND md2.version_number = (
                         SELECT MAX(md3.version_number)
                         FROM Metadata md3
@@ -327,7 +330,6 @@ def build_thread_from_objectID(object_id: int):
         """
         cur.execute(QUERY, (object_id, object_id, object_id, object_id, object_id, object_id, object_id))
         row = cur.fetchone()
-        print(row)
         if row and row[0]:
             return row[0]
         else:
@@ -505,110 +507,75 @@ def _fetch_images_for_objects(conn, object_ids):
         return []
 
 
-def get_map_results_for_object(object_id: int, relation: str = "cooccurrence"):
+def get_map_results_for_object(object_id: int, relation: str = "cooccurrence" , co_occurrence_images: list[int] = []):
     """
     Returns map-ready images for a given object depending on the relation type.
     - cooccurrence: images where the object appears with at least one other object.
-    - metadata: images for objects sharing metadata with the given object (links from target images to related images only),
-                along with the metadata that justify each link.
+    - metadata: images for objects sharing metadata with the given object (substring matching included).
     """
     conn = get_db_connection()
     if conn is None:
         return {"images": [], "links": []}
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
-
         if relation == "metadata":
-            # 1. Target metadata (key/value) for the object
-            cur.execute(
-                "SELECT DISTINCT key, value FROM Metadata WHERE object_id = %s",
-                (object_id,)
-            )
-            target_meta_rows = cur.fetchall()
-            target_meta_map = {row["key"]: row["value"] for row in target_meta_rows}
-
-            # 2. Images where the target object appears
+            # Images where the target object appears
             cur.execute(
                 "SELECT DISTINCT image_id FROM ObjectInstance WHERE object_id = %s",
                 (object_id,)
             )
             target_image_ids = [row["image_id"] for row in cur.fetchall()]
-
-            # 3. Related images with metadata matches
+            
+            # Related images with metadata matches 
+            # NOTE: ('%%') are used for psycopg2 , to differentiate from variables.
             cur.execute(
                 """
                 SELECT 
-                    m2.image_id,
-                    json_agg(DISTINCT jsonb_build_object('key', m2.key, 'value', m2.value)) AS metadata
+                    m2.image_id AS related_image_id, tm.image_id AS target_image_id,
+                    json_agg(DISTINCT jsonb_build_object('key', m2.key, 'target_value', tm.value, 'related_value', m2.value)) AS metadata
                 FROM Metadata m2
                 JOIN Metadata tm
                   ON tm.key = m2.key
                  AND tm.object_id = %s
                 WHERE m2.object_id <> %s
                   AND (
-                        unaccent(LOWER(m2.value)) LIKE unaccent(LOWER(tm.value))
-                     OR unaccent(LOWER(tm.value)) LIKE unaccent(LOWER(m2.value))
+                        -- Check if target value is inside related value (e.g. Paris in Paris, France)
+                        unaccent(LOWER(m2.value::text)) LIKE ('%%' || unaccent(LOWER(tm.value::text)) || '%%')
+                        OR
+                        -- Check if related value is inside target value (e.g. Saku in Sakura)
+                        unaccent(LOWER(tm.value::text)) LIKE ('%%' || unaccent(LOWER(m2.value::text)) || '%%')
                   )
-                GROUP BY m2.image_id;
+                GROUP BY m2.image_id, tm.image_id;
                 """,
                 (object_id, object_id)
             )
+            
             related_rows = cur.fetchall()
-            related_image_ids = [row["image_id"] for row in related_rows]
-
+            related_image_ids = [row["related_image_id"] for row in related_rows]
+            
             # 4. Build links target_image -> related_image with metadata reasons
             links = []
-            for rid, rel_meta in [(row["image_id"], row["metadata"] or []) for row in related_rows]:
-                rel_meta_list = []
-                for entry in rel_meta:
-                    key = entry.get("key")
-                    rel_val = entry.get("value")
-                    rel_meta_list.append({
-                        "key": key,
-                        "target_value": target_meta_map.get(key),
-                        "related_value": rel_val
-                    })
-                for tid in target_image_ids:
-                    links.append({
-                        "from_image_id": tid,
-                        "to_image_id": rid,
-                        "metadata": rel_meta_list
-                    })
-
+            for row in related_rows:
+                links.append({
+                    "from_image_id": row["target_image_id"],
+                    "to_image_id": row["related_image_id"],
+                    "metadata": row["metadata"]
+                })
+            
             image_ids = target_image_ids + related_image_ids
             images = _fetch_images_by_ids(conn, image_ids)
             cur.close()
             return {"images": images, "links": links}
-
-        # Default: cooccurrence images (object + at least another object in the same image)
-        query = """
-        WITH target_images AS (
-            SELECT DISTINCT image_id
-            FROM ObjectInstance
-            WHERE object_id = %s
-        ),
-        co_images AS (
-            SELECT ti.image_id
-            FROM target_images ti
-            JOIN ObjectInstance oi ON oi.image_id = ti.image_id
-            GROUP BY ti.image_id
-            HAVING COUNT(DISTINCT oi.object_id) > 1
-        )
-        SELECT image_id FROM co_images;
-        """
-        cur.execute(query, (object_id,))
-        image_ids = [row[0] for row in cur.fetchall()]
-        cur.close()
-        images = _fetch_images_by_ids(conn, image_ids)
+            
+        # Default: cooccurrence images
+        co_occurrence_images = [int(img_id) for img_id in co_occurrence_images]
+        images = _fetch_images_by_ids(conn, co_occurrence_images)
         return {"images": images, "links": []}
-
     except Exception as e:
         print("Error in get_map_results_for_object:", e)
         return {"images": [], "links": []}
     finally:
-        close_db_connection(conn)
-
-
+        close_db_connection(conn)      
 def get_map_results_for_image(image_id: int):
     """
     Returns images for all objects that appear in the given image.

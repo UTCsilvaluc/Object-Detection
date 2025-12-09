@@ -108,9 +108,10 @@ def show_results():
     if mode == "object":
         object_id = data.get("object_id")
         relation = data.get("relation", "cooccurrence")
+        co_occurrence_images = data.get("co_occurrence_images", [])
         if not object_id:
             return jsonify({"success": False, "error": "object_id is required"}), 400
-        results = get_map_results_for_object(object_id, relation)
+        results = get_map_results_for_object(object_id, relation, co_occurrence_images)
         images = results.get("images", []) if isinstance(results, dict) else results
         links = results.get("links", []) if isinstance(results, dict) else []
         focus_id = images[0]["image_id"] if images else None
