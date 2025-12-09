@@ -11,6 +11,7 @@ import { createPopupHTML } from './popup.js';
 
 let threadCounter = 0;
 const mapStates = {}; // Keep Leaflet instances per thread
+let searchLocked = false; // Lock search after first selection
 
 /************************************************************
  * 3. LISTENERS AND USER INTERACTIONS
@@ -26,6 +27,7 @@ function mergeThreadValues(threads, key, values) {
 
 // Pressing Enter triggers the search
 function handleTyping(e) {
+    if (searchLocked) return;
     if (e.key === "Enter") performSearch();
 }
 window.handleTyping = handleTyping;
@@ -214,6 +216,10 @@ const searchTypeToInput = {
  * 5. API : SEARCH VALUES
  ************************************************************/
 async function performSearch() {
+    if (searchLocked) {
+        alert("Search is locked. You already started a thread with a selected object.");
+        return;
+    }
     const input = document.getElementById("search-input");
     const select = document.getElementById("search-type");
 
@@ -238,7 +244,7 @@ async function performSearch() {
 }
 window.performSearch = performSearch;
 
-async function selectObject(objectId) {
+async function selectObject(objectId, triggerEl = null) {
 
     const threadsData = await requestThreadGeneration({
         mode: "object",
@@ -246,6 +252,8 @@ async function selectObject(objectId) {
     });
 
     if (!threadsData) return;
+
+    lockSearchUI(objectId, triggerEl);
 
     const threadId = "thread-" + threadCounter;
     
@@ -255,6 +263,43 @@ async function selectObject(objectId) {
     threadCounter++;
 }
 window.selectObject = selectObject;
+
+function lockSearchUI(objectId, triggerEl) {
+    if (searchLocked) return;
+    searchLocked = true;
+
+    const searchInput = document.getElementById("search-input");
+    const searchSelect = document.getElementById("search-type");
+    const searchBtn = document.querySelector(".search-box button");
+    [searchInput, searchSelect, searchBtn].forEach(el => {
+        if (el) {
+            el.setAttribute("disabled", "disabled");
+            el.classList.add("disabled");
+        }
+    });
+
+    const container = document.getElementById("results-container");
+    if (!container) return;
+
+    let selectedBlock = container.querySelector(`.object-block[data-object-id="${objectId}"]`);
+    if (!selectedBlock && triggerEl) {
+        selectedBlock = triggerEl.closest(".object-block");
+    }
+
+    if (selectedBlock) {
+        const clone = selectedBlock.cloneNode(true);
+        const btn = clone.querySelector(".select-btn");
+        if (btn) {
+            btn.textContent = "Selected";
+            btn.setAttribute("disabled", "disabled");
+            btn.classList.add("disabled-btn");
+        }
+        container.innerHTML = `
+            <p class="locked-label">Search locked: Object #${objectId} selected.</p>
+        `;
+        container.appendChild(clone);
+    }
+}
 
 
 async function requestThreadGeneration(payload) {
@@ -319,7 +364,7 @@ function displayResultsIn(container, objects) {
 
         // Bouton
         html += `
-            <button class="select-btn" onclick="selectObject(${obj.object_id})">
+            <button class="select-btn" onclick="selectObject(${obj.object_id}, this)">
                 Select Object
             </button>
         `;
@@ -918,7 +963,7 @@ async function showResults(threadId) {
         data.images || [],
         data.focus_image_id || null,
         data.relation || payload.relation || null,
-        true,
+        false,
         data.links || []
     );
     selectTab(threadId, "map");

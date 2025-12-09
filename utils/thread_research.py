@@ -42,6 +42,7 @@ def build_thread_from_object_list(object_ids: list[int]):
     result = {
         "threads": dynamic_threads,
         "objects_same_picture": [],
+        "objects_same_metadata": [],
         "images_from_object": []
     }
     for obj_id in object_ids:
@@ -67,24 +68,33 @@ def merge_thread_result(base: dict, new: dict, thread_def: dict):
     thread_def is { category: [metadata keys] }
     """
     # --- Merge threads ---
+    incoming_threads = new.get("threads") or {}
     for category in thread_def.keys():
         if category not in base["threads"]:
             base["threads"][category] = []
-        for value in new.get("threads", {}).get(category, []):
+        for value in incoming_threads.get(category, []) or []:
             if value not in base["threads"][category]:
                 base["threads"][category].append(value)
 
     # --- Merge objects_same_picture ---
     seen_obj_ids = {obj["object_id"] for obj in base["objects_same_picture"]}
-    for obj in new.get("objects_same_picture", []):
+    for obj in new.get("objects_same_picture") or []:
         oid = obj.get("object_id")
         if oid and oid not in seen_obj_ids:
             base["objects_same_picture"].append(obj)
             seen_obj_ids.add(oid)
 
+    # --- Merge objects_same_metadata ---
+    seen_obj_md_ids = {obj["object_id"] for obj in base.get("objects_same_metadata", [])}
+    for obj in new.get("objects_same_metadata") or []:
+        oid = obj.get("object_id")
+        if oid and oid not in seen_obj_md_ids:
+            base.setdefault("objects_same_metadata", []).append(obj)
+            seen_obj_md_ids.add(oid)
+
     # --- Merge images_from_object ---
     seen_img_ids = {img["image_id"] for img in base["images_from_object"]}
-    for img in new.get("images_from_object", []):
+    for img in new.get("images_from_object") or []:
         iid = img.get("image_id")
         if iid and iid not in seen_img_ids:
             base["images_from_object"].append(img)
@@ -372,7 +382,19 @@ def build_thread_from_metadata(selectersValue: list[dict]):
     Returns a dictionary with threads categorized by identity, place, and date.
     """
     object_ids = get_objects_from_thread(selectersValue)
-    return build_thread_from_object_list(object_ids)
+    result = build_thread_from_object_list(object_ids)
+
+    # In thread mode, keep only objects that themselves match the selectors (avoid co-occurrence noise)
+    allowed_ids = set(object_ids)
+    result["objects_same_picture"] = [
+        obj for obj in result.get("objects_same_picture", [])
+        if obj.get("object_id") in allowed_ids
+    ]
+    result["objects_same_metadata"] = [
+        obj for obj in result.get("objects_same_metadata", [])
+        if obj.get("object_id") in allowed_ids
+    ]
+    return result
 
 def get_objects_from_thread(selectersValue: list[dict]):
     """
