@@ -128,8 +128,15 @@ def show_results():
         selectors = data.get("threads", [])
         if not selectors:
             return jsonify({"success": False, "error": "threads metadata is required"}), 400
-        images = get_map_results_for_thread(selectors)
-        focus_id = images[0]["image_id"] if images else None
-        return jsonify({"success": True, "images": images, "focus_image_id": focus_id, "relation": "thread"})
+        results = get_map_results_for_thread(selectors)
+        if isinstance(results, dict):
+            images = results.get("images", [])
+            links = results.get("links", [])
+            focus_id = results.get("focus_image_id") or (images[0]["image_id"] if images else None)
+        else:
+            images = results or []
+            links = []
+            focus_id = images[0]["image_id"] if images else None
+        return jsonify({"success": True, "images": images, "links": links, "focus_image_id": focus_id, "relation": "thread"})
 
     return jsonify({"success": False, "error": "Unknown mode"}), 400

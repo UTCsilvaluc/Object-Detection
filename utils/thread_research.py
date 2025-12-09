@@ -1,5 +1,6 @@
 from utils.database import get_db_connection , close_db_connection , get_objectsID_in_image
 from psycopg2.extras import RealDictCursor
+import re
 
 def get_existing_threads():
     conn = get_db_connection()
@@ -395,22 +396,47 @@ def get_objects_from_thread(selectersValue: list[dict]):
             if not val or not category:
                 continue
             if category == "place":
-                # Match place via object metadata OR image location_name
-                conditions.append("""
+                tokens = re.split(r"[,\s]+", val)
+                tokens = [t.strip() for t in tokens if t.strip()]
+
+                if not tokens:
+                    continue
+
+                md_subconds = []
+                im_subconds = []
+
+                for _ in tokens:
+                    md_subconds.append(
+                        "unaccent(LOWER(md.value::text)) LIKE ('%%' || unaccent(LOWER(%s)) || '%%')"
+                    )
+                    im_subconds.append(
+                        "unaccent(LOWER(im.location_name::text)) LIKE ('%%' || unaccent(LOWER(%s)) || '%%')"
+                    )
+
+                md_cond = " AND ".join(md_subconds)
+                im_cond = " AND ".join(im_subconds)
+
+                conditions.append(f"""
                 (
-                   (md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s)
-                    AND md.value = %s)
-                   OR
-                   (im.location_name IS NOT NULL AND 
-                        unaccent(LOWER(im.location_name)) LIKE unaccent(LOWER(%s)) 
-                                  OR
-                        unaccent(LOWER(%s)) LIKE unaccent(LOWER(im.location_name))
+                    (
+                        md.key IN (
+                            SELECT key FROM MetadataDefinition
+                            WHERE thread_category = %s
                         )
+                        AND ({md_cond})
+                    )
+                    OR
+                    (
+                        im.location_name IS NOT NULL
+                        AND ({im_cond})
+                    )
                 )
                 """)
-                params.extend([category, val, val, val])
+
+                params.append(category)
+                for token in tokens:
+                    params.extend([token, token])
             elif category == "date":
-                # Match date via object metadata OR image event/capture dates (date-only)
                 conditions.append("""
                 (
                    (md.key IN (SELECT key FROM MetadataDefinition WHERE thread_category = %s)
@@ -600,6 +626,184 @@ def get_map_results_for_thread(selectersValue: list[dict]):
         return []
     try:
         object_ids = get_objects_from_thread(selectersValue)
-        return _fetch_images_for_objects(conn, object_ids)
+        images = _fetch_images_for_objects(conn, object_ids)
+
+        # No matches, early return
+        if not images:
+            return {"images": [], "links": [], "focus_image_id": None}
+
+        # Build a map of image_id -> list of matched selectors to later create links
+        matches_by_image = {}
+
+        def add_match(image_id, key, value, source):
+            if value is None:
+                return
+            matches_by_image.setdefault(image_id, []).append({
+                "key": key,
+                "value": value,
+                "source": source
+            })
+
+        enabled_selectors = [
+            sel for sel in selectersValue
+            if sel.get("enabled") and sel.get("value") and sel.get("key")
+        ]
+
+        if not enabled_selectors:
+            return {"images": images, "links": [], "focus_image_id": images[0].get("image_id")}
+
+        def _place_tokens(value: str):
+            tokens = re.split(r"[,\s]+", value)
+            return [t.strip() for t in tokens if t.strip()]
+
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        for sel in enabled_selectors:
+            category = sel.get("key")
+            val = sel.get("value")
+
+            if category == "place":
+                tokens = _place_tokens(str(val))
+                if not tokens:
+                    continue
+
+                md_cond = " AND ".join(
+                    ["unaccent(LOWER(md.value::text)) LIKE ('%%' || unaccent(LOWER(%s)) || '%%')" for _ in tokens]
+                )
+                im_cond = " AND ".join(
+                    ["unaccent(LOWER(im.location_name::text)) LIKE ('%%' || unaccent(LOWER(%s)) || '%%')" for _ in tokens]
+                )
+
+                query = f"""
+                SELECT DISTINCT 
+                    im.image_id,
+                    CASE 
+                        WHEN im.location_name IS NOT NULL AND ({im_cond}) THEN im.location_name::text 
+                        ELSE NULL
+                    END AS location_match,
+                    CASE 
+                        WHEN def.thread_category = %s AND ({md_cond}) THEN md.value::text 
+                        ELSE NULL
+                    END AS metadata_match
+                FROM ObjectInstance oi
+                JOIN Image im ON im.image_id = oi.image_id
+                LEFT JOIN Metadata md 
+                  ON md.object_id = oi.object_id
+                 AND md.image_id = oi.image_id
+                 AND md.version_number = oi.version_number
+                LEFT JOIN MetadataDefinition def ON def.key = md.key
+                WHERE oi.object_id = ANY(%s)
+                  AND (
+                        (im.location_name IS NOT NULL AND ({im_cond}))
+                     OR (def.thread_category = %s AND ({md_cond}))
+                  );
+                """
+                params = []
+                params.extend(tokens)                 # im_cond (select)
+                params.append(category)               # def.thread_category (select)
+                params.extend(tokens)                 # md_cond (select)
+                params.append(list(set(object_ids)))  # ANY(%s)
+                params.extend(tokens)                 # im_cond (where)
+                params.append(category)               # def.thread_category (where)
+                params.extend(tokens)                 # md_cond (where)
+
+                cur.execute(query, tuple(params))
+                rows = cur.fetchall()
+                for row in rows:
+                    add_match(row["image_id"], category, row.get("location_match"), "location")
+                    add_match(row["image_id"], category, row.get("metadata_match"), "metadata")
+
+            elif category == "date":
+                query = """
+                SELECT DISTINCT 
+                    im.image_id,
+                    md.value::text AS metadata_match,
+                    im.event_date::text AS event_match,
+                    im.capture_date::text AS capture_match
+                FROM ObjectInstance oi
+                JOIN Image im ON im.image_id = oi.image_id
+                LEFT JOIN Metadata md 
+                  ON md.object_id = oi.object_id
+                 AND md.image_id = oi.image_id
+                 AND md.version_number = oi.version_number
+                LEFT JOIN MetadataDefinition def ON def.key = md.key
+                WHERE oi.object_id = ANY(%s)
+                  AND (
+                        (def.thread_category = %s AND md.value::date = %s::date)
+                     OR (im.event_date IS NOT NULL AND im.event_date::date = %s::date)
+                     OR (im.capture_date IS NOT NULL AND im.capture_date::date = %s::date)
+                  );
+                """
+                params = (list(set(object_ids)), category, val, val, val)
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                for row in rows:
+                    add_match(row["image_id"], category, row.get("metadata_match"), "metadata")
+                    add_match(row["image_id"], category, row.get("event_match"), "event_date")
+                    add_match(row["image_id"], category, row.get("capture_match"), "capture_date")
+
+            else:
+                query = """
+                SELECT DISTINCT 
+                    im.image_id,
+                    md.value::text AS metadata_match
+                FROM ObjectInstance oi
+                JOIN Image im ON im.image_id = oi.image_id
+                JOIN Metadata md 
+                  ON md.object_id = oi.object_id
+                 AND md.image_id = oi.image_id
+                 AND md.version_number = oi.version_number
+                JOIN MetadataDefinition def ON def.key = md.key
+                WHERE oi.object_id = ANY(%s)
+                  AND def.thread_category = %s
+                  AND md.value = %s;
+                """
+                params = (list(set(object_ids)), category, val)
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                for row in rows:
+                    add_match(row["image_id"], category, row.get("metadata_match"), "metadata")
+
+        cur.close()
+
+        focus_id = images[0].get("image_id")
+        focus_matches = matches_by_image.get(focus_id, [])
+        if not focus_matches:
+            # If the first image does not carry the matches, pick the first image that does.
+            for img_id, match_list in matches_by_image.items():
+                if match_list:
+                    focus_id = img_id
+                    focus_matches = match_list
+                    break
+
+        links = []
+        for img in images:
+            img_id = img.get("image_id")
+            if img_id is None or img_id == focus_id:
+                continue
+            other_matches = matches_by_image.get(img_id, [])
+            if not other_matches or not focus_matches:
+                continue
+
+            shared_metadata = []
+            seen_keys = set()
+            for fm in focus_matches:
+                for om in other_matches:
+                    if fm["key"] != om["key"] or fm["key"] in seen_keys:
+                        continue
+                    shared_metadata.append({
+                        "key": fm["key"],
+                        "target_value": fm["value"],
+                        "related_value": om["value"]
+                    })
+                    seen_keys.add(fm["key"])
+            if shared_metadata:
+                links.append({
+                    "from_image_id": focus_id,
+                    "to_image_id": img_id,
+                    "metadata": shared_metadata
+                })
+
+        return {"images": images, "links": links, "focus_image_id": focus_id}
     finally:
         close_db_connection(conn)

@@ -648,7 +648,8 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
     }
 
     // Metadata links: only between focus and newly related images, with reasons
-    if (relation === "metadata" && links && links.length > 0) {
+    const drawMetadataLink = relation === "metadata" || relation === "thread";
+    if (drawMetadataLink && links && links.length > 0) {
         links.forEach(link => {
             const fromMarker = state.markers.get(Number(link.from_image_id));
             const toMarker = state.markers.get(Number(link.to_image_id));
@@ -662,7 +663,7 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
             }).join("");
             const popupHtml = `
                 <div style="font-size:12px;">
-                    <strong>Link by metadata</strong>
+                    <strong>${relation === "thread" ? "Link by thread filters" : "Link by metadata"}</strong>
                     <ul style="padding-left:16px; margin:6px 0;">
                         ${reasons || "<li>No details</li>"}
                     </ul>
