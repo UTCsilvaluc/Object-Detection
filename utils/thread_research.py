@@ -52,6 +52,72 @@ def build_thread_from_object_list(object_ids: list[int]):
         result = merge_thread_result(result, t, thread_def)
     return result
 
+def get_nearby_event_images(image_id: int, max_km: float = 30, max_days: int = 365):
+    """
+    Returns images that are BOTH geographically close and temporally close.
+    Intersection of two conditions:
+        - distance < max_km
+        - |date difference| < max_days
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return []
+
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        QUERY = """
+        WITH ref AS (
+            SELECT 
+                image_id,
+                latitude AS ref_lat,
+                longitude AS ref_lon,
+                COALESCE(capture_date, event_date) AS ref_date
+            FROM Image
+            WHERE image_id = %s
+        ),
+        others AS (
+            SELECT
+                img.*,
+                (
+                    6371 * acos(
+                        cos(radians(ref.ref_lat)) 
+                        * cos(radians(img.latitude)) 
+                        * cos(radians(img.longitude) - radians(ref.ref_lon))
+                        + sin(radians(ref.ref_lat)) 
+                        * sin(radians(img.latitude))
+                    )
+                ) AS distance_km,
+                ABS(
+                    EXTRACT(EPOCH FROM (COALESCE(img.capture_date, img.event_date) - ref.ref_date)) 
+                    / 86400
+                ) AS diff_days
+            FROM Image img
+            CROSS JOIN ref
+            WHERE img.image_id != ref.image_id
+              AND img.latitude IS NOT NULL
+              AND img.longitude IS NOT NULL
+              AND COALESCE(img.capture_date, img.event_date) IS NOT NULL
+        )
+        SELECT O.image_id
+        FROM others O
+        WHERE distance_km < %s
+          AND diff_days < %s
+        ORDER BY distance_km ASC, diff_days ASC;
+        """
+
+        cur.execute(QUERY, (image_id, max_km, max_days))
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+
+    except Exception as e:
+        print("Error in get_nearby_event_images:", e)
+        return []
+
+    finally:
+        close_db_connection(conn)
+
 def merge_thread_result(base: dict, new: dict, thread_def: dict):
     """
     Merge the result of build_thread_from_objectID into an accumulated structure.
@@ -372,6 +438,11 @@ def build_thread_from_imageID(image_id: int):
     Returns a dictionary with threads categorized by identity, place, and date.
     """
     object_ids = get_objectsID_in_image(image_id)
+    images_IDS_close = get_nearby_event_images(image_id)
+    for img in images_IDS_close:
+        img_id = img.get("image_id")
+        objs = get_objectsID_in_image(img_id)
+        object_ids.extend(objs)
     return build_thread_from_object_list(object_ids)
         
 def build_thread_from_metadata(selectersValue: list[dict]):
