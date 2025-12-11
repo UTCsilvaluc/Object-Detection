@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detected Objects</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='objects.css') }}">
+</head>
+<body>
+    <main class="objects-page">
+        <header class="page-header">
+            <div class="heading">
+                <p class="eyebrow">Explorer</p>
+                <h1>Detected Objects Catalog</h1>
+                <p class="lede">Browse all detected objects and open their instances in one click.</p>
+            </div>
+            <div class="stats">
+                <div class="stat-card">
+                    <span>Objects</span>
+                    <strong id="object-count">{{ objects|length }}</strong>
+                </div>
+                <div class="stat-card">
+                    <span>Instances</span>
+                    <strong id="instance-count">{{ total_instances }}</strong>
+                </div>
+            </div>
+        </header>
+
+        <section class="filters">
+            <div class="field">
+                <label for="search-input">Quick Search</label>
+                <input id="search-input" type="search" placeholder="Class, metadata, image, location..." autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="class-filter">Class</label>
+                <select id="class-filter">
+                    <option value="">All classes</option>
+                    {% for class_name in classes %}
+                    <option value="{{ class_name }}">{{ class_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="metadata-filter">Metadata Key</label>
+                <select id="metadata-filter">
+                    <option value="">All metadata</option>
+                    {% for key in metadata_keys %}
+                    <option value="{{ key }}">{{ key }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field actions">
+                <label for="reset-filters">Reset Filters</label>
+                <button id="reset-filters" type="button">Reset</button>
+            </div>
+        </section>
+
+        <section id="object-grid" class="object-grid"></section>
+    </main>
+
+    <script>
+        window.objectsData = {{ objects|tojson }};
+        window.imagesBaseUrl = "{{ url_for('static', filename='img/Images/') }}";
+        window.viewerBaseUrl = "{{ url_for('main_routes.view_image', image_id=0) }}";
+    </script>
+
+    <script>
+        (function() {
+            const objects = window.objectsData || [];
+            const grid = document.getElementById('object-grid');
+            const searchInput = document.getElementById('search-input');
+            const classFilter = document.getElementById('class-filter');
+            const metadataFilter = document.getElementById('metadata-filter');
+            const resetButton = document.getElementById('reset-filters');
+            const objectCount = document.getElementById('object-count');
+            const instanceCount = document.getElementById('instance-count');
+            const viewUrlTemplate = window.viewerBaseUrl || '';
+            const imagesBaseUrl = window.imagesBaseUrl || '';
+
+            const escapeHtml = (value) => {
+                return (value ?? '').toString()
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            };
+
+            const buildViewUrl = (imageId) => {
+                if (!viewUrlTemplate) return '#';
+                return viewUrlTemplate.endsWith('/0')
+                    ? `${viewUrlTemplate.slice(0, -1)}${imageId}`
+                    : `${viewUrlTemplate}${imageId}`;
+            };
+
+            const renderInstances = (instances) => {
+                if (!instances || instances.length === 0) {
+                    return '<p class="empty-row">No instances available.</p>';
+                }
+
+                return instances.map((inst) => {
+                    const meta = (inst.metadata || [])
+                        .map(md => `<span class="chip muted">${escapeHtml(md.key)}: ${escapeHtml(md.value)}</span>`)
+                        .join('');
+
+                    const cropPath = inst.cropped_file_path ? `${imagesBaseUrl}${inst.cropped_file_path}` : '';
+                    const instanceImage = cropPath
+                        ? `<img src="${cropPath}" alt="Instance ${escapeHtml(inst.class || '')}" loading="lazy">`
+                        : '<div class="placeholder">No thumbnail</div>';
+
+                    return `
+                        <article class="instance">
+                            <div class="instance-thumb">${instanceImage}</div>
+                            <div class="instance-body">
+                                <div class="instance-header">
+                                    <span class="chip">${escapeHtml(inst.class || 'Unknown class')}</span>
+                                    ${inst.confidence_score ? `<span class="chip soft">Score ${Number(inst.confidence_score).toFixed(2)}</span>` : ''}
+                                </div>
+                                <div class="instance-meta">
+                                    <div><strong>Image:</strong> <a href="${buildViewUrl(inst.image_id)}">#${inst.image_id} · ${escapeHtml(inst.image_title || 'Untitled')}</a></div>
+                                    <div><strong>Location:</strong> ${escapeHtml(inst.image_location || 'Not specified')}</div>
+                                    <div><strong>Date:</strong> ${escapeHtml(inst.capture_date || '—')}</div>
+                                </div>
+                                ${meta ? `<div class="instance-tags">${meta}</div>` : ''}
+                            </div>
+                        </article>
+                    `;
+                }).join('');
+            };
+
+            const renderObjects = (list) => {
+                if (!grid) return;
+                if (!list || list.length === 0) {
+                    grid.innerHTML = '<p class="empty-row">No objects match the filters.</p>';
+                    return;
+                }
+
+                grid.innerHTML = list.map((obj) => {
+                    const cover = obj.cover_path ? `${imagesBaseUrl}${obj.cover_path}` : '';
+                    const coverHtml = cover
+                        ? `<img src="${cover}" alt="Object ${obj.object_id}" loading="lazy">`
+                        : '<div class="placeholder">No preview</div>';
+
+                    const metadata = (obj.metadata || []).slice(0, 4)
+                        .map(md => `<span class="chip muted">${escapeHtml(md.key)}: ${escapeHtml(md.value)}</span>`)
+                        .join('');
+
+                    return `
+                        <article class="object-card">
+                            <div class="object-hero">
+                                <div class="thumb">${coverHtml}</div>
+                                <div class="object-info">
+                                    <p class="object-id">Object #${obj.object_id}</p>
+                                    <h3>${escapeHtml(obj.class || 'Unknown class')}</h3>
+                                    <p class="muted">${obj.instance_count} instance(s)</p>
+                                    ${metadata ? `<div class="object-tags">${metadata}</div>` : ''}
+                                </div>
+                                <button class="toggle-instances" data-object-id="${obj.object_id}" type="button">Show instances</button>
+                            </div>
+                            <div class="instance-list" data-object-id="${obj.object_id}">
+                                ${renderInstances(obj.instances)}
+                            </div>
+                        </article>
+                    `;
+                }).join('');
+            };
+
+            const applyFilters = () => {
+                const term = (searchInput?.value || '').trim().toLowerCase();
+                const classValue = classFilter?.value || '';
+                const metadataValue = metadataFilter?.value || '';
+
+                const filtered = objects.filter((obj) => {
+                    if (classValue && obj.class !== classValue) return false;
+
+                    if (metadataValue) {
+                        const matchesMetadata = (obj.metadata || []).some(md => md.key === metadataValue)
+                            || (obj.instances || []).some(inst => (inst.metadata || []).some(md => md.key === metadataValue));
+                        if (!matchesMetadata) return false;
+                    }
+
+                    if (term) {
+                        const haystack = [
+                            obj.object_id,
+                            obj.class,
+                            (obj.metadata || []).map(md => `${md.key} ${md.value}`).join(' '),
+                            (obj.instances || []).map(inst => [
+                                inst.class,
+                                inst.image_title,
+                                inst.image_location,
+                                (inst.metadata || []).map(md => `${md.key} ${md.value}`).join(' ')
+                            ].join(' ')).join(' ')
+                        ].join(' ').toLowerCase();
+
+                        if (!haystack.includes(term)) return false;
+                    }
+
+                    return true;
+                });
+
+                const totalInst = filtered.reduce((sum, item) => sum + (item.instance_count || 0), 0);
+                objectCount.textContent = filtered.length;
+                instanceCount.textContent = totalInst;
+                renderObjects(filtered);
+            };
+
+            const resetFilters = () => {
+                if (searchInput) searchInput.value = '';
+                if (classFilter) classFilter.value = '';
+                if (metadataFilter) metadataFilter.value = '';
+                applyFilters();
+            };
+
+            const toggleInstanceList = (objectId) => {
+                const panel = grid.querySelector(`.instance-list[data-object-id="${objectId}"]`);
+                if (!panel) return;
+                panel.classList.toggle('open');
+            };
+
+            if (grid) {
+                grid.addEventListener('click', (event) => {
+                    const btn = event.target.closest('.toggle-instances');
+                    if (btn) {
+                        toggleInstanceList(btn.dataset.objectId);
+                    }
+                });
+            }
+
+            searchInput?.addEventListener('input', applyFilters);
+            classFilter?.addEventListener('change', applyFilters);
+            metadataFilter?.addEventListener('change', applyFilters);
+            resetButton?.addEventListener('click', resetFilters);
+
+            applyFilters();
+        })();
+    </script>
+</body>
+</html>

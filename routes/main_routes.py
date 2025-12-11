@@ -17,7 +17,8 @@ from utils.database import (
     get_all_link_types,
     get_all_full_images,
     get_all_full_points,
-    get_all_full_links
+    get_all_full_links,
+    get_all_full_objects_instances
 )
 
 from utils.data_objects import (
@@ -102,3 +103,31 @@ def map_data():
         "object_datas": object_datas
     })
 
+
+@main_routes_bp.route('/objects-overview')
+def objects_overview():
+    from utils.database import get_objects_overview_sql
+
+    # 1. Fetch everything from SQL
+    objects = get_objects_overview_sql()
+
+    # 2. Extract class list
+    classes = sorted({obj["class"] for obj in objects if obj["class"]})
+
+    # 3. Extract metadata key list
+    metadata_keys = sorted({
+        md["key"]
+        for obj in objects
+        for md in (obj["metadata"] or [])
+    })
+
+    # 4. Count total instances
+    total_instances = sum(obj["instance_count"] for obj in objects)
+
+    return render_template(
+        'objects.html',
+        objects=objects,
+        classes=classes,
+        metadata_keys=metadata_keys,
+        total_instances=total_instances
+    )

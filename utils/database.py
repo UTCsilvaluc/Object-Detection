@@ -2,6 +2,7 @@ import psycopg2
 from dotenv import load_dotenv
 import os
 from dateutil import parser
+from psycopg2.extras import RealDictCursor
 
 load_dotenv()
 
@@ -1724,6 +1725,111 @@ def find_shared_objects_between_images():
         return []
     finally:
         close_db_connection(conn)
+
+def get_objects_overview_sql():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+
+    QUERY = """
+    WITH aggregated AS (
+        SELECT
+            oi.object_id,
+
+            -- dominant class
+            COALESCE(
+            (
+                SELECT oi2.class
+                FROM ObjectInstance oi2
+                WHERE oi2.object_id = oi.object_id
+                GROUP BY oi2.class
+                ORDER BY COUNT(*) DESC
+                LIMIT 1
+            ) , 'unknown'
+            ) AS class,
+
+            COUNT(*) AS instance_count,
+
+            -- unique metadata
+            COALESCE(
+            (
+                SELECT json_agg(
+                    DISTINCT jsonb_build_object(
+                        'key', md.key,
+                        'value', md.value
+                    )
+                )
+                FROM Metadata md
+                JOIN LATERAL (
+                    SELECT VI.version_number
+                    FROM VersionedImage VI
+                    WHERE VI.image_id = md.image_id
+                    ORDER BY VI.version_number DESC
+                    LIMIT 1
+                ) AS latest ON TRUE
+                WHERE md.object_id = oi.object_id
+                  AND md.version_number = latest.version_number
+            ) ,
+            '[]'
+            )AS metadata,
+
+            -- instance list
+            COALESCE(
+            json_agg(
+                jsonb_build_object(
+                    'image_id', oi.image_id,
+                    'version_number', oi.version_number,
+                    'cropped_file_path', oi.cropped_file_path,
+                    'class', oi.class,
+                    'confidence_score', oi.confidence_score,
+                    'width', oi.width,
+                    'height', oi.height,
+
+                    'metadata', (
+                        SELECT json_agg(
+                            jsonb_build_object(
+                                'key', md.key,
+                                'value', md.value
+                            )
+                        )
+                        FROM Metadata md
+                        JOIN LATERAL (
+                            SELECT VI.version_number
+                            FROM VersionedImage VI
+                            WHERE VI.image_id = md.image_id
+                            ORDER BY VI.version_number DESC
+                            LIMIT 1
+                        ) AS latest2 ON TRUE
+                        WHERE md.object_id = oi.object_id AND md.image_id = oi.image_id 
+                            AND md.version_number = latest2.version_number
+                    ),
+
+                    'image_title', img.title,
+                    'image_location', img.location_name,
+                    'capture_date', img.capture_date,
+                    'file_path', img.file_path
+                )
+            ) , '[]'
+            ) AS instances,
+
+            MIN(oi.cropped_file_path) 
+                FILTER (WHERE oi.cropped_file_path IS NOT NULL) 
+                AS cover_path
+
+        FROM ObjectInstance oi
+        LEFT JOIN Image img ON img.image_id = oi.image_id
+        GROUP BY oi.object_id
+    )
+
+    SELECT *
+    FROM aggregated
+    ORDER BY object_id DESC;
+    """
+
+    cur.execute(QUERY)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
 
 def find_similar_objects_by_value(value: str):
     conn = get_db_connection()
