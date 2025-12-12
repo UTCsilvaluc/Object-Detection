@@ -114,8 +114,16 @@ def show_results():
         results = get_map_results_for_object(object_id, relation, co_occurrence_images)
         images = results.get("images", []) if isinstance(results, dict) else results
         links = results.get("links", []) if isinstance(results, dict) else []
+        common_object = results.get("common_object") if isinstance(results, dict) else None
         focus_id = images[0]["image_id"] if images else None
-        return jsonify({"success": True, "images": images, "links": links, "focus_image_id": focus_id, "relation": relation})
+        return jsonify({
+            "success": True,
+            "images": images,
+            "links": links,
+            "focus_image_id": focus_id,
+            "relation": relation,
+            "common_object": common_object
+        })
 
     if mode == "image":
         image_id = data.get("image_id")

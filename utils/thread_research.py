@@ -2,6 +2,28 @@ from utils.database import get_db_connection , close_db_connection , get_objects
 from psycopg2.extras import RealDictCursor
 import re
 
+def _fetch_object_label(conn, object_id: int):
+    """
+    Small helper to retrieve a minimal representation of an object.
+    Used to explain links on the map (object id + optional name).
+    """
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            "SELECT object_id, name FROM Object WHERE object_id = %s",
+            (object_id,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            return {
+                "object_id": row.get("object_id"),
+                "name": row.get("name")
+            }
+    except Exception as e:
+        print(f"Error while fetching object label for {object_id}: {e}")
+    return None
+
 def get_existing_threads():
     conn = get_db_connection()
     if conn is None:
@@ -407,22 +429,28 @@ def build_thread_from_objectID(object_id: int):
         """
         cur.execute(QUERY, (object_id, object_id, object_id, object_id, object_id, object_id, object_id))
         row = cur.fetchone()
-        if row and row[0]:
-            return row[0]
-        else:
-            return {
-                "threads": {},
-                "objects_same_picture": [],
-                "objects_same_metadata": [],
-                "images_from_object": []
-            }
+        base_result = {
+            "threads": {},
+            "objects_same_picture": [],
+            "objects_same_metadata": [],
+            "images_from_object": [],
+            "main_object": _fetch_object_label(conn, object_id)
+        }
+        if not row or not row[0]:
+            return base_result
+
+        result = row[0]
+        result["main_object"] = _fetch_object_label(conn, object_id)
+        return result
 
     except Exception as e:
         print(f"Error in optimized build_thread_from_objectID: {e}")
         return {
             "threads": {},
             "objects_same_picture": [],
-            "images_from_object": []
+            "objects_same_metadata": [],
+            "images_from_object": [],
+            "main_object": _fetch_object_label(conn, object_id) if conn else None
         }
     finally:
         close_db_connection(conn)
@@ -587,8 +615,24 @@ def _fetch_images_by_ids(conn, image_ids):
         cur.execute(
             """
             SELECT 
-                image_id, file_path, title, description, capture_date, event_date,
-                location_name, latitude, longitude, type
+                im.image_id,
+                im.file_path,
+                im.title,
+                im.description,
+                im.capture_date,
+                im.event_date,
+                im.location_name,
+                im.latitude,
+                im.longitude,
+                im.type,
+                COALESCE(
+                    (
+                        SELECT array_agg(DISTINCT oi.object_id)
+                        FROM ObjectInstance oi
+                        WHERE oi.image_id = im.image_id
+                    ),
+                    '{}'
+                ) AS object_ids
             FROM Image
             WHERE image_id = ANY(%s)
             """,
@@ -609,9 +653,24 @@ def _fetch_images_for_objects(conn, object_ids):
         cur.execute(
             """
             SELECT DISTINCT 
-                im.image_id, im.file_path, im.title, im.description,
-                im.capture_date, im.event_date, im.location_name,
-                im.latitude, im.longitude, im.type
+                im.image_id,
+                im.file_path,
+                im.title,
+                im.description,
+                im.capture_date,
+                im.event_date,
+                im.location_name,
+                im.latitude,
+                im.longitude,
+                im.type,
+                COALESCE(
+                    (
+                        SELECT array_agg(DISTINCT oi.object_id)
+                        FROM ObjectInstance oi
+                        WHERE oi.image_id = im.image_id
+                    ),
+                    '{}'
+                ) AS object_ids
             FROM ObjectInstance oi
             JOIN Image im ON im.image_id = oi.image_id
             WHERE oi.object_id = ANY(%s)
@@ -636,9 +695,10 @@ def get_map_results_for_object(object_id: int, relation: str = "cooccurrence" , 
     if conn is None:
         return {"images": [], "links": []}
     try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+        common_object = _fetch_object_label(conn, object_id)
         if relation == "metadata":
             # Images where the target object appears
+            cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
                 "SELECT DISTINCT image_id FROM ObjectInstance WHERE object_id = %s",
                 (object_id,)
@@ -684,15 +744,15 @@ def get_map_results_for_object(object_id: int, relation: str = "cooccurrence" , 
             image_ids = target_image_ids + related_image_ids
             images = _fetch_images_by_ids(conn, image_ids)
             cur.close()
-            return {"images": images, "links": links}
+            return {"images": images, "links": links, "common_object": common_object}
             
         # Default: cooccurrence images
         co_occurrence_images = [int(img_id) for img_id in co_occurrence_images]
         images = _fetch_images_by_ids(conn, co_occurrence_images)
-        return {"images": images, "links": []}
+        return {"images": images, "links": [], "common_object": common_object}
     except Exception as e:
         print("Error in get_map_results_for_object:", e)
-        return {"images": [], "links": []}
+        return {"images": [], "links": [], "common_object": None}
     finally:
         close_db_connection(conn)      
 def get_map_results_for_image(image_id: int):

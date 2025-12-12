@@ -17,8 +17,7 @@ from utils.database import (
     get_all_link_types,
     get_all_full_images,
     get_all_full_points,
-    get_all_full_links,
-    get_all_full_objects_instances
+    get_all_full_links
 )
 
 from utils.data_objects import (

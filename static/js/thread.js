@@ -157,6 +157,145 @@ function buildGeoTimeline(imagesList = []) {
         });
 }
 
+function formatObjectLabel(obj = null) {
+    if (!obj) return null;
+    const id = obj.object_id ?? obj.id;
+    const name = obj.name ?? obj.label ?? obj.class;
+    if (id && name) return `${name} (#${id})`;
+    if (id) return `Object #${id}`;
+    return name || null;
+}
+
+function buildChronoPopup(fromItem, toItem, relation = null, objectLabel = null, linkReason = null) {
+    const relationLabel = relation === "cooccurrence"
+        ? "Co-occurrence link"
+        : "Chronological link";
+    const reason = linkReason
+        ? linkReason
+        : (relation === "cooccurrence" && objectLabel
+            ? `Images sharing ${objectLabel}`
+            : (objectLabel ? `Linked by ${objectLabel}` : "Linked by date order"));
+    const dateLine = `${fromItem.dateLabel} -> ${toItem.dateLabel}`;
+    const locFrom = fromItem.raw.location_name || "Unknown place";
+    const locTo = fromItem.raw.location_name || "Unknown place";
+
+    return `
+        <div style="font-size:12px; line-height:1.4;">
+            <strong>${relationLabel}</strong>
+            <div>${reason}</div>
+            <div>Date path: ${dateLine}</div>
+            <div>From ${locFrom} to ${locTo}</div>
+        </div>
+    `;
+}
+
+function drawChronologicalLinks(state, timeline, relation = null, commonObject = null, links = []) {
+    if (!state || !state.layer || !timeline || timeline.length < 2) return;
+
+    const objectLabel = formatObjectLabel(commonObject);
+    const byId = new Map(timeline.map(item => [Number(item.raw.image_id), item]));
+    const objectsByImage = new Map(
+        timeline.map(item => [Number(item.raw.image_id), item.raw.object_ids || []])
+    );
+    const adjacency = new Map();
+
+    const edges = (links || []).map(l => ({
+        from: Number(l.from_image_id),
+        to: Number(l.to_image_id),
+        reason: l.metadata && l.metadata.length
+            ? l.metadata.map(md => `${md.key}: ${md.target_value ?? md.value1 ?? "?"} ⇄ ${md.related_value ?? md.value2 ?? "?"}`).join("<br>")
+            : null
+    })).filter(e => byId.has(e.from) && byId.has(e.to));
+
+    // If no explicit links, build co-occurrence links from shared objects
+    if (edges.length === 0) {
+        const ids = Array.from(byId.keys());
+        for (let i = 0; i < ids.length; i++) {
+            for (let j = i + 1; j < ids.length; j++) {
+                const a = ids[i];
+                const b = ids[j];
+                const objsA = objectsByImage.get(a) || [];
+                const objsB = objectsByImage.get(b) || [];
+                const shared = objsA.filter(id => objsB.includes(id));
+                if (shared.length > 0) {
+                    const reason = `Shared object(s): ${shared.map(id => `#${id}`).join(", ")}`;
+                    edges.push({ from: a, to: b, reason });
+                }
+            }
+        }
+    }
+
+    const components = [];
+    const visited = new Set();
+
+    edges.forEach(e => {
+        if (!adjacency.has(e.from)) adjacency.set(e.from, []);
+        if (!adjacency.has(e.to)) adjacency.set(e.to, []);
+        adjacency.get(e.from).push(e.to);
+        adjacency.get(e.to).push(e.from);
+    });
+
+    const buildComponent = (startNode) => {
+        const stack = [startNode];
+        const nodes = [];
+        while (stack.length) {
+            const node = stack.pop();
+            if (visited.has(node)) continue;
+            visited.add(node);
+            nodes.push(node);
+            (adjacency.get(node) || []).forEach(next => {
+                if (!visited.has(next)) stack.push(next);
+            });
+        }
+        return nodes;
+    };
+
+    if (edges.length > 0) {
+        edges.forEach(e => {
+            [e.from, e.to].forEach(node => {
+                if (!visited.has(node)) {
+                    const compNodes = buildComponent(node);
+                    components.push(compNodes);
+                }
+            });
+        });
+    } else if (commonObject) {
+        // Fallback: all images share the common object, so link them chronologically
+        components.push(timeline.map(t => Number(t.raw.image_id)));
+    } else {
+        return;
+    }
+
+    const edgeReasonMap = new Map();
+    edges.forEach(e => {
+        const key1 = `${e.from}-${e.to}`;
+        const key2 = `${e.to}-${e.from}`;
+        if (e.reason) {
+            edgeReasonMap.set(key1, e.reason);
+            edgeReasonMap.set(key2, e.reason);
+        }
+    });
+
+    components.forEach(comp => {
+        const entries = comp
+            .map(id => byId.get(id))
+            .filter(Boolean)
+            .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+        for (let idx = 1; idx < entries.length; idx++) {
+            const prev = entries[idx - 1];
+            const curr = entries[idx];
+            const coords = [
+                [prev.lat, prev.lng],
+                [curr.lat, curr.lng]
+            ];
+            const reason = edgeReasonMap.get(`${Number(prev.raw.image_id)}-${Number(curr.raw.image_id)}`) || null;
+            const popupHTML = buildChronoPopup(prev, curr, relation, objectLabel, reason);
+            L.polyline(coords, { color: relation === "cooccurrence" ? "#0ea5e9" : "#2463eb", weight: 3, opacity: 0.85 })
+                .bindPopup(popupHTML)
+                .addTo(state.layer);
+        }
+    });
+}
 function ensureThreadMap(threadId, center) {
     if (!mapStates[threadId]) {
         mapStates[threadId] = {
@@ -168,7 +307,8 @@ function ensureThreadMap(threadId, center) {
             drawnLinks: new Set(),
             previousIds: new Set(),
             colors: new Object(),
-            images: []
+            images: [],
+            context: {}
         };
     }
     const state = mapStates[threadId];
@@ -258,7 +398,8 @@ async function selectObject(objectId, triggerEl = null) {
     const threadId = "thread-" + threadCounter;
     
     createThreadContainer(threadId); 
-    renderFullThread(threadId, threadsData);
+    const context = { commonObject: threadsData.main_object || { object_id: objectId } };
+    renderFullThread(threadId, threadsData, context);
 
     threadCounter++;
 }
@@ -597,7 +738,7 @@ function renderImagesTab(threadId, imagesList) {
 }
 window.renderImagesTab = renderImagesTab;
 
-function renderMapTab(threadId, imagesList, focusImageId = null, relation = null, append = false, links = []) {
+function renderMapTab(threadId, imagesList, focusImageId = null, relation = null, append = false, links = [], context = {}) {
     const container = document.querySelector(
         `#${threadId} .thread-content[data-section="map"]`
     );
@@ -622,6 +763,8 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
 
     const defaultCenter = [34.33, 134.05];
     const state = ensureThreadMap(threadId, defaultCenter);
+    state.context = Object.assign({}, state.context || {}, context || {});
+    const commonObject = state.context.commonObject || null;
     if (!state.map) return;
     // Reset map content when not appending
     if (!append) {
@@ -642,12 +785,16 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
 
     const timeline = buildGeoTimeline(state.images);
     const newTimeline = buildGeoTimeline(newImages);
+    const objectLabel = formatObjectLabel(commonObject);
 
     if (timeline.length === 0) {
         listEl.innerHTML = `<p>No geolocated images for this selection.</p>`;
     } else {
         listEl.innerHTML = `
             <p><strong>${timeline.length} result(s)</strong></p>
+            <p class="map-link-hint">
+                ${objectLabel ? `Links explained by ${objectLabel} (ordered by date)` : "Links ordered by date"}
+            </p>
             ${timeline.map(({ raw, dateLabel }) => `
                 <div class="map-image-card ${raw.image_id == focusImageId ? "primary" : ""}">
                     <img class="thumb" src="${window.appConfig.URL_for_images + raw.file_path}" alt="${raw.title ?? "Image"}">
@@ -682,15 +829,8 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
         }
     });
 
-    // Polyline for this batch (maintain prior lines)
-    //Filter newTimeline to keep only items that are the main object of the thread.
-    const filteredTimeline = newTimeline.filter(item => {
-        return state.previousIds.has(item.raw.image_id);
-    });
-    const newCoords = filteredTimeline.map(item => [item.lat, item.lng]);
-    if (newCoords.length > 1) {
-        L.polyline(newCoords, { color: "#2463eb", weight: 3, opacity: 0.8 }).addTo(state.layer);
-    }
+    console.log("Rendering map polyline for relation:", relation);
+    drawChronologicalLinks(state, timeline, relation, commonObject, links || []);
 
     // Metadata links: only between focus and newly related images, with reasons
     const drawMetadataLink = relation === "metadata" || relation === "thread";
@@ -753,7 +893,7 @@ function injectImageContextIntoThread(threadsData) {
 }
 window.injectImageContextIntoThread = injectImageContextIntoThread;
 
-function renderFullThread(threadId, threadsData) {
+function renderFullThread(threadId, threadsData, context = {}) {
 
     const allObjects = [
         ...(threadsData.objects_same_picture || []).map(obj => ({ ...obj, relation: "cooccurrence" })),
@@ -763,10 +903,10 @@ function renderFullThread(threadId, threadsData) {
     renderObjectsTab(threadId, allObjects);
 
     const threads = injectImageContextIntoThread(threadsData);
-
+    console.log(threadsData);
     renderThreadTab(threadId, threads);
     renderImagesTab(threadId, threadsData.images_from_object);
-    renderMapTab(threadId, threadsData.images_from_object);
+    renderMapTab(threadId, threadsData.images_from_object, null, null, false, [], context);
     enableSingleSelect(threadId, ".object-block");
     enableSingleSelect(threadId, ".image-block");
 }
@@ -895,7 +1035,10 @@ async function generateThread(threadId) {
     const newThreadId = "thread-" + threadCounter;
 
     createThreadContainer(newThreadId);
-    renderFullThread(newThreadId, newData);
+    const context = {
+        commonObject: newData.main_object || (payload.object_id ? { object_id: payload.object_id } : null)
+    };
+    renderFullThread(newThreadId, newData, context);
 
     threadCounter++;
 }
@@ -964,7 +1107,10 @@ async function showResults(threadId) {
         data.focus_image_id || null,
         data.relation || payload.relation || null,
         false,
-        data.links || []
+        data.links || [],
+        {
+            commonObject: data.common_object || (payload.object_id ? { object_id: payload.object_id } : null)
+        }
     );
     selectTab(threadId, "map");
 }
