@@ -166,15 +166,33 @@ function formatObjectLabel(obj = null) {
     return name || null;
 }
 
-function buildChronoPopup(fromItem, toItem, relation = null, objectLabel = null, linkReason = null) {
+function renderObjectBadge(obj = null) {
+    if (!obj) return "";
+    const label = formatObjectLabel(obj) || "Object";
+    const thumb = obj.cropped_path || obj.thumb || null;
+    const imgTag = thumb
+        ? `<img src="${window.appConfig.URL_for_images}${thumb}" class="shared-thumb" alt="${label}">`
+        : "";
+    return `
+        <div class="shared-obj-card">
+            <div>${label}</div>
+            ${imgTag}
+            <a href="http://127.0.0.1:5000/objects-overview" target="_blank" rel="noopener noreferrer">See</a>
+        </div>
+    `;
+}
+
+function buildChronoPopup(fromItem, toItem, relation = null, objectLabel = null, linkReason = null, linkedObject = null) {
     const relationLabel = relation === "cooccurrence"
         ? "Co-occurrence link"
         : "Chronological link";
-    const reason = linkReason
+    const baseReason = linkReason
         ? linkReason
         : (relation === "cooccurrence" && objectLabel
             ? `Images sharing ${objectLabel}`
             : (objectLabel ? `Linked by ${objectLabel}` : "Linked by date order"));
+    const objectBadge = renderObjectBadge(linkedObject || null);
+    const reason = `${baseReason}${objectBadge ? `<div style="margin-top:6px;">${objectBadge}</div>` : ""}`;
     const dateLine = `${fromItem.dateLabel} -> ${toItem.dateLabel}`;
     const locFrom = fromItem.raw.location_name || "Unknown place";
     const locTo = fromItem.raw.location_name || "Unknown place";
@@ -195,7 +213,13 @@ function drawChronologicalLinks(state, timeline, relation = null, commonObject =
     const objectLabel = formatObjectLabel(commonObject);
     const byId = new Map(timeline.map(item => [Number(item.raw.image_id), item]));
     const objectsByImage = new Map(
-        timeline.map(item => [Number(item.raw.image_id), item.raw.object_ids || []])
+        timeline.map(item => {
+            const objMap = new Map();
+            (item.raw.object_instances || []).forEach(o => {
+                objMap.set(Number(o.object_id), { id: Number(o.object_id), thumb: o.cropped_path || null });
+            });
+            return [Number(item.raw.image_id), objMap];
+        })
     );
     const adjacency = new Map();
 
@@ -214,11 +238,31 @@ function drawChronologicalLinks(state, timeline, relation = null, commonObject =
             for (let j = i + 1; j < ids.length; j++) {
                 const a = ids[i];
                 const b = ids[j];
-                const objsA = objectsByImage.get(a) || [];
-                const objsB = objectsByImage.get(b) || [];
-                const shared = objsA.filter(id => objsB.includes(id));
+                const objsA = objectsByImage.get(a) || new Map();
+                const objsB = objectsByImage.get(b) || new Map();
+                const shared = Array.from(objsA.keys()).filter(id => objsB.has(id));
                 if (shared.length > 0) {
-                    const reason = `Shared object(s): ${shared.map(id => `#${id}`).join(", ")}`;
+                    const sharedDetails = shared.map(id => {
+                        const fromObj = objsA.get(id);
+                        const toObj = objsB.get(id);
+                        return {
+                            id,
+                            thumb: fromObj?.thumb || toObj?.thumb || null
+                        };
+                    });
+                    const thumbsHTML = sharedDetails.map(s => {
+                        const imgTag = s.thumb
+                            ? `<img src="${window.appConfig.URL_for_images}${s.thumb}" class="shared-thumb" alt="Object #${s.id}" />`
+                            : "";
+                        return `<div class="shared-obj-card"><div>#${s.id}</div>${imgTag}</div>`;
+                    }).join("");
+                    const reason = `
+                        <div style="font-size:12px;">
+                            <div>Objets communs :</div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${thumbsHTML}</div>
+                            <a href="/objects-overview" target="_blank" rel="noopener noreferrer">Voir les objets</a>
+                        </div>
+                    `;
                     edges.push({ from: a, to: b, reason });
                 }
             }
@@ -289,7 +333,7 @@ function drawChronologicalLinks(state, timeline, relation = null, commonObject =
                 [curr.lat, curr.lng]
             ];
             const reason = edgeReasonMap.get(`${Number(prev.raw.image_id)}-${Number(curr.raw.image_id)}`) || null;
-            const popupHTML = buildChronoPopup(prev, curr, relation, objectLabel, reason);
+            const popupHTML = buildChronoPopup(prev, curr, relation, objectLabel, reason, commonObject);
             L.polyline(coords, { color: relation === "cooccurrence" ? "#0ea5e9" : "#2463eb", weight: 3, opacity: 0.85 })
                 .bindPopup(popupHTML)
                 .addTo(state.layer);

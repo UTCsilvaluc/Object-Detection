@@ -10,7 +10,20 @@ def _fetch_object_label(conn, object_id: int):
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            "SELECT object_id, name FROM Object WHERE object_id = %s",
+            """
+            SELECT 
+                o.object_id, 
+                o.name,
+                (
+                    SELECT oi.cropped_file_path
+                    FROM ObjectInstance oi
+                    WHERE oi.object_id = o.object_id
+                    ORDER BY oi.version_number DESC
+                    LIMIT 1
+                ) AS cropped_path
+            FROM Object o
+            WHERE o.object_id = %s
+            """,
             (object_id,)
         )
         row = cur.fetchone()
@@ -18,7 +31,8 @@ def _fetch_object_label(conn, object_id: int):
         if row:
             return {
                 "object_id": row.get("object_id"),
-                "name": row.get("name")
+                "name": row.get("name"),
+                "cropped_path": row.get("cropped_path")
             }
     except Exception as e:
         print(f"Error while fetching object label for {object_id}: {e}")
@@ -627,14 +641,26 @@ def _fetch_images_by_ids(conn, image_ids):
                 im.type,
                 COALESCE(
                     (
-                        SELECT array_agg(DISTINCT oi.object_id)
-                        FROM ObjectInstance oi
-                        WHERE oi.image_id = im.image_id
+                        SELECT array_agg(
+                            json_build_object(
+                                'object_id', oi.object_id,
+                                'cropped_path', oi.cropped_file_path
+                            )
+                            ORDER BY oi.object_id
+                        )
+                        FROM (
+                            SELECT DISTINCT ON (oi.object_id)
+                                oi.object_id,
+                                oi.cropped_file_path
+                            FROM ObjectInstance oi
+                            WHERE oi.image_id = im.image_id
+                            ORDER BY oi.object_id, oi.version_number DESC
+                        ) oi
                     ),
-                    '{}'
-                ) AS object_ids
-            FROM Image
-            WHERE image_id = ANY(%s)
+                    ARRAY[]::json[]
+                ) AS object_instances
+            FROM Image im
+            WHERE im.image_id = ANY(%s)
             """,
             (list(set(image_ids)),)
         )
@@ -652,7 +678,13 @@ def _fetch_images_for_objects(conn, object_ids):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
             """
-            SELECT DISTINCT 
+            WITH imgs AS (
+                SELECT DISTINCT im.image_id
+                FROM ObjectInstance oi
+                JOIN Image im ON im.image_id = oi.image_id
+                WHERE oi.object_id = ANY(%s)
+            )
+            SELECT 
                 im.image_id,
                 im.file_path,
                 im.title,
@@ -665,15 +697,26 @@ def _fetch_images_for_objects(conn, object_ids):
                 im.type,
                 COALESCE(
                     (
-                        SELECT array_agg(DISTINCT oi.object_id)
-                        FROM ObjectInstance oi
-                        WHERE oi.image_id = im.image_id
+                        SELECT array_agg(
+                            json_build_object(
+                                'object_id', oi.object_id,
+                                'cropped_path', oi.cropped_file_path
+                            )
+                            ORDER BY oi.object_id
+                        )
+                        FROM (
+                            SELECT DISTINCT ON (oi.object_id)
+                                oi.object_id,
+                                oi.cropped_file_path
+                            FROM ObjectInstance oi
+                            WHERE oi.image_id = im.image_id
+                            ORDER BY oi.object_id, oi.version_number DESC
+                        ) oi
                     ),
-                    '{}'
-                ) AS object_ids
-            FROM ObjectInstance oi
-            JOIN Image im ON im.image_id = oi.image_id
-            WHERE oi.object_id = ANY(%s)
+                    ARRAY[]::json[]
+                ) AS object_instances
+            FROM Image im
+            JOIN imgs ON imgs.image_id = im.image_id
             """,
             (list(set(object_ids)),)
         )
