@@ -7,6 +7,7 @@ import numpy as np
 
 from utils.helper import (
     build_json_temp_path,
+    build_img_temp_path,
     save_json,
     save_temp_img,
     draw_annotations,
@@ -68,33 +69,40 @@ def merge_objects():
 @object_bp.route('/remove_object', methods=['POST'])
 def remove_object():
     data = request.get_json()
-    id = int(data.get('id'))
-    img_name = data.get('img_name')
+    try:
+        obj_id = int(data.get('id'))
+    except (TypeError, ValueError):
+        return {"error": "Invalid object id"}, 400
+
+    img_name = (data.get('img_name') or '').strip()
     result_data, error, image, img_original_path, img_annotated_path = load_analysis_context(
         img_name,
         data.get("img_original_path", ""),
         data.get("img_annotated_path", ""),
         require_json=True
     )
-    if error:
-        return {"error": error}, 404
-    result_data , json_path = load_analysis_json(img_name)
+    if error or result_data is None or image is None:
+        return {"error": error or "Analysis context not found"}, 404
+
     objects = result_data.get("objects", [])
-    obj_to_delete = next((obj for obj in objects if obj.get("id") == id), None)
-    if obj_to_delete:
-        objects.remove(obj_to_delete)
-        crop_path = obj_to_delete.get("obj_crop_path")
-        if crop_path and os.path.exists(crop_path):
-            os.remove(crop_path)
-    else:
+    obj_to_delete = next((obj for obj in objects if obj.get("id") == obj_id), None)
+    if not obj_to_delete:
         return {"error": "Object not found in JSON"}, 404
 
-    save_json(result_data, build_json_temp_path(), img_name)
-    image = draw_annotations(image, objects)
-    if os.path.exists(img_annotated_path):
-        os.remove(img_annotated_path)
+    # Remove the object from the in-memory list and persist it to disk
+    objects[:] = [obj for obj in objects if obj.get("id") != obj_id]
+    result_data["num_objects"] = len(objects)
 
-    cv2.imwrite(img_annotated_path, image)
+    crop_path = obj_to_delete.get("obj_crop_path")
+    if crop_path:
+        crop_abs = crop_path if os.path.isabs(crop_path) else build_img_temp_path(crop_path)
+        if os.path.exists(crop_abs):
+            os.remove(crop_abs)
+
+    save_json(result_data, build_json_temp_path(), img_name)
+
+    annotated_image = draw_annotations(image.copy(), objects)
+    cv2.imwrite(img_annotated_path, annotated_image)
 
     return {"success": True, "num_objects": len(objects)}, 200
 
