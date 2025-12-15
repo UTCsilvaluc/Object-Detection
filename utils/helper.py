@@ -4,6 +4,7 @@ import tempfile, os
 import cv2
 import shutil
 import json
+import html
 from utils.database import *
 from ultralytics.utils.plotting import colors
 import io
@@ -14,6 +15,13 @@ from models.object_embedding import generate_embedding_from_crop
 from utils.database import get_instance_object_by_object_id , find_similar_objects
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
+
+
+def _sanitize_filename(name: str) -> str:
+    """Normalize filenames coming from the frontend (HTML entities, extra spaces)."""
+    if not name:
+        return name
+    return html.unescape(name).strip()
 
 def build_json_temp_path(extension=None):
     """
@@ -98,6 +106,7 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     return dest_path
 
 def load_analysis_json(img_name, required=True):
+    img_name = _sanitize_filename(img_name)
     json_path = build_json_temp_path(f"{img_name}.json")
     data = load_json(json_path)
     if required and data is None:
@@ -517,6 +526,10 @@ def create_new_object(obj_img, bbox, contour, new_id, score=1.0):
     return new_obj
 
 def load_analysis_context(img_name, original_path, annotated_path, require_json=True):
+    img_name = _sanitize_filename(img_name)
+    original_path = _sanitize_filename(original_path)
+    annotated_path = _sanitize_filename(annotated_path)
+
     img_original = build_img_temp_path(original_path)
     img_annotated = build_img_temp_path(annotated_path)
 
