@@ -92,6 +92,18 @@
     </div>
 </div>
 
+<!-- INSTANCE PREVIEW OVERLAY -->
+<div id="instance-preview" class="instance-preview hidden" role="dialog" aria-modal="true">
+    <div class="instance-preview__panel">
+        <button class="instance-preview__close" type="button" onclick="closeInstancePreview()" aria-label="Close preview">&times;</button>
+        <img class="instance-preview__img" src="" alt="Object instance">
+        <div class="instance-preview__meta">
+            <div class="instance-preview__title"></div>
+            <div class="instance-preview__subtitle"></div>
+        </div>
+    </div>
+</div>
+
 
 <script>
     window.appConfig = {

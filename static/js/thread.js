@@ -499,10 +499,85 @@ async function requestThreadGeneration(payload) {
 }
 window.requestThreadGeneration = requestThreadGeneration;
 
-
-window.selectObject = selectObject;
 /************************************************************
- * 6. UI : DISPLAYING RESULTS
+ * 6. UI : INSTANCE PREVIEW 
+ ************************************************************/
+const instancePreview = {
+    root: null,
+    img: null,
+    title: null,
+    subtitle: null
+};
+
+function initInstancePreview() {
+    if (instancePreview.root) return true;
+    instancePreview.root = document.getElementById("instance-preview");
+    if (!instancePreview.root) return false;
+
+    instancePreview.img = instancePreview.root.querySelector(".instance-preview__img");
+    instancePreview.title = instancePreview.root.querySelector(".instance-preview__title");
+    instancePreview.subtitle = instancePreview.root.querySelector(".instance-preview__subtitle");
+
+    instancePreview.root.addEventListener("click", (e) => {
+        if (e.target === instancePreview.root) closeInstancePreview();
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeInstancePreview();
+    });
+
+    return true;
+}
+
+function openInstancePreview({ src, title, subtitle }) {
+    if (!initInstancePreview()) return;
+    if (!instancePreview.root) return;
+
+    instancePreview.img.src = src;
+    instancePreview.img.alt = title || subtitle || "Object instance";
+    instancePreview.title.textContent = title || "Instance preview";
+    instancePreview.subtitle.textContent = subtitle || "";
+
+    instancePreview.root.classList.remove("hidden");
+    document.body.classList.add("preview-open");
+}
+
+function closeInstancePreview() {
+    if (!instancePreview.root) return;
+    instancePreview.root.classList.add("hidden");
+    instancePreview.img.src = "";
+    document.body.classList.remove("preview-open");
+}
+window.closeInstancePreview = closeInstancePreview;
+
+function wireInstancePreviews(scope) {
+    const root = scope || document;
+    if (!root) return;
+    const thumbs = root.querySelectorAll(".obj-instance");
+    thumbs.forEach(img => {
+        if (img.dataset.previewBound === "1") return;
+        const src = img.getAttribute("src");
+        const block = img.closest(".object-block");
+        const objectId = block?.dataset.objectId || "";
+        const relation = block?.dataset.relation || "";
+        const imageLabel = img.getAttribute("title") || "";
+        const subtitleParts = [];
+        if (imageLabel) subtitleParts.push(`Image ${imageLabel}`);
+        if (relation) subtitleParts.push(`Relation: ${relation}`);
+
+        img.dataset.previewBound = "1";
+        img.addEventListener("click", () => {
+            openInstancePreview({
+                src,
+                title: objectId ? `Object #${objectId}` : "Object instance",
+                subtitle: subtitleParts.join(" · ")
+            });
+        });
+    });
+}
+
+/************************************************************
+ * 7. UI : DISPLAYING RESULTS
  ************************************************************/
 function displayResultsIn(container, objects) {
     container.innerHTML = "";
@@ -557,6 +632,8 @@ function displayResultsIn(container, objects) {
         div.innerHTML = html;
         container.appendChild(div);
     });
+
+    wireInstancePreviews(container);
 }
 window.displayResultsIn = displayResultsIn;
 
@@ -613,7 +690,16 @@ function renderObjectsTab(threadId, objectsList) {
         return;
     }
 
+    const withMetadata = [];
+    const withoutMetadata = [];
+
     objectsList.forEach(obj => {
+        const hasMetadata = obj.metadata && Object.keys(obj.metadata).length > 0;
+        if (hasMetadata) withMetadata.push(obj);
+        else withoutMetadata.push(obj);
+    });
+
+    const renderBlock = (obj, targetContainer) => {
         const block = document.createElement("div");
         block.className = "object-block";
         block.dataset.objectId = obj.object_id;
@@ -623,7 +709,7 @@ function renderObjectsTab(threadId, objectsList) {
         // Build HTML
         let html = `
             <h2>Object #${obj.object_id} — ${obj.name ?? "Unnamed"}</h2>
-            <p class="object-relation">Relation: ${block.dataset.relation}</p>
+            <p class="object-relation">Relation: ${block.dataset.relation + (obj.co_occurrence_images ? " (" + obj.co_occurrence_images.length + " images)" : "")}</p>
 
             <div class="instance-row">
         `;
@@ -646,14 +732,24 @@ function renderObjectsTab(threadId, objectsList) {
                 <table>
         `;
 
-        Object.keys(obj.metadata).forEach(key => {
+        const metaKeys = Object.keys(obj.metadata || {});
+        if (metaKeys.length === 0) {
             html += `
                 <tr>
-                    <td class="meta-key">${key}</td>
-                    <td class="meta-value">${obj.metadata[key].join(", ")}</td>
+                    <td class="meta-key">Metadata</td>
+                    <td class="meta-value">None</td>
                 </tr>
             `;
-        });
+        } else {
+            metaKeys.forEach(key => {
+                html += `
+                    <tr>
+                        <td class="meta-key">${key}</td>
+                        <td class="meta-value">${obj.metadata[key].join(", ")}</td>
+                    </tr>
+                `;
+            });
+        }
 
         html += `
                 </table>
@@ -661,8 +757,25 @@ function renderObjectsTab(threadId, objectsList) {
         `;
 
         block.innerHTML = html;
-        container.appendChild(block);
-    });
+        targetContainer.appendChild(block);
+    };
+
+    withMetadata.forEach(obj => renderBlock(obj, container));
+
+    if (withoutMetadata.length > 0) {
+        const collapsible = document.createElement("details");
+        collapsible.className = "no-metadata-section";
+        collapsible.innerHTML = `<summary>Objects without metadata (${withoutMetadata.length})</summary>`;
+
+        const noMetaContainer = document.createElement("div");
+        noMetaContainer.className = "no-metadata-list";
+        withoutMetadata.forEach(obj => renderBlock(obj, noMetaContainer));
+
+        collapsible.appendChild(noMetaContainer);
+        container.appendChild(collapsible);
+    }
+
+    wireInstancePreviews(container);
 }
 /**
  * Renders the "thread" tab content , fullfiling the select options
@@ -937,17 +1050,35 @@ function injectImageContextIntoThread(threadsData) {
 }
 window.injectImageContextIntoThread = injectImageContextIntoThread;
 
+function orderObjectsByRelevance(objectsList) {
+    if (!objectsList || objectsList.length === 0) return [];
+    objectsList.sort((a, b) => {
+        const aMetaCount = a.metadata ? Object.keys(a.metadata).length : 0;
+        const bMetaCount = b.metadata ? Object.keys(b.metadata).length : 0;
+
+        if (bMetaCount !== aMetaCount) {
+            return bMetaCount - aMetaCount;
+        }
+
+        const aOcc = a.co_occurrence_images ? a.co_occurrence_images.length : 0;
+        const bOcc = b.co_occurrence_images ? b.co_occurrence_images.length : 0;
+
+        return bOcc - aOcc;
+    });
+    return objectsList;
+}
+
+
 function renderFullThread(threadId, threadsData, context = {}) {
 
     const allObjects = [
         ...(threadsData.objects_same_picture || []).map(obj => ({ ...obj, relation: "cooccurrence" })),
         ...(threadsData.objects_same_metadata || []).map(obj => ({ ...obj, relation: "metadata" }))
     ];
+    orderObjectsByRelevance(allObjects);
 
     renderObjectsTab(threadId, allObjects);
-
     const threads = injectImageContextIntoThread(threadsData);
-    console.log(threadsData);
     renderThreadTab(threadId, threads);
     renderImagesTab(threadId, threadsData.images_from_object);
     renderMapTab(threadId, threadsData.images_from_object, null, null, false, [], context);
