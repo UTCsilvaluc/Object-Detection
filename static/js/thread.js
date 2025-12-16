@@ -177,7 +177,7 @@ function renderObjectBadge(obj = null) {
         <div class="shared-obj-card">
             <div>${label}</div>
             ${imgTag}
-            <a href="http://127.0.0.1:5000/objects-overview" target="_blank" rel="noopener noreferrer">See</a>
+            <a href="/objects-overview?ObjectID=${encodeURIComponent(obj.object_id || obj.id || '')}" target="_blank" rel="noopener noreferrer">See</a>
         </div>
     `;
 }
@@ -260,7 +260,7 @@ function drawChronologicalLinks(state, timeline, relation = null, commonObject =
                         <div style="font-size:12px;">
                             <div>Objets communs :</div>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${thumbsHTML}</div>
-                            <a href="/objects-overview" target="_blank" rel="noopener noreferrer">Voir les objets</a>
+                            <a href="/objects-overview?ObjectID=${sharedDetails.map(s => s.id).join(',')}" target="_blank" rel="noopener noreferrer">Voir les objets</a>
                         </div>
                     `;
                     edges.push({ from: a, to: b, reason });
@@ -986,7 +986,6 @@ function renderMapTab(threadId, imagesList, focusImageId = null, relation = null
         }
     });
 
-    console.log("Rendering map polyline for relation:", relation);
     drawChronologicalLinks(state, timeline, relation, commonObject, links || []);
 
     // Metadata links: only between focus and newly related images, with reasons

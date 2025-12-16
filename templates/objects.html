@@ -232,6 +232,28 @@
             resetButton?.addEventListener('click', resetFilters);
 
             applyFilters();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const ObjectIDParam = urlParams.get('ObjectID') ? urlParams.get('ObjectID') : null;
+            if (ObjectIDParam) {
+                //If is an array of IDs, split by comma
+                const decodedObjectID = decodeURIComponent(ObjectIDParam);
+                const objectIDs = decodedObjectID.includes(',') ? decodedObjectID.split(',').map(id => id.trim()) : [decodedObjectID];
+                const filteredByIDs = objects.filter(obj => objectIDs.includes(obj.object_id.toString()));
+                if (filteredByIDs.length > 0) {
+                    objectCount.textContent = filteredByIDs.length;
+                    const totalInstByIDs = filteredByIDs.reduce((sum, item) => sum + (item.instance_count || 0), 0);
+                    instanceCount.textContent = totalInstByIDs;
+                    renderObjects(filteredByIDs);
+                    return;
+                }
+                //If not found, try single ID match     
+                const filteredByID = objects.filter(obj => obj.object_id.toString() === ObjectIDParam);
+                objectCount.textContent = filteredByID.length;
+                const totalInstByID = filteredByID.reduce((sum, item) => sum + (item.instance_count || 0), 0);
+                instanceCount.textContent = totalInstByID;
+                renderObjects(filteredByID);
+            }
         })();
     </script>
 </body>
