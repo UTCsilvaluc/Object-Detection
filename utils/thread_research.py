@@ -727,7 +727,6 @@ def _fetch_images_for_objects(conn, object_ids):
         print("Error fetching images for objects:", e)
         return []
 
-
 def get_map_results_for_object(object_id: int, relation: str = "cooccurrence" , co_occurrence_images: list[int] = []):
     """
     Returns map-ready images for a given object depending on the relation type.
@@ -822,8 +821,9 @@ def get_map_results_for_thread(selectersValue: list[dict]):
         return []
     try:
         object_ids = get_objects_from_thread(selectersValue)
+        print("Object IDs found for thread selectors:", object_ids)
         images = _fetch_images_for_objects(conn, object_ids)
-
+        print("Images fetched for thread selectors:", len(images))
         # No matches, early return
         if not images:
             return {"images": [], "links": [], "focus_image_id": None}
@@ -961,7 +961,6 @@ def get_map_results_for_thread(selectersValue: list[dict]):
                     add_match(row["image_id"], category, row.get("metadata_match"), "metadata")
 
         cur.close()
-
         focus_id = images[0].get("image_id")
         focus_matches = matches_by_image.get(focus_id, [])
         if not focus_matches:
@@ -972,7 +971,7 @@ def get_map_results_for_thread(selectersValue: list[dict]):
                     focus_matches = match_list
                     break
 
-        links = []
+        metadata_links = []
         for img in images:
             img_id = img.get("image_id")
             if img_id is None or img_id == focus_id:
@@ -994,12 +993,103 @@ def get_map_results_for_thread(selectersValue: list[dict]):
                     })
                     seen_keys.add(fm["key"])
             if shared_metadata:
-                links.append({
+                metadata_links.append({
                     "from_image_id": focus_id,
                     "to_image_id": img_id,
+                    "type": "metadata",
                     "metadata": shared_metadata
                 })
 
+        # Link images back to the focus image when they share one (or more) of the matched objects.
+        matched_object_ids = set(int(x) for x in (object_ids or []) if x is not None)
+        image_objects: dict[int, set[int]] = {}
+        for img in images:
+            img_id = img.get("image_id")
+            if img_id is None:
+                continue
+            obj_ids = set()
+            for inst in (img.get("object_instances") or []):
+                try:
+                    oid = inst.get("object_id")
+                    if oid is not None:
+                        obj_ids.add(int(oid))
+                except Exception:
+                    continue
+            image_objects[int(img_id)] = obj_ids
+
+        focus_objects = (image_objects.get(int(focus_id)) or set()) & matched_object_ids
+        # Fallback: if for some reason focus_objects is empty, still link by matched objects present on each image.
+        if not focus_objects:
+            focus_objects = set(matched_object_ids)
+        object_presence_links = []
+        for img in images:
+            img_id = img.get("image_id")
+            if img_id is None or int(img_id) == int(focus_id):
+                continue
+            shared = focus_objects & (image_objects.get(int(img_id)) or set())
+            if not shared:
+                continue
+            object_presence_links.append({
+                "from_image_id": focus_id,
+                "to_image_id": img_id,
+                "type": "object_presence",
+                "object_ids": sorted(shared)
+            })
+
+        # For each matched object, link its images (that have date+coords) in chronological order.
+        movement_by_edge: dict[tuple[int, int], set[int]] = {}
+
+        def _date_sort_key(value):
+            if value is None:
+                return None
+            try:
+                # psycopg2 can return date/datetime objects; normalize to ISO for stable ordering.
+                if hasattr(value, "isoformat"):
+                    return value.isoformat()
+            except Exception:
+                pass
+            return str(value)
+
+        def _coalesce_date_key(img_row: dict):
+            return _date_sort_key(img_row.get("event_date") or img_row.get("capture_date"))
+
+        def _has_coords(img_row: dict):
+            return img_row.get("latitude") is not None and img_row.get("longitude") is not None
+
+        images_by_id = {int(img.get("image_id")): img for img in images if img.get("image_id") is not None}
+        for oid in matched_object_ids:
+            occurrences = []
+            for img_id, obj_set in image_objects.items():
+                if oid not in obj_set:
+                    continue
+                row = images_by_id.get(int(img_id))
+                if not row:
+                    continue
+                date_key = _coalesce_date_key(row)
+                if not date_key or not _has_coords(row):
+                    continue
+                occurrences.append((date_key, int(img_id)))
+            if len(occurrences) < 2:
+                continue
+            occurrences.sort(key=lambda x: x[0])
+            for idx in range(1, len(occurrences)):
+                prev_id = occurrences[idx - 1][1]
+                curr_id = occurrences[idx][1]
+                if prev_id == curr_id:
+                    continue
+                key = (prev_id, curr_id)
+                movement_by_edge.setdefault(key, set()).add(int(oid))
+
+        movement_links = []
+        for (from_id, to_id), obj_set in movement_by_edge.items():
+            movement_links.append({
+                "from_image_id": from_id,
+                "to_image_id": to_id,
+                "type": "movement",
+                "object_ids": sorted(obj_set)
+            })
+
+        links = metadata_links + object_presence_links + movement_links
         return {"images": images, "links": links, "focus_image_id": focus_id}
     finally:
         close_db_connection(conn)
