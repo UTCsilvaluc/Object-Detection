@@ -102,7 +102,7 @@ function addChronoLinkDecorations(state, fromLatLng, toLatLng, color, stepLabel)
 
   const labelIcon = L.divIcon({
     className: "chrono-link-label-icon",
-    html: `<div class="chrono-link-label">${stepLabel}</div>`,
+    html: `<div class="chrono-link-label" style="background:${color}; border-color:${color}; color:#fff;">${stepLabel}</div>`,
     iconSize: [1, 1]
   });
   const labelMarker = L.marker(midpointLatLng(fromLatLng, toLatLng), {
@@ -520,36 +520,42 @@ export function renderMapTab(
 
   const stepAssignments =
     relation === "thread"
-      ? computeChronoStepAssignments([
-          ...(presenceLinks || []).map((link) => ({
-            key: `presence:${link.from_image_id}->${link.to_image_id}`,
-            fromId: Number(link.from_image_id),
-            toId: Number(link.to_image_id),
-            fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-            toDate: timelineById.get(Number(link.to_image_id))?.date || null
-          })),
-          ...(movementLinks || []).map((link) => ({
-            key: `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`,
-            fromId: Number(link.from_image_id),
-            toId: Number(link.to_image_id),
-            fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-            toDate: timelineById.get(Number(link.to_image_id))?.date || null
-          })),
-          ...(metadataLinks || []).map((link) => ({
-            key: `${link.from_image_id}->${link.to_image_id}`,
-            fromId: Number(link.from_image_id),
-            toId: Number(link.to_image_id),
-            fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-            toDate: timelineById.get(Number(link.to_image_id))?.date || null
-          }))
-        ])
-      : new Map();
+      ? {
+          presence: computeChronoStepAssignments(
+            (presenceLinks || []).map((link) => ({
+              key: `presence:${link.from_image_id}->${link.to_image_id}`,
+              fromId: Number(link.from_image_id),
+              toId: Number(link.to_image_id),
+              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+              toDate: timelineById.get(Number(link.to_image_id))?.date || null
+            }))
+          ),
+          movement: computeChronoStepAssignments(
+            (movementLinks || []).map((link) => ({
+              key: `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`,
+              fromId: Number(link.from_image_id),
+              toId: Number(link.to_image_id),
+              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+              toDate: timelineById.get(Number(link.to_image_id))?.date || null
+            }))
+          ),
+          metadata: computeChronoStepAssignments(
+            (metadataLinks || []).map((link) => ({
+              key: `${link.from_image_id}->${link.to_image_id}`,
+              fromId: Number(link.from_image_id),
+              toId: Number(link.to_image_id),
+              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+              toDate: timelineById.get(Number(link.to_image_id))?.date || null
+            }))
+          )
+        }
+      : null;
 
   if (relation === "thread" && presenceLinks.length > 0) {
     presenceLinks.forEach((link) => {
       const key = `presence:${link.from_image_id}->${link.to_image_id}`;
       if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments.get(key) || null;
+      const step = stepAssignments?.presence?.get(key) || null;
       const fromId = step ? step.fromId : Number(link.from_image_id);
       const toId = step ? step.toId : Number(link.to_image_id);
       const fromMarker = state.markers.get(fromId);
@@ -579,7 +585,7 @@ export function renderMapTab(
     movementLinks.forEach((link) => {
       const key = `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`;
       if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments.get(key) || null;
+      const step = stepAssignments?.movement?.get(key) || null;
       const fromId = step ? step.fromId : Number(link.from_image_id);
       const toId = step ? step.toId : Number(link.to_image_id);
       const fromMarker = state.markers.get(fromId);
@@ -621,7 +627,7 @@ export function renderMapTab(
     metadataLinks.forEach((link) => {
       const key = `${link.from_image_id}->${link.to_image_id}`;
       if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments.get(key) || null;
+      const step = stepAssignments?.metadata?.get(key) || null;
       const fromId = step ? step.fromId : Number(link.from_image_id);
       const toId = step ? step.toId : Number(link.to_image_id);
       const fromMarker = state.markers.get(fromId);
@@ -672,4 +678,3 @@ export function renderMapTab(
     }, 300);
   }
 }
-
