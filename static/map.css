@@ -54,11 +54,20 @@ body {
     opacity: 1;
     transform: translateY(0);
     height: 620px;
+    overflow: hidden;
 }
 
 #sidebar-images {
+    contain: layout paint style;
+    will-change: transform;
+    overflow-y: auto;
     position: sticky;
     top: 16px;
+}
+
+#sidebar-timeline.visible {
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 #sidebar-images h2 {

@@ -40,6 +40,8 @@ let filteredImages = [];
 let metadata_keys = window.appConfig.metadata_keys || [];
 let metadata_keys_available = metadata_keys.slice();
 let tempMarker = null;
+let mapInvalidateTimer = null;
+let lastTimelineImageId = null;
 
 window.filteredImages = filteredImages;
 window.checkClasses = checkClasses;
@@ -107,6 +109,14 @@ function initMap(position) {
     handleActionPropagation(L);
 }
 
+function invalidateMapSize() {
+    if (!map) return;
+    clearTimeout(mapInvalidateTimer);
+    mapInvalidateTimer = setTimeout(() => {
+        map.invalidateSize();
+    }, 200);
+}
+
 
 function handleLocationError(error) {
     console.warn(`ERROR(${error.code}): ${error.message}`);
@@ -150,15 +160,16 @@ function applyFilters() {
     markers.clearLayers();
     const thumbs = sidebar.querySelector('.image-thumbnails');
     if (thumbs) {
-            thumbs.innerHTML = '';
-        }
+        thumbs.innerHTML = '';
+    }
+    const fragment = document.createDocumentFragment();
     filteredImages.forEach(img => {
-        let thumbDiv = document.createElement('div');
+        const thumbDiv = document.createElement('div');
         thumbDiv.className = 'image-thumbnail';
         thumbDiv.setAttribute('data-longitude', img.longitude);
         thumbDiv.setAttribute('data-latitude', img.latitude);
         thumbDiv.innerHTML = `
-            <img src="${URL_for_images + img.file_path}" alt="${img.title}">
+            <img src="${URL_for_images + img.file_path}" alt="${img.title}" loading="lazy" decoding="async">
             <div class="data-image">
                 <span class="image-title"><strong>Title:</strong> ${img.title}</span>
                 <span class="image-class"><strong>Description:</strong> ${img.description}</span>
@@ -166,10 +177,7 @@ function applyFilters() {
             </div>
         `;
         if (thumbs) {
-            thumbs.appendChild(thumbDiv);
-            thumbDiv.addEventListener('click', () => {
-                map.setView([img.latitude, img.longitude], 15);
-            });
+            fragment.appendChild(thumbDiv);
         }
         if (!img.latitude || !img.longitude) return;
         const icon = L.icon({
@@ -187,6 +195,9 @@ function applyFilters() {
                 }   
             });
     });
+    if (thumbs) {
+        thumbs.appendChild(fragment);
+    }
     refreshVisualization();
     buildTimelineFromFilteredImages(filteredImages , URL_for_images);
 }
@@ -221,9 +232,11 @@ function checkAllFilters(image) {
     }
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
-    const imgDate = new Date(image.capture_date);
+    const rawDate = image.capture_date || image.event_date || null;
+    const imgDate = rawDate ? new Date(rawDate) : null;
 
-    if (!isNaN(imgDate)){
+    if (startDate || endDate) {
+        if (!imgDate || isNaN(imgDate)) return false;
         if (startDate && imgDate < new Date(startDate)) return false;
         if (endDate && imgDate > new Date(endDate)) return false;
     }
@@ -438,10 +451,10 @@ document.getElementById('toggle-cluster').addEventListener('change', (e) => {
 document.getElementById('toggle-timeline').addEventListener('change', (e) => {
     if (e.target.checked) {
         document.getElementById('sidebar-timeline').classList.add('visible');
-        document.getElementById('sidebar-timeline').style.width = '50%';
     } else {
         document.getElementById('sidebar-timeline').classList.remove('visible');
     }
+    invalidateMapSize();
 });
 
 document.getElementById('import-geojson').addEventListener('click', () => {
@@ -453,32 +466,44 @@ document.getElementById('import-other').addEventListener('click', () => {
 });
 
 document.getElementById('toggle-sidebar').addEventListener('click', () => {
-    const sidebar = document.querySelector('.map-controller .sidebar');
+    const sidebar = document.getElementById('sidebar-images');
     sidebar.classList.toggle('visible');
+    invalidateMapSize();
 });
 
-document.querySelectorAll('.image-thumbnail').forEach(div => {
-    div.addEventListener('click', (e) => {
-        const longitude = parseFloat(div.getAttribute('data-longitude'));
-        const latitude = parseFloat(div.getAttribute('data-latitude'));
-        map.setView([latitude, longitude], 15);
+const sidebarImages = document.getElementById('sidebar-images');
+if (sidebarImages) {
+    sidebarImages.addEventListener('click', (event) => {
+        const thumb = event.target.closest('.image-thumbnail');
+        if (!thumb) return;
+        const longitude = parseFloat(thumb.getAttribute('data-longitude'));
+        const latitude = parseFloat(thumb.getAttribute('data-latitude'));
+        if (!isNaN(latitude) && !isNaN(longitude)) {
+            map.setView([latitude, longitude], 15);
+        }
     });
-});
+}
 
 document.getElementById('add-metadata-link').addEventListener('click', () => {
     addMetaData(1);
 });
 
-document.getElementById("sidebar-timeline").addEventListener("scroll", (e) => {
-    const activeItem = document.querySelector(".timeline-item--active");
-    if (activeItem) {
-        const lat = parseFloat(activeItem.getAttribute("data-latitude"));
-        const lon = parseFloat(activeItem.getAttribute("data-longitude"));
+
+const sidebarTimeline = document.getElementById("sidebar-timeline");
+if (sidebarTimeline) {
+    sidebarTimeline.addEventListener("timeline:active-change", (event) => {
+        const detail = event.detail || {};
+        const imageId = Number(detail.imageId);
+        if (Number.isFinite(imageId) && imageId === lastTimelineImageId) return;
+        const lat = parseFloat(detail.latitude);
+        const lon = parseFloat(detail.longitude);
         if (!isNaN(lat) && !isNaN(lon)) {
-            map.setView([lat, lon], map.getZoom());
+            map.panTo([lat, lon], { animate: false });
+            if (Number.isFinite(imageId)) lastTimelineImageId = imageId;
         }
-    }
-});
+    });
+}
+
 
 document.getElementById('toggle-filters').addEventListener('change', (e) => {
     const filterDiv = document.querySelector('.filter');
