@@ -32,9 +32,9 @@ export function getOrCreateMapState(threadDomId) {
       previousIds: new Set(),
       colors: {},
       images: [],
+      objectIndexByImage: new Map(),
       context: {}
     };
   }
   return threadState.mapStates[threadDomId];
 }
-

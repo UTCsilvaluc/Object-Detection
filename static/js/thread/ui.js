@@ -1,3 +1,7 @@
+import { getOrCreateMapState } from "./state.js";
+import { renderMapTab } from "./mapView.js";
+import {requestFullImagesByIds} from "./searchController.js";
+
 export function toggleMetadata(btn, event) {
   event.stopPropagation();
   const block = btn.nextElementSibling;
@@ -69,3 +73,90 @@ export function clearThreadExcept(threadDomId, section, singleItemHTML) {
   }
 }
 
+export async function switchMode(button, threadID) {
+  const threadDomId = threadID.startsWith("thread-") ? threadID : `thread-${threadID}`;
+  const state = getOrCreateMapState(threadDomId);
+
+  const currentMode = state?.context?.viewMode === "objects" ? "objects" : "images";
+  const nextMode = currentMode === "images" ? "objects" : "images";
+  const buttonLabel = nextMode === "objects" ? "Switch to images display" : "Switch to objects display";
+
+  if (state && state.context) state.context.viewMode = nextMode;
+  button.textContent = buttonLabel;
+
+  if (!state?.images || state.images.length === 0) return;
+
+  const fullImages = await requestFullImagesByIds(state?.plottedIds || []);
+
+  if (fullImages && Array.isArray(fullImages.images)) {
+    state.fullImages = fullImages.images;
+  }
+
+  renderMapTab(
+    threadDomId,
+    state.fullImages || [],
+    null,
+    state.context?.relation || null,
+    false,
+    state.context?.links || [],
+    state.context,
+    nextMode
+  );
+}
+
+export function navigateObject(button , idx , direction , threadDomId) {
+  const state = getOrCreateMapState(threadDomId);
+  if (!state || !state.images || state.images.length === 0) return null;
+
+  const card = button.closest(".map-image-card");
+  const imageId = card?.dataset?.imageId ? Number(card.dataset.imageId) : null;
+  const currentImage =
+    (imageId && state.images.find((img) => Number(img.image_id) === imageId)) ||
+    state.fullImages?.find((img) => Number(img.image_id) === imageId) ||
+    state.images[idx] ||
+    null;
+
+  const objects = currentImage?.objects || currentImage?.object_instances || [];
+  if (!objects.length) return null;
+
+  const currentIdxObject = Number.isInteger(parseInt(button.dataset.currentObjectIdx, 10))
+    ? parseInt(button.dataset.currentObjectIdx, 10)
+    : 0;
+  const delta = direction === "prev" ? -1 : 1;
+  const newIndex = (currentIdxObject + delta + objects.length) % objects.length;
+
+  const thumb = card?.querySelector(".thumb");
+  const newThumbPath = objects[newIndex]?.cropped_file_path || objects[newIndex]?.cropped_path || null;
+  if (thumb) {
+    const fallbackPath = currentImage?.file_path || "";
+    const nextPath = newThumbPath || fallbackPath;
+    if (nextPath) thumb.src = `${window.appConfig.URL_for_images}${nextPath}`;
+  }
+
+  const labelEl = card?.querySelector(".map-object-label");
+  const countEl = card?.querySelector(".map-object-count");
+  const objectLabel = objects[newIndex]?.name || objects[newIndex]?.label || objects[newIndex]?.class || null;
+  const objectId = objects[newIndex]?.object_id ?? objects[newIndex]?.id ?? null;
+  if (labelEl) {
+    labelEl.textContent = objectLabel || (objectId ? `Object #${objectId}` : "Object");
+  }
+  if (countEl) {
+    countEl.textContent = `${newIndex + 1} / ${objects.length}`;
+  }
+
+  if (card) {
+    card.querySelectorAll(".obj-nav-btn").forEach((btn) => {
+      btn.dataset.currentObjectIdx = String(newIndex);
+    });
+    card.dataset.currentObjectIdx = String(newIndex);
+  } else {
+    button.dataset.currentObjectIdx = String(newIndex);
+  }
+
+  const imageKey = imageId || currentImage?.image_id || null;
+  if (state.objectIndexByImage && imageKey) {
+    state.objectIndexByImage.set(Number(imageKey), newIndex);
+  }
+
+  return newIndex;
+}

@@ -59,9 +59,14 @@
     <div class="thread-content hidden" data-section="map">
         <div class="map-panel">
             <div id="map-__ID__" class="thread-map"></div>
-            <div class="map-side">
-                <h3>Moves over time</h3>
-                <div class="map-image-list"></div>
+            <div class="map-handler">
+                <div class="map-mode-switch-div">
+                    <button class="map-mode-switch" onclick="switchMode(this , '__ID__')">Switch to objects display</button>
+                </div>
+                <div class="map-side">
+                    <h3>Moves over time</h3>
+                    <div class="map-image-list"></div>
+                </div>
             </div>
         </div>
     </div>

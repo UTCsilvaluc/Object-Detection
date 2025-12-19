@@ -1,5 +1,5 @@
 import { handleTyping, updateSearchField, performSearch, selectObject } from "./searchController.js";
-import { toggleMetadata } from "./ui.js";
+import { toggleMetadata , switchMode , navigateObject } from "./ui.js";
 import { closeInstancePreview } from "./instancePreview.js";
 import { generateThread, showResults, selectTab, loadInitialThreads } from "./threadController.js";
 
@@ -19,5 +19,8 @@ export function initThreadPageGlobals() {
 
   // Legacy compatibility (if some other template calls it)
   window.loadInitialThreads = loadInitialThreads;
+
+  window.switchMode = switchMode;
+  window.navigateObject = navigateObject;
 }
 

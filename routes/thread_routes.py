@@ -4,7 +4,8 @@ from utils.database import (
     get_all_full_points,
     get_all_metadata_keys,
     get_all_full_objects_from_value, 
-    get_ThreadCategory
+    get_ThreadCategory,
+    get_all_full_images
 )
 
 from utils.thread_research import (
@@ -148,3 +149,17 @@ def show_results():
         return jsonify({"success": True, "images": images, "links": links, "focus_image_id": focus_id, "relation": "thread"})
 
     return jsonify({"success": False, "error": "Unknown mode"}), 400
+
+@thread_bp.route('/request_full_images', methods=['POST'])
+def request_full_images():
+    data = request.get_json()
+    print("Received data for full images request:", data)
+    image_ids = data.get("image_ids", [])
+    if not image_ids:
+        return jsonify({"success": False, "error": "image_ids is required"}), 400
+
+    images = get_all_full_images(images_id=image_ids)
+    return jsonify({
+        "success": True,
+        "images": images
+    })

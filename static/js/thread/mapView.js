@@ -35,6 +35,14 @@ function formatObjectLabel(obj = null) {
   return name || null;
 }
 
+function getImageObjects(image = null) {
+  return image?.objects || image?.object_instances || [];
+}
+
+function getObjectThumbPath(obj = null) {
+  return obj?.cropped_file_path || obj?.cropped_path || obj?.thumb || null;
+}
+
 function renderObjectBadge(obj = null) {
   if (!obj) return "";
   const label = formatObjectLabel(obj) || "Object";
@@ -370,18 +378,7 @@ export function refreshThreadMap(threadDomId) {
   if (state.bounds) state.map.fitBounds(state.bounds, { padding: [20, 20] });
 }
 
-export function renderMapTab(
-  threadDomId,
-  imagesList,
-  focusImageId = null,
-  relation = null,
-  append = false,
-  links = [],
-  context = {}
-) {
-  const container = document.querySelector(`#${threadDomId} .thread-content[data-section="map"]`);
-  if (!container) return;
-
+function ensureMapPanel(container, threadDomId) {
   if (!container.querySelector(".map-panel")) {
     container.innerHTML = `
       <div class="map-panel">
@@ -396,66 +393,194 @@ export function renderMapTab(
 
   const listEl = container.querySelector(".map-image-list");
   const mapEl = container.querySelector(".thread-map");
-  if (!listEl || !mapEl) return;
+  return { listEl, mapEl };
+}
 
-  const defaultCenter = [34.33, 134.05];
-  const state = ensureThreadMap(threadDomId, defaultCenter);
-  state.context = Object.assign({}, state.context || {}, context || {});
-  const commonObject = state.context.commonObject || null;
-  if (!state.map) return;
+function resetMapState(state) {
+  state.layer.clearLayers();
+  state.markers = new Map();
+  state.plottedIds = new Set();
+  state.drawnLinks = new Set();
+  state.images = [];
+  state.previousIds = new Set();
+  state.colors = {};
+}
 
-  if (!append) {
-    state.layer.clearLayers();
-    state.markers = new Map();
-    state.plottedIds = new Set();
-    state.drawnLinks = new Set();
-    state.images = [];
-    state.previousIds = new Set();
-    state.colors = {};
-  }
-
-  const newImages = imagesList || [];
+function mergeImagesIntoState(state, newImages) {
   const merged = new Map();
   state.images.forEach((img) => merged.set(img.image_id, img));
   newImages.forEach((img) => merged.set(img.image_id, img));
   state.images = Array.from(merged.values());
+}
 
-  const timeline = buildGeoTimeline(state.images);
-  const newTimeline = buildGeoTimeline(newImages);
-  const objectLabel = formatObjectLabel(commonObject);
+function syncObjectIndex(state) {
+  if (!state.objectIndexByImage) state.objectIndexByImage = new Map();
+  const nextObjectIndexByImage = new Map();
+  state.images.forEach((img) => {
+    const imgId = Number(img.image_id);
+    if (Number.isFinite(imgId) && state.objectIndexByImage.has(imgId)) {
+      nextObjectIndexByImage.set(imgId, state.objectIndexByImage.get(imgId));
+    }
+  });
+  state.objectIndexByImage = nextObjectIndexByImage;
+}
 
-  if (timeline.length === 0) {
-    listEl.innerHTML = `<p>No geolocated images for this selection.</p>`;
-  } else {
-    const linkHint =
-      relation === "thread"
-        ? "Red: metadata • Purple: object presence • Green: movement (ordered by date)"
-        : objectLabel
-          ? `Links explained by ${objectLabel} (ordered by date)`
-          : "Links ordered by date";
-    listEl.innerHTML = `
-      <p><strong>${timeline.length} result(s)</strong></p>
-      <p class="map-link-hint">${linkHint}</p>
-      ${timeline
-        .map(
-          ({ raw, dateLabel }) => `
-            <div class="map-image-card ${raw.image_id == focusImageId ? "primary" : ""}">
-              <img class="thumb" src="${window.appConfig.URL_for_images + raw.file_path}" alt="${raw.title ?? "Image"}">
-              <strong>${raw.title ?? "Untitled image"}</strong>
-              <small>${dateLabel}</small>
-              <div>${raw.location_name ?? "Unknown location"}</div>
+function buildListLinkHint(relation, objectLabel) {
+  if (relation === "thread") {
+    return "Red: metadata • Purple: object presence • Green: movement (ordered by date)";
+  }
+  if (objectLabel) {
+    return `Links explained by ${objectLabel} (ordered by date)`;
+  }
+  return "Links ordered by date";
+}
+
+function getObjectSelection(rawImage, state) {
+  const objects = getImageObjects(rawImage);
+  const objectCount = objects.length;
+  const storedIdx = state.objectIndexByImage?.get(Number(rawImage.image_id));
+  let objectIdx = Number.isInteger(storedIdx) ? storedIdx : 0;
+  if (objectCount === 0) objectIdx = 0;
+  if (objectIdx >= objectCount) objectIdx = 0;
+  if (objectCount > 0) state.objectIndexByImage.set(Number(rawImage.image_id), objectIdx);
+  return { objects, objectCount, objectIdx };
+}
+
+function buildMapCardHTML({
+  raw,
+  dateLabel,
+  idx,
+  focusImageId,
+  mode,
+  threadDomId,
+  objectSelection
+}) {
+  const { objects, objectCount, objectIdx } = objectSelection;
+  const selectedObject = objectCount > 0 ? objects[objectIdx] : null;
+  const objectThumb = selectedObject ? getObjectThumbPath(selectedObject) : null;
+  const displayThumb =
+    mode === "objects"
+      ? objectThumb || raw.file_path || ""
+      : raw.file_path || "";
+  const objectLabelText =
+    selectedObject ? formatObjectLabel(selectedObject) || "Object" : "No objects detected";
+  const objectCountText = objectCount > 0 ? `${objectIdx + 1} / ${objectCount}` : "0 / 0";
+  const navDisabled = objectCount > 1 ? "" : "disabled";
+
+  return `
+    <div class="map-image-card ${raw.image_id == focusImageId ? "primary" : ""}" data-image-id="${raw.image_id}" data-timeline-idx="${idx}" data-current-object-idx="${objectIdx}">
+      ${
+        mode === "objects"
+          ? `
+            <div class="map-object-nav">
+              <button class="obj-nav-btn left" data-currentObjectIdx="${objectIdx}" data-dir="prev" onclick="navigateObject(this , ${idx}, 'prev' , '${threadDomId}')" ${navDisabled}>◀</button>
+              <button class="obj-nav-btn right" data-currentObjectIdx="${objectIdx}" data-dir="next" onclick="navigateObject(this , ${idx}, 'next', '${threadDomId}')" ${navDisabled}>▶</button>
             </div>
           `
-        )
-        .join("")}
-    `;
+          : ""
+      }
+
+      <img class="thumb map-object-thumb" src="${window.appConfig.URL_for_images + displayThumb}" alt="${raw.title ?? "Image"}">
+      ${
+        mode === "objects"
+          ? `
+            <div class="map-object-meta ${objectCount > 0 ? "" : "empty"}">
+              <span class="map-object-count">${objectCountText}</span>
+              <span class="map-object-label">${objectLabelText}</span>
+            </div>
+          `
+          : ""
+      }
+      <strong>${raw.title ?? "Untitled image"}</strong>
+      <small>${dateLabel}</small>
+      <div>${raw.location_name ?? "Unknown location"}</div>
+    </div>
+  `;
+}
+
+function renderTimelineList({
+  listEl,
+  timeline,
+  focusImageId,
+  relation,
+  objectLabel,
+  mode,
+  threadDomId,
+  state
+}) {
+  if (timeline.length === 0) {
+    listEl.innerHTML = `<p>No geolocated images for this selection.</p>`;
+    return;
   }
 
+  const linkHint = buildListLinkHint(relation, objectLabel);
+  listEl.innerHTML = `
+    <p><strong>${timeline.length} result(s)</strong></p>
+    <p class="map-link-hint">${linkHint}</p>
+    ${timeline
+      .map(({ raw, dateLabel }, idx) =>
+        buildMapCardHTML({
+          raw,
+          dateLabel,
+          idx,
+          focusImageId,
+          mode,
+          threadDomId,
+          objectSelection: getObjectSelection(raw, state)
+        })
+      )
+      .join("")}
+  `;
+}
+
+function selectCardInList(listEl, imageId) {
+  const id = Number(imageId);
+  if (!Number.isFinite(id)) return;
+  listEl.querySelectorAll(".map-image-card").forEach((card) => card.classList.remove("selected"));
+  const card = listEl.querySelector(`.map-image-card[data-image-id="${id}"]`);
+  if (card) {
+    card.classList.add("selected");
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function focusMarkerOnMap(state, imageId, opts = {}) {
+  const marker = state.markers.get(Number(imageId));
+  if (!marker || !state.map) return;
+  const zoom = Number.isFinite(opts.zoom) ? opts.zoom : 15;
+  state.map.setView(marker.getLatLng(), zoom);
+  if (opts.openPopup !== false) marker.openPopup();
+}
+
+function bindThumbZoom(listEl, onThumbClick) {
+  if (listEl.dataset.thumbZoomBound) return;
+  listEl.addEventListener("click", (event) => {
+    const thumb = event.target.closest(".map-object-thumb");
+    if (!thumb) return;
+    const card = thumb.closest(".map-image-card");
+    if (!card) return;
+    const imageId = Number(card.dataset.imageId);
+    if (!Number.isFinite(imageId)) return;
+    onThumbClick(imageId);
+  });
+  listEl.dataset.thumbZoomBound = "true";
+}
+
+function collectMarkerCoords(state) {
   const coordsAll = [];
   state.markers.forEach((marker) => coordsAll.push([marker.getLatLng().lat, marker.getLatLng().lng]));
+  return coordsAll;
+}
 
+function upsertMarkers({
+  state,
+  newTimeline,
+  focusImageId,
+  onMarkerClick
+}) {
   let focusMarker = state.markers.get(Number(focusImageId)) || null;
   let focusLatLng = focusMarker ? focusMarker.getLatLng() : null;
+  const coordsAll = collectMarkerCoords(state);
 
   newTimeline.forEach((item) => {
     if (state.plottedIds.has(item.raw.image_id)) return;
@@ -466,6 +591,7 @@ export function renderMapTab(
       window.appConfig.URL_for_view_image
     );
     const marker = L.marker([item.lat, item.lng]).bindPopup(popupHTML).addTo(state.layer);
+    if (onMarkerClick) marker.on("click", () => onMarkerClick(item.raw.image_id));
     state.markers.set(item.raw.image_id, marker);
     state.plottedIds.add(item.raw.image_id);
     coordsAll.push([item.lat, item.lng]);
@@ -475,10 +601,285 @@ export function renderMapTab(
     }
   });
 
+  return { coordsAll, focusMarker, focusLatLng };
+}
+
+function splitLinksByType(links) {
   const allLinks = Array.isArray(links) ? links : [];
-  const metadataLinks = allLinks.filter((l) => l?.type === "metadata" || (Array.isArray(l?.metadata) && l.metadata.length > 0));
-  const presenceLinks = allLinks.filter((l) => l?.type === "object_presence");
-  const movementLinks = allLinks.filter((l) => l?.type === "movement");
+  return {
+    allLinks,
+    metadataLinks: allLinks.filter(
+      (l) => l?.type === "metadata" || (Array.isArray(l?.metadata) && l.metadata.length > 0)
+    ),
+    presenceLinks: allLinks.filter((l) => l?.type === "object_presence"),
+    movementLinks: allLinks.filter((l) => l?.type === "movement")
+  };
+}
+
+function buildSharedObjectsHTML(imagesById, fromId, toId, objectIds = []) {
+  const imgA = imagesById.get(Number(fromId));
+  const imgB = imagesById.get(Number(toId));
+  if (!imgA || !imgB) return "";
+  const objsA = new Map((imgA.object_instances || []).map((o) => [Number(o.object_id), o]));
+  const objsB = new Map((imgB.object_instances || []).map((o) => [Number(o.object_id), o]));
+  const ids = (objectIds || []).length
+    ? (objectIds || []).map(Number).filter((id) => objsA.has(id) && objsB.has(id))
+    : Array.from(objsA.keys()).filter((id) => objsB.has(id));
+  if (ids.length === 0) return "";
+  const cards = ids
+    .map((id) => {
+      const thumb = objsA.get(id)?.cropped_path || objsB.get(id)?.cropped_path || null;
+      const imgTag = thumb
+        ? `<img src="${window.appConfig.URL_for_images}${thumb}" class="shared-thumb" alt="Object #${id}" />`
+        : "";
+      return `<div class="shared-obj-card"><div>#${id}</div>${imgTag}</div>`;
+    })
+    .join("");
+  const link = `/objects-overview?ObjectID=${encodeURIComponent(ids.join(","))}`;
+  return `
+    <div style="font-size:12px;">
+      <div>Objets communs :</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${cards}</div>
+      <a href="${link}" target="_blank" rel="noopener noreferrer">Voir les objets</a>
+    </div>
+  `;
+}
+
+function computeThreadStepAssignments({ relation, presenceLinks, movementLinks, metadataLinks, timelineById }) {
+  if (relation !== "thread") return null;
+  return {
+    presence: computeChronoStepAssignments(
+      (presenceLinks || []).map((link) => ({
+        key: `presence:${link.from_image_id}->${link.to_image_id}`,
+        fromId: Number(link.from_image_id),
+        toId: Number(link.to_image_id),
+        fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+        toDate: timelineById.get(Number(link.to_image_id))?.date || null
+      }))
+    ),
+    movement: computeChronoStepAssignments(
+      (movementLinks || []).map((link) => ({
+        key: `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`,
+        fromId: Number(link.from_image_id),
+        toId: Number(link.to_image_id),
+        fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+        toDate: timelineById.get(Number(link.to_image_id))?.date || null
+      }))
+    ),
+    metadata: computeChronoStepAssignments(
+      (metadataLinks || []).map((link) => ({
+        key: `${link.from_image_id}->${link.to_image_id}`,
+        fromId: Number(link.from_image_id),
+        toId: Number(link.to_image_id),
+        fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
+        toDate: timelineById.get(Number(link.to_image_id))?.date || null
+      }))
+    )
+  };
+}
+
+function drawThreadPresenceLinks({
+  state,
+  presenceLinks,
+  stepAssignments,
+  imagesById
+}) {
+  if (presenceLinks.length === 0) return;
+  presenceLinks.forEach((link) => {
+    const key = `presence:${link.from_image_id}->${link.to_image_id}`;
+    if (state.drawnLinks?.has(key)) return;
+    const step = stepAssignments?.presence?.get(key) || null;
+    const fromId = step ? step.fromId : Number(link.from_image_id);
+    const toId = step ? step.toId : Number(link.to_image_id);
+    const fromMarker = state.markers.get(fromId);
+    const toMarker = state.markers.get(toId);
+    if (!fromMarker || !toMarker) return;
+
+    const reason = buildSharedObjectsHTML(imagesById, link.from_image_id, link.to_image_id, link.object_ids || []);
+    const stepLabel = step ? `${step.step} / ${step.total}` : null;
+    const popupHtml = `
+      <div style="font-size:12px;">
+        <strong>Link by object presence</strong>
+        ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
+        <div style="margin-top:6px;">${reason || "Shared objects detected."}</div>
+      </div>
+    `;
+
+    const color = "#7c3aed";
+    const fromLatLng = fromMarker.getLatLng();
+    const toLatLng = toMarker.getLatLng();
+    L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
+    if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
+    state.drawnLinks.add(key);
+  });
+}
+
+function drawThreadMovementLinks({
+  state,
+  movementLinks,
+  stepAssignments,
+  imagesById,
+  timelineById
+}) {
+  if (movementLinks.length === 0) return;
+  movementLinks.forEach((link) => {
+    const key = `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`;
+    if (state.drawnLinks?.has(key)) return;
+    const step = stepAssignments?.movement?.get(key) || null;
+    const fromId = step ? step.fromId : Number(link.from_image_id);
+    const toId = step ? step.toId : Number(link.to_image_id);
+    const fromMarker = state.markers.get(fromId);
+    const toMarker = state.markers.get(toId);
+    if (!fromMarker || !toMarker) return;
+
+    const fromItem = timelineById.get(fromId);
+    const toItem = timelineById.get(toId);
+    const reason = buildSharedObjectsHTML(imagesById, link.from_image_id, link.to_image_id, link.object_ids || []);
+    const stepLabel = step ? `${step.step} / ${step.total}` : null;
+
+    const popupHtml =
+      fromItem && toItem
+        ? `
+            <div style="font-size:12px; line-height:1.4; margin-bottom:6px;">
+              ${stepLabel ? `<div><strong>Step:</strong> ${stepLabel}</div>` : ""}
+            </div>
+            ${buildChronoPopup(fromItem, toItem, "movement", null, reason || null, null)}
+          `
+        : `
+            <div style="font-size:12px;">
+              <strong>Movement link</strong>
+              ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
+              <div style="margin-top:6px;">${reason || "Chronological link."}</div>
+            </div>
+          `;
+
+    const color = "#16a34a";
+    const fromLatLng = fromMarker.getLatLng();
+    const toLatLng = toMarker.getLatLng();
+    L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
+    if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
+    state.drawnLinks.add(key);
+  });
+}
+
+function drawThreadMetadataLinks({
+  state,
+  metadataLinks,
+  stepAssignments,
+  relation
+}) {
+  if (metadataLinks.length === 0) return;
+  metadataLinks.forEach((link) => {
+    const key = `${link.from_image_id}->${link.to_image_id}`;
+    if (state.drawnLinks?.has(key)) return;
+    const step = stepAssignments?.metadata?.get(key) || null;
+    const fromId = step ? step.fromId : Number(link.from_image_id);
+    const toId = step ? step.toId : Number(link.to_image_id);
+    const fromMarker = state.markers.get(fromId);
+    const toMarker = state.markers.get(toId);
+    if (!fromMarker || !toMarker) return;
+
+    const reasons = (link.metadata || [])
+      .map((md) => {
+        const tgt = md.target_value ?? "N/A";
+        const rel = md.related_value ?? "N/A";
+        return `<li><strong>${md.key}:</strong> ${tgt} ⇄ ${rel}</li>`;
+      })
+      .join("");
+
+    const stepLabel = step ? `${step.step} / ${step.total}` : null;
+    const popupHtml = `
+      <div style="font-size:12px;">
+        <strong>${relation === "thread" ? "Link by thread filters" : "Link by metadata"}</strong>
+        ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
+        <ul style="padding-left:16px; margin:6px 0;">${reasons || "<li>No details</li>"}</ul>
+      </div>
+    `;
+    const color = "#e3342f";
+    const fromLatLng = fromMarker.getLatLng();
+    const toLatLng = toMarker.getLatLng();
+    L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
+    if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
+    state.drawnLinks.add(key);
+  });
+}
+
+function updateMapBounds(state, coordsAll, defaultCenter) {
+  if (coordsAll.length > 0) {
+    state.bounds = L.latLngBounds(coordsAll);
+    state.map.fitBounds(state.bounds, { padding: [20, 20] });
+  } else {
+    state.bounds = null;
+    state.map.setView(defaultCenter, 2);
+  }
+}
+
+function focusInitialMarker(state, focusMarker, focusLatLng) {
+  if (!focusMarker) return;
+  setTimeout(() => {
+    state.map.setView(focusLatLng, 15);
+    focusMarker.openPopup();
+  }, 300);
+}
+
+export function renderMapTab(
+  threadDomId,
+  imagesList,
+  focusImageId = null,
+  relation = null,
+  append = false,
+  links = [],
+  context = {},
+  mode = "images"
+) {
+  const container = document.querySelector(`#${threadDomId} .thread-content[data-section="map"]`);
+  if (!container) return;
+
+  const { listEl, mapEl } = ensureMapPanel(container, threadDomId);
+  if (!listEl || !mapEl) return;
+
+  const defaultCenter = [34.33, 134.05];
+  const state = ensureThreadMap(threadDomId, defaultCenter);
+  state.context = Object.assign({}, state.context || {}, context || {});
+  state.context.viewMode = mode;
+  const commonObject = state.context.commonObject || null;
+  if (!state.map) return;
+
+  if (!append) {
+    resetMapState(state);
+  }
+
+  const newImages = imagesList || [];
+  mergeImagesIntoState(state, newImages);
+  syncObjectIndex(state);
+  const timeline = buildGeoTimeline(state.images);
+  const newTimeline = buildGeoTimeline(newImages);
+  const objectLabel = formatObjectLabel(commonObject);
+
+  renderTimelineList({
+    listEl,
+    timeline,
+    focusImageId,
+    relation,
+    objectLabel,
+    mode,
+    threadDomId,
+    state
+  });
+
+  bindThumbZoom(listEl, (imageId) => {
+    selectCardInList(listEl, imageId);
+    focusMarkerOnMap(state, imageId, { zoom: 15, openPopup: true });
+  });
+
+  const { coordsAll, focusMarker, focusLatLng } = upsertMarkers({
+    state,
+    newTimeline,
+    focusImageId,
+    onMarkerClick: (imageId) => selectCardInList(listEl, imageId)
+  });
+
+  const { allLinks, metadataLinks, presenceLinks, movementLinks } = splitLinksByType(links);
 
   if (relation !== "thread") {
     drawChronologicalLinks(state, timeline, relation, commonObject, allLinks);
@@ -488,193 +889,29 @@ export function renderMapTab(
 
   const imagesById = new Map(state.images.map((img) => [Number(img.image_id), img]));
   const timelineById = new Map(timeline.map((item) => [Number(item.raw.image_id), item]));
+  const stepAssignments = computeThreadStepAssignments({
+    relation,
+    presenceLinks,
+    movementLinks,
+    metadataLinks,
+    timelineById
+  });
 
-  const buildSharedObjectsHTML = (fromId, toId, objectIds = []) => {
-    const imgA = imagesById.get(Number(fromId));
-    const imgB = imagesById.get(Number(toId));
-    if (!imgA || !imgB) return "";
-    const objsA = new Map((imgA.object_instances || []).map((o) => [Number(o.object_id), o]));
-    const objsB = new Map((imgB.object_instances || []).map((o) => [Number(o.object_id), o]));
-    const ids = (objectIds || []).length
-      ? (objectIds || []).map(Number).filter((id) => objsA.has(id) && objsB.has(id))
-      : Array.from(objsA.keys()).filter((id) => objsB.has(id));
-    if (ids.length === 0) return "";
-    const cards = ids
-      .map((id) => {
-        const thumb = objsA.get(id)?.cropped_path || objsB.get(id)?.cropped_path || null;
-        const imgTag = thumb
-          ? `<img src="${window.appConfig.URL_for_images}${thumb}" class="shared-thumb" alt="Object #${id}" />`
-          : "";
-        return `<div class="shared-obj-card"><div>#${id}</div>${imgTag}</div>`;
-      })
-      .join("");
-    const link = `/objects-overview?ObjectID=${encodeURIComponent(ids.join(","))}`;
-    return `
-      <div style="font-size:12px;">
-        <div>Objets communs :</div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${cards}</div>
-        <a href="${link}" target="_blank" rel="noopener noreferrer">Voir les objets</a>
-      </div>
-    `;
-  };
-
-  const stepAssignments =
-    relation === "thread"
-      ? {
-          presence: computeChronoStepAssignments(
-            (presenceLinks || []).map((link) => ({
-              key: `presence:${link.from_image_id}->${link.to_image_id}`,
-              fromId: Number(link.from_image_id),
-              toId: Number(link.to_image_id),
-              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-              toDate: timelineById.get(Number(link.to_image_id))?.date || null
-            }))
-          ),
-          movement: computeChronoStepAssignments(
-            (movementLinks || []).map((link) => ({
-              key: `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`,
-              fromId: Number(link.from_image_id),
-              toId: Number(link.to_image_id),
-              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-              toDate: timelineById.get(Number(link.to_image_id))?.date || null
-            }))
-          ),
-          metadata: computeChronoStepAssignments(
-            (metadataLinks || []).map((link) => ({
-              key: `${link.from_image_id}->${link.to_image_id}`,
-              fromId: Number(link.from_image_id),
-              toId: Number(link.to_image_id),
-              fromDate: timelineById.get(Number(link.from_image_id))?.date || null,
-              toDate: timelineById.get(Number(link.to_image_id))?.date || null
-            }))
-          )
-        }
-      : null;
-
-  if (relation === "thread" && presenceLinks.length > 0) {
-    presenceLinks.forEach((link) => {
-      const key = `presence:${link.from_image_id}->${link.to_image_id}`;
-      if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments?.presence?.get(key) || null;
-      const fromId = step ? step.fromId : Number(link.from_image_id);
-      const toId = step ? step.toId : Number(link.to_image_id);
-      const fromMarker = state.markers.get(fromId);
-      const toMarker = state.markers.get(toId);
-      if (!fromMarker || !toMarker) return;
-
-      const reason = buildSharedObjectsHTML(link.from_image_id, link.to_image_id, link.object_ids || []);
-      const stepLabel = step ? `${step.step} / ${step.total}` : null;
-      const popupHtml = `
-        <div style="font-size:12px;">
-          <strong>Link by object presence</strong>
-          ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
-          <div style="margin-top:6px;">${reason || "Shared objects detected."}</div>
-        </div>
-      `;
-
-      const color = "#7c3aed";
-      const fromLatLng = fromMarker.getLatLng();
-      const toLatLng = toMarker.getLatLng();
-      L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
-      if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
-      state.drawnLinks.add(key);
-    });
-  }
-
-  if (relation === "thread" && movementLinks.length > 0) {
-    movementLinks.forEach((link) => {
-      const key = `movement:${link.from_image_id}->${link.to_image_id}:${(link.object_ids || []).join(",")}`;
-      if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments?.movement?.get(key) || null;
-      const fromId = step ? step.fromId : Number(link.from_image_id);
-      const toId = step ? step.toId : Number(link.to_image_id);
-      const fromMarker = state.markers.get(fromId);
-      const toMarker = state.markers.get(toId);
-      if (!fromMarker || !toMarker) return;
-
-      const fromItem = timelineById.get(fromId);
-      const toItem = timelineById.get(toId);
-      const reason = buildSharedObjectsHTML(link.from_image_id, link.to_image_id, link.object_ids || []);
-      const stepLabel = step ? `${step.step} / ${step.total}` : null;
-
-      const popupHtml =
-        fromItem && toItem
-          ? `
-              <div style="font-size:12px; line-height:1.4; margin-bottom:6px;">
-                ${stepLabel ? `<div><strong>Step:</strong> ${stepLabel}</div>` : ""}
-              </div>
-              ${buildChronoPopup(fromItem, toItem, "movement", null, reason || null, null)}
-            `
-          : `
-              <div style="font-size:12px;">
-                <strong>Movement link</strong>
-                ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
-                <div style="margin-top:6px;">${reason || "Chronological link."}</div>
-              </div>
-            `;
-
-      const color = "#16a34a";
-      const fromLatLng = fromMarker.getLatLng();
-      const toLatLng = toMarker.getLatLng();
-      L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
-      if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
-      state.drawnLinks.add(key);
-    });
+  if (relation === "thread") {
+    drawThreadPresenceLinks({ state, presenceLinks, stepAssignments, imagesById });
+    drawThreadMovementLinks({ state, movementLinks, stepAssignments, imagesById, timelineById });
   }
 
   const drawMetadataLink = relation === "metadata" || relation === "thread";
-  if (drawMetadataLink && metadataLinks.length > 0) {
-    metadataLinks.forEach((link) => {
-      const key = `${link.from_image_id}->${link.to_image_id}`;
-      if (state.drawnLinks?.has(key)) return;
-      const step = stepAssignments?.metadata?.get(key) || null;
-      const fromId = step ? step.fromId : Number(link.from_image_id);
-      const toId = step ? step.toId : Number(link.to_image_id);
-      const fromMarker = state.markers.get(fromId);
-      const toMarker = state.markers.get(toId);
-      if (!fromMarker || !toMarker) return;
-
-      const reasons = (link.metadata || [])
-        .map((md) => {
-          const tgt = md.target_value ?? "N/A";
-          const rel = md.related_value ?? "N/A";
-          return `<li><strong>${md.key}:</strong> ${tgt} ⇄ ${rel}</li>`;
-        })
-        .join("");
-
-      const stepLabel = step ? `${step.step} / ${step.total}` : null;
-      const popupHtml = `
-        <div style="font-size:12px;">
-          <strong>${relation === "thread" ? "Link by thread filters" : "Link by metadata"}</strong>
-          ${stepLabel ? `<div style="margin-top:6px;"><strong>Step:</strong> ${stepLabel}</div>` : ""}
-          <ul style="padding-left:16px; margin:6px 0;">${reasons || "<li>No details</li>"}</ul>
-        </div>
-      `;
-      const color = "#e3342f";
-      const fromLatLng = fromMarker.getLatLng();
-      const toLatLng = toMarker.getLatLng();
-      L.polyline([fromLatLng, toLatLng], { color, weight: 3, opacity: 0.9 }).bindPopup(popupHtml).addTo(state.layer);
-      if (stepLabel) addChronoLinkDecorations(state, [fromLatLng.lat, fromLatLng.lng], [toLatLng.lat, toLatLng.lng], color, stepLabel);
-      state.drawnLinks.add(key);
-    });
+  if (drawMetadataLink) {
+    drawThreadMetadataLinks({ state, metadataLinks, stepAssignments, relation });
   }
 
-  if (coordsAll.length > 0) {
-    state.bounds = L.latLngBounds(coordsAll);
-    state.map.fitBounds(state.bounds, { padding: [20, 20] });
-  } else {
-    state.bounds = null;
-    state.map.setView(defaultCenter, 2);
-  }
+  updateMapBounds(state, coordsAll, defaultCenter);
 
   if (state.previousIds && state.previousIds.size === 0) {
     state.previousIds = new Set(state.plottedIds);
   }
 
-  if (focusMarker) {
-    setTimeout(() => {
-      state.map.setView(focusLatLng, 15);
-      focusMarker.openPopup();
-    }, 300);
-  }
+  focusInitialMarker(state, focusMarker, focusLatLng);
 }

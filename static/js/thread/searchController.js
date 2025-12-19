@@ -161,3 +161,13 @@ export function displayResultsIn(container, objects) {
   wireInstancePreviews(container);
 }
 
+/**
+ * If requested by switchMode, request full images by their IDs.
+ * Allows to fetch only the images currently plotted on the map. Only if needed.
+ * @param {*} imageIds 
+ */
+export async function requestFullImagesByIds(imageIds) {
+  if (!imageIds || imageIds.length === 0) return [];
+  const idsArray = Array.from(imageIds);
+  return await apiPost("/thread/request_full_images",{ image_ids: idsArray });
+}

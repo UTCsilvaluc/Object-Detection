@@ -330,6 +330,71 @@ body.preview-open {
     min-height: 420px;
 }
 
+.map-handler {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 12px;
+    background: #f9fbff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+
+.map-mode-switch {
+    display: flex;
+    justify-content: center;
+}
+
+.map-mode-switch-div {
+    text-align: center;
+    display: flex;
+    justify-content: center;
+}
+
+.map-mode-switch {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 999px;
+    border: 1px solid #c7d2fe;
+    background: #ffffff;
+    color: #2563eb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.map-mode-switch:hover {
+    background: #eef3ff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+}
+
+.map-object-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.obj-nav-btn {
+  border: none;
+  background: #eef2ff;
+  color: #1e40af;
+  font-weight: bold;
+  border-radius: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.obj-nav-btn:hover {
+  background: #c7d2fe;
+}
+
+.obj-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .thread-map {
     width: 100%;
     min-height: 420px;
@@ -355,6 +420,11 @@ body.preview-open {
     background: #fff;
 }
 
+.map-image-card.selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
 .map-image-card strong {
     display: block;
     margin-bottom: 4px;
@@ -369,6 +439,28 @@ body.preview-open {
     border-radius: 6px;
     margin-bottom: 8px;
     object-fit: cover;
+}
+
+.map-object-thumb {
+    cursor: pointer;
+}
+
+.map-object-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 8px;
+}
+
+.map-object-meta.empty {
+    color: #94a3b8;
+    justify-content: flex-start;
+}
+
+.map-object-label {
+    font-weight: 600;
 }
 
 /* Shared object thumbnails in map popups */

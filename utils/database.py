@@ -922,15 +922,20 @@ def get_objectsID_in_image(image_id: int):
     finally:
         close_db_connection(conn)
 
-def get_all_full_images():
+def get_all_full_images(images_id: list[int] | None = None):
     conn = get_db_connection()
     if conn is None:
         return []
     try:
         cur = conn.cursor()
-        query = """
+        where_clause = ""
+        params = []
+        if images_id is not None:
+            where_clause = "WHERE img.image_id = ANY(%s)"
+            params.append(images_id)
+        query = f"""
             SELECT 
-                img.image_id, img.file_path, img.title, img.description, img.capture_date,
+                img.image_id, img.file_path, img.title, img.description, img.capture_date, img.event_date,
                 img.location_name, img.latitude, img.longitude, img.upload_date, img.source_type, img.type,
                     -- objects regrouped per image
                     COALESCE(
@@ -983,10 +988,12 @@ def get_all_full_images():
                 GROUP BY oi.object_id, oi.width, oi.height, oi.cropped_file_path, oi.class, oi.confidence_score
             ) obj ON TRUE
 
+            {where_clause}
+
             GROUP BY img.image_id
             ORDER BY img.image_id DESC;
         """
-        cur.execute(query)
+        cur.execute(query, params)
         rows = cur.fetchall()
         full_images = []
         for row in rows:
@@ -996,13 +1003,14 @@ def get_all_full_images():
                 "title": row[2],
                 "description": row[3],
                 "capture_date": row[4],
-                "location_name": row[5],
-                "latitude": row[6],
-                "longitude": row[7],
-                "upload_date": row[8],
-                "source_type": row[9],
-                "type": row[10],
-                "objects": row[11]
+                "event_date": row[5],
+                "location_name": row[6],
+                "latitude": row[7],
+                "longitude": row[8],
+                "upload_date": row[9],
+                "source_type": row[10],
+                "type": row[11],
+                "objects": row[12]
             })
         cur.close()
         return full_images
