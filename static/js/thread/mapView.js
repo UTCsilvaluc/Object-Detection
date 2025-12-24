@@ -1,7 +1,7 @@
 import { createPopupHTML } from "../popup.js";
 import { getOrCreateMapState } from "./state.js";
 
-function buildGeoTimeline(imagesList = []) {
+export function buildGeoTimeline(imagesList = []) {
   return imagesList
     .map((img) => {
       const lat = Number(img?.latitude);
@@ -26,7 +26,7 @@ function buildGeoTimeline(imagesList = []) {
     });
 }
 
-function formatObjectLabel(obj = null) {
+export function formatObjectLabel(obj = null) {
   if (!obj) return null;
   const id = obj.object_id ?? obj.id;
   const name = obj.name ?? obj.label ?? obj.class;
@@ -35,11 +35,11 @@ function formatObjectLabel(obj = null) {
   return name || null;
 }
 
-function getImageObjects(image = null) {
+export function getImageObjects(image = null) {
   return image?.objects || image?.object_instances || [];
 }
 
-function getObjectThumbPath(obj = null) {
+export function getObjectThumbPath(obj = null) {
   return obj?.cropped_file_path || obj?.cropped_path || obj?.thumb || null;
 }
 
@@ -97,7 +97,7 @@ function safeDateMs(date) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function midpointLatLng(a, b) {
+export function midpointLatLng(a, b) {
   const latA = Array.isArray(a) ? a[0] : a.lat;
   const lngA = Array.isArray(a) ? a[1] : a.lng;
   const latB = Array.isArray(b) ? b[0] : b.lat;
@@ -105,7 +105,7 @@ function midpointLatLng(a, b) {
   return [(latA + latB) / 2, (lngA + lngB) / 2];
 }
 
-function addChronoLinkDecorations(state, fromLatLng, toLatLng, color, stepLabel) {
+export function addChronoLinkDecorations(state, fromLatLng, toLatLng, color, stepLabel) {
   if (!state?.layer || !state?.map) return;
 
   const labelIcon = L.divIcon({

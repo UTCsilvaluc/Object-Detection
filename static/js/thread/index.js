@@ -2,7 +2,7 @@ import { handleTyping, updateSearchField, performSearch, selectObject } from "./
 import { toggleMetadata , switchMode , navigateObject } from "./ui.js";
 import { closeInstancePreview } from "./instancePreview.js";
 import { generateThread, showResults, selectTab, loadInitialThreads } from "./threadController.js";
-
+import {initGlobalThreadMap} from "./globalMap.js";
 export function initThreadPageGlobals() {
   // Functions called from inline HTML attributes in templates/thread.html
   window.handleTyping = handleTyping;
@@ -22,5 +22,7 @@ export function initThreadPageGlobals() {
 
   window.switchMode = switchMode;
   window.navigateObject = navigateObject;
+
+  initGlobalThreadMap();
 }
 

@@ -4,6 +4,7 @@ import { searchTypeToInput } from "./searchConfig.js";
 import { allocateThreadDomId, isSearchLocked, lockSearch } from "./state.js";
 import { createThreadContainer, renderFullThread } from "./render.js";
 import { wireInstancePreviews } from "./instancePreview.js";
+import { addThreadToGlobalMap } from "./globalMap.js";
 
 export function handleTyping(e) {
   if (isSearchLocked()) return;
@@ -98,6 +99,14 @@ export async function selectObject(objectId, triggerEl = null) {
 
   const context = { commonObject: threadsData.main_object || { object_id: objectId } };
   renderFullThread(threadDomId, threadsData, context);
+
+  addThreadToGlobalMap({
+    threadDomId,
+    mode: "object",
+    seedObjects: threadsData.main_object ? [threadsData.main_object] : [{ object_id: objectId }],
+    seedImageId: null,
+    imagesFromThread: threadsData.images_from_object || []
+  });
 }
 
 export function displayResultsIn(container, objects) {

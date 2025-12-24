@@ -3,6 +3,7 @@ import { allocateThreadDomId } from "./state.js";
 import { closeTab, clearThreadExcept } from "./ui.js";
 import { createThreadContainer, renderFullThread } from "./render.js";
 import { refreshThreadMap, renderMapTab } from "./mapView.js";
+import { addThreadToGlobalMap } from "./globalMap.js";
 
 async function requestThreadGeneration(payload) {
   const data = await apiPost("/thread/generate", payload);
@@ -40,6 +41,8 @@ export async function generateThread(threadId) {
 
   let cleanupSelectedView = null;
   let payload = {};
+  let seedObjects = null;
+  let seedImageId = null;
 
   if (tab === "objects") {
     const selected = document.querySelector(`#${threadDomId} .object-block.selected`);
@@ -48,6 +51,7 @@ export async function generateThread(threadId) {
       return;
     }
     payload = { mode: "object", object_id: selected.dataset.objectId };
+    seedObjects = [{ object_id: selected.dataset.objectId }];
     const singleObjectHTML = selected.outerHTML;
     cleanupSelectedView = () => clearThreadExcept(threadDomId, "objects", singleObjectHTML);
   } else if (tab === "images") {
@@ -57,6 +61,7 @@ export async function generateThread(threadId) {
       return;
     }
     payload = { mode: "image", image_id: selected.dataset.imageId };
+    seedImageId = selected.dataset.imageId;
     const singleImageHTML = selected.outerHTML;
     cleanupSelectedView = () => clearThreadExcept(threadDomId, "images", singleImageHTML);
   } else if (tab === "map") {
@@ -109,6 +114,29 @@ export async function generateThread(threadId) {
     commonObject: newData.main_object || (payload.object_id ? { object_id: payload.object_id } : null)
   };
   renderFullThread(newThreadDomId, newData, context);
+
+  if (payload.mode === "object" && newData.main_object) {
+    seedObjects = [newData.main_object];
+  }
+
+  if (payload.mode === "thread") {
+    const merged = new Map();
+    (newData.objects_same_picture || []).forEach((obj) => {
+      if (obj?.object_id) merged.set(Number(obj.object_id), obj);
+    });
+    (newData.objects_same_metadata || []).forEach((obj) => {
+      if (obj?.object_id) merged.set(Number(obj.object_id), obj);
+    });
+    seedObjects = Array.from(merged.values());
+  }
+
+  addThreadToGlobalMap({
+    threadDomId: newThreadDomId,
+    mode: payload.mode,
+    seedObjects,
+    seedImageId,
+    imagesFromThread: newData.images_from_object || []
+  });
 }
 
 export async function showResults(threadId) {
@@ -189,4 +217,3 @@ export function loadInitialThreads(threads) {
   };
   selectors.forEach((sel) => fillSelect(sel, threads[sel.dataset.key] || []));
 }
-
