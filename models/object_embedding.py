@@ -3,9 +3,6 @@ import clip
 from PIL import Image
 import numpy as np
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)
 
