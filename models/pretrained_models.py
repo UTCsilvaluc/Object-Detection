@@ -13,6 +13,9 @@ from segment_anything import sam_model_registry , SamAutomaticMaskGenerator , Sa
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 SAM_DEVICE = torch.device("cpu")
 
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+
 #YOLO
 yolo_model = YOLO('yolov8n.pt')
 
