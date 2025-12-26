@@ -84,9 +84,9 @@ class SAMStrategy(BaseModelStrategy):
         Please follow : {"pred_iou_thresh": float, "stability_score_thresh": float, "stability_score_offset": float, "min_mask_region_area": int}
         """
         if tiled:
-            masks , img , img_result = segment_sam_tiled(image_path=image_path , sam_parameters=defaultParameters)
+            masks , img , img_result = segment_sam_tiled(image_path=image_path , sam_parameters=defaultParameters, save=False)
         else:
-            masks , img , img_result = segment_sam(image_path=image_path, sam_parameters=defaultParameters)
+            masks , img , img_result = segment_sam(image_path=image_path, sam_parameters=defaultParameters, save=False)
         return masks , img , img_result
     def process_results(self, masks , img):
         return process_SAM(self, masks , img)

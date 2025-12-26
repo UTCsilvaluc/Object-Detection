@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import torch
 def filter_and_merge_segments(masks, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
     """
     Filter, deduplicate, and merge partial segments. 
@@ -73,10 +74,9 @@ def segment_object_with_sam(img_rgb, bbox):
         return None, None
 
     # SAM expects the full image, but we can use it locally:
-    predictor = SAM_GLOBAL_INSTANCE.get_mask_predictor()
-    with SAM_GLOBAL_INSTANCE.get_predictor_lock():
-        predictor.set_image(img_rgb)
-        box = np.array([x_min, y_min, x_max, y_max])
+    predictor = SAM_GLOBAL_INSTANCE.get_mask_predictor(img_rgb)
+    box = np.array([x_min, y_min, x_max, y_max])
+    with SAM_GLOBAL_INSTANCE.get_predictor_lock(), torch.inference_mode():
         masks, _, _ = predictor.predict(box=box, multimask_output=False)
 
     if masks is None or len(masks) == 0:

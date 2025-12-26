@@ -1,17 +1,18 @@
 import torch
 from ultralytics import YOLO
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator , SamPredictor
-import os   
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
+import os
 import math
 import threading
 import numpy as np
 import cv2
-from PIL import Image
 from models.helpers import filter_and_merge_segments
-from segment_anything import sam_model_registry , SamAutomaticMaskGenerator , SamPredictor
 #Device
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-SAM_DEVICE = torch.device("cpu")
+SAM_DEVICE = torch.device(
+    "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+)
+SAM_MAX_SIDE = int(os.getenv("SAM_MAX_SIDE", "1024"))
 
 #YOLO
 yolo_model = YOLO('yolov8n.pt')
@@ -20,7 +21,7 @@ yolo_model = YOLO('yolov8n.pt')
 
 def defautlSamParameters():
     return {
-        "points_per_side": 16, 
+        "points_per_side": 16,
         "pred_iou_thresh": 0.90,
         "stability_score_thresh": 0.90,
         "min_mask_region_area": 10000
@@ -49,6 +50,7 @@ class SAMModel:
         self._initialized = True
         self._checkpoint_path = checkpoint_path or sam_checkpoint
         self._GLOBAL_SAM_MODEL = None
+        self._PREDICTOR_IMAGE_ID = None
         self._PREDICTOR_LOCK = threading.Lock()
         self._GENERATOR_LOCK = threading.Lock()
 
@@ -69,9 +71,15 @@ class SAMModel:
             self._set_sam_model()
         self._GLOBAL_SAM_PREDICTOR = SamPredictor(self._GLOBAL_SAM_MODEL)
 
-    def get_mask_predictor(self):
+    def get_mask_predictor(self, image_rgb=None):
         if not hasattr(self, "_GLOBAL_SAM_PREDICTOR") or self._GLOBAL_SAM_PREDICTOR is None:
             self._set_sam_predictor()
+        if image_rgb is not None:
+            image_id = id(image_rgb)
+            if self._PREDICTOR_IMAGE_ID != image_id:
+                with self._PREDICTOR_LOCK:
+                    self._GLOBAL_SAM_PREDICTOR.set_image(image_rgb)
+                    self._PREDICTOR_IMAGE_ID = image_id
         return self._GLOBAL_SAM_PREDICTOR
 
     def create_mask_generator(self, sam_parameters):
@@ -88,18 +96,34 @@ class SAMModel:
 # GLOBAL INSTANCE SINGLETON OF SAMModel
 SAM_GLOBAL_INSTANCE = SAMModel()
 
+def _resize_for_sam(image_rgb, max_side):
+    if max_side is None:
+        return image_rgb, 1.0
+    h, w = image_rgb.shape[:2]
+    max_dim = max(h, w)
+    if max_dim <= max_side:
+        return image_rgb, 1.0
+    scale = max_side / float(max_dim)
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    resized = cv2.resize(image_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return resized, scale
+
+def _upsample_mask(mask, target_shape):
+    h, w = target_shape[:2]
+    return cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+
 def safe_predict_point(img_rgb , x , y):
-    predictor = SamPredictor(SAM_GLOBAL_INSTANCE.get_sam_model())
-    with SAM_GLOBAL_INSTANCE.get_predictor_lock():
-        predictor.set_image(img_rgb)
-    masks , scores , logits = predictor.predict(
-        point_coords = np.array([[x , y]]),
-        point_labels = np.array([1]),
-        multimask_output=False
-    )
+    predictor = SAM_GLOBAL_INSTANCE.get_mask_predictor(img_rgb)
+    with SAM_GLOBAL_INSTANCE.get_predictor_lock(), torch.inference_mode():
+        masks, scores, logits = predictor.predict(
+            point_coords=np.array([[x, y]]),
+            point_labels=np.array([1]),
+            multimask_output=False
+        )
     return masks , scores , logits
 
-def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_thresh=0.9, merge_thresh=0.3):
+def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_thresh=0.9, merge_thresh=0.3, max_side=None):
     """
     Segment objects in an image using the SAM model.
     :image_path: Path to the input image.
@@ -111,26 +135,30 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
     """
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_for_sam, scale = _resize_for_sam(image_rgb, SAM_MAX_SIDE if max_side is None else max_side)
     generator = SAM_GLOBAL_INSTANCE.create_mask_generator(sam_parameters or defautlSamParameters())
-    with SAM_GLOBAL_INSTANCE.get_generator_lock():
-        masks = generator.generate(image_rgb)
+    with SAM_GLOBAL_INSTANCE.get_generator_lock(), torch.inference_mode():
+        masks = generator.generate(image_for_sam)
+    scaled_min_area = max(1, int(round(min_area * (scale ** 2)))) if scale < 1.0 else min_area
     # Filter, deduplicate, and merge segments
-    masks = filter_and_merge_segments(masks, min_area=min_area, 
+    masks = filter_and_merge_segments(masks, min_area=scaled_min_area,
                                       iou_thresh=iou_thresh, 
                                       merge_thresh=merge_thresh)
+    if scale != 1.0:
+        for mask in masks:
+            mask["segmentation"] = _upsample_mask(mask["segmentation"], image_rgb.shape)
+
+    annotated = image_rgb.copy()
+    if masks:
+        for mask in masks:
+            seg = mask["segmentation"]
+            contours, _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(annotated, contours, -1, (0, 255, 0), 2)
 
     if save:
         base_name = os.path.splitext(os.path.basename(image_path))[0]
         save_dir = os.path.join(sam_dir, base_name)
         os.makedirs(save_dir, exist_ok=True)
-        for mask in masks:
-            seg = mask["segmentation"]
-            contours , _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            cv2.drawContours(image_rgb, contours, -1, (0,255,0), 2)
-
-        img_pil = Image.fromarray(image_rgb)
-
-
         # Save each isolated object
         for idx, mask in enumerate(masks):
             seg = mask["segmentation"].astype(np.uint8)
@@ -146,12 +174,9 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
 
             obj_path = os.path.join(save_dir, f"{base_name}_obj_{idx+1}.png")
             cv2.imwrite(obj_path, cv2.cvtColor(obj_crop, cv2.COLOR_RGB2BGR))
-    # Convert img_pil to numpy array
-    img_pil = np.array(img_pil)
+    return (masks, image_rgb, annotated)
 
-    return (masks , image_rgb , img_pil)
-
-def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10000 , iou_thresh=0.7 , merge_thresh=0.2 , tile_size=1024 , overlap=100):
+def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10000 , iou_thresh=0.7 , merge_thresh=0.2 , tile_size=1024 , overlap=100, max_side=None):
     """
     Segment objects in an image using the SAM model with tiling.
     :image_path: Path to the input image.
@@ -166,42 +191,53 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     H , W , _ = image_rgb.shape
+    image_for_sam, scale = _resize_for_sam(image_rgb, SAM_MAX_SIDE if max_side is None else max_side)
+    if scale != 1.0:
+        H, W = image_for_sam.shape[:2]
     generator = SAM_GLOBAL_INSTANCE.create_mask_generator(sam_parameters or defautlSamParameters())
+    scaled_min_area = max(1, int(round(min_area * (scale ** 2)))) if scale < 1.0 else min_area
     all_masks = []
-    tile_masks_count = 0
 
-    tiles_x = math.ceil(W / tile_size)
-    tiles_y = math.ceil(H / tile_size)
+    stride = max(1, tile_size - overlap)
+    tiles_x = math.ceil((W - tile_size) / stride) + 1
+    tiles_y = math.ceil((H - tile_size) / stride) + 1
 
     for ty in range(tiles_y):
         for tx in range(tiles_x):
-            x1 = tx * tile_size
-            y1 = ty * tile_size
+            x1 = tx * stride
+            y1 = ty * stride
             x2 = min(x1 + tile_size, W)
             y2 = min(y1 + tile_size, H)
-            tile = image_rgb[y1:y2, x1:x2]
-            with SAM_GLOBAL_INSTANCE.get_generator_lock():
+            tile = image_for_sam[y1:y2, x1:x2]
+            with SAM_GLOBAL_INSTANCE.get_generator_lock(), torch.inference_mode():
                 local_masks = generator.generate(tile)
+            if local_masks:
+                local_masks = filter_and_merge_segments(
+                    local_masks,
+                    min_area=scaled_min_area,
+                    iou_thresh=iou_thresh,
+                    merge_thresh=merge_thresh
+                )
             for mask in local_masks:
                 seg = mask["segmentation"]
                 full_seg = np.zeros((H, W), dtype=seg.dtype)
                 full_seg[y1:y2, x1:x2] = seg
-                
                 mask_reproj = {
                     "segmentation": full_seg,
                     "score": mask.get("score", 0)
                 }
                 all_masks.append(mask_reproj)
-            tile_masks_count += len(local_masks)
         
-    merged_masks = filter_and_merge_segments(all_masks, min_area=min_area, 
+    merged_masks = filter_and_merge_segments(all_masks, min_area=scaled_min_area,
                                              iou_thresh=iou_thresh, 
                                              merge_thresh=merge_thresh)
+    if scale != 1.0:
+        for mask in merged_masks:
+            mask["segmentation"] = _upsample_mask(mask["segmentation"], image_rgb.shape)
     annotated = image_rgb.copy()
-    if save and merged_masks:
+    if merged_masks:
         for m in merged_masks:
             seg = m["segmentation"]
             contours , _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(annotated, contours, -1, (0,255,0), 2)
-    annotated_pil = Image.fromarray(annotated)
-    return (merged_masks , image_rgb , np.array(annotated_pil))
+    return (merged_masks, image_rgb, annotated)
