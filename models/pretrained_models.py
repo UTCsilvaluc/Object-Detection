@@ -1,21 +1,37 @@
-import torch
-from ultralytics import YOLO
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 import os
 import math
 import threading
-import numpy as np
-import cv2
-from models.helpers import filter_and_merge_segments
-#Device
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-SAM_DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
-)
+from config import Config
+
+def _lazy_import_torch():
+    import torch
+    return torch
+
+def _lazy_import_cv2():
+    import cv2
+    return cv2
+
+def _lazy_import_np():
+    import numpy as np
+    return np
+
+def get_sam_device():
+    torch = _lazy_import_torch()
+    return torch.device(
+        "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+    )
+
 SAM_MAX_SIDE = int(os.getenv("SAM_MAX_SIDE", "1024"))
 
 #YOLO
-yolo_model = YOLO('yolov8n.pt')
+_YOLO_MODEL = None
+
+def get_yolo_model():
+    global _YOLO_MODEL
+    if _YOLO_MODEL is None:
+        from ultralytics import YOLO
+        _YOLO_MODEL = YOLO('yolov8n.pt')
+    return _YOLO_MODEL
 
 #SAM
 
@@ -29,10 +45,27 @@ def defautlSamParameters():
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
-sam_checkpoint = os.path.join(CHECKPOINTS_DIR, "sam_vit_h.pth")
 base_save_dir = "img/ModelGen"
 os.makedirs(base_save_dir, exist_ok=True)
 sam_dir = os.path.join(base_save_dir, "SAM")
+
+SAM_MODEL_MAP = {
+    "sam_vit_h": ("vit_h", "sam_vit_h.pth"),
+    "sam_vit_l": ("vit_l", "sam_vit_l.pth"),
+    "sam_vit_b": ("vit_b", "sam_vit_b.pth"),
+    "vit_h": ("vit_h", "sam_vit_h.pth"),
+    "vit_l": ("vit_l", "sam_vit_l.pth"),
+    "vit_b": ("vit_b", "sam_vit_b.pth"),
+    "sam_min": ("vit_b", "sam_vit_b.pth")
+}
+
+def resolve_sam_config():
+    model_key = getattr(Config, "SAM_MODEL", "sam_vit_h")
+    if model_key not in SAM_MODEL_MAP:
+        raise ValueError(f"Unknown SAM model '{model_key}'. Expected one of: {', '.join(SAM_MODEL_MAP)}")
+    registry_key, checkpoint_file = SAM_MODEL_MAP[model_key]
+    checkpoint_path = os.path.join(CHECKPOINTS_DIR, checkpoint_file)
+    return registry_key, checkpoint_path
 
 class SAMModel:
     _instance = None
@@ -48,7 +81,9 @@ class SAMModel:
         if hasattr(self, "_initialized") and self._initialized:
             return
         self._initialized = True
-        self._checkpoint_path = checkpoint_path or sam_checkpoint
+        registry_key, default_checkpoint = resolve_sam_config()
+        self._registry_key = registry_key
+        self._checkpoint_path = checkpoint_path or default_checkpoint
         self._GLOBAL_SAM_MODEL = None
         self._PREDICTOR_IMAGE_ID = None
         self._PREDICTOR_LOCK = threading.Lock()
@@ -56,10 +91,13 @@ class SAMModel:
 
     def _set_sam_model(self, checkpoint_path: str = None):
         if checkpoint_path is None:
-            checkpoint_path = sam_checkpoint
-        self._GLOBAL_SAM_MODEL = sam_model_registry["vit_h"](
+            checkpoint_path = self._checkpoint_path
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"SAM checkpoint not found: {checkpoint_path}")
+        from segment_anything import sam_model_registry
+        self._GLOBAL_SAM_MODEL = sam_model_registry[self._registry_key](
             checkpoint=checkpoint_path
-        ).to(device=SAM_DEVICE)
+        ).to(device=get_sam_device())
 
     def get_sam_model(self):
         if self._GLOBAL_SAM_MODEL is None:
@@ -69,6 +107,7 @@ class SAMModel:
     def _set_sam_predictor(self):
         if self._GLOBAL_SAM_MODEL is None:
             self._set_sam_model()
+        from segment_anything import SamPredictor
         self._GLOBAL_SAM_PREDICTOR = SamPredictor(self._GLOBAL_SAM_MODEL)
 
     def get_mask_predictor(self, image_rgb=None):
@@ -84,6 +123,7 @@ class SAMModel:
 
     def create_mask_generator(self, sam_parameters):
         model = self.get_sam_model()
+        from segment_anything import SamAutomaticMaskGenerator
         return SamAutomaticMaskGenerator(model, **sam_parameters)
 
     def get_predictor_lock(self):
@@ -106,14 +146,19 @@ def _resize_for_sam(image_rgb, max_side):
     scale = max_side / float(max_dim)
     new_w = max(1, int(round(w * scale)))
     new_h = max(1, int(round(h * scale)))
+    cv2 = _lazy_import_cv2()
     resized = cv2.resize(image_rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return resized, scale
 
 def _upsample_mask(mask, target_shape):
     h, w = target_shape[:2]
+    cv2 = _lazy_import_cv2()
+    np = _lazy_import_np()
     return cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
 
 def safe_predict_point(img_rgb , x , y):
+    np = _lazy_import_np()
+    torch = _lazy_import_torch()
     predictor = SAM_GLOBAL_INSTANCE.get_mask_predictor(img_rgb)
     with SAM_GLOBAL_INSTANCE.get_predictor_lock(), torch.inference_mode():
         masks, scores, logits = predictor.predict(
@@ -133,14 +178,17 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
     :merge_thresh: IoU threshold for merging segments.
     :returns: Tuple (masks, original_image, annotated_image)
     """
+    cv2 = _lazy_import_cv2()
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image_for_sam, scale = _resize_for_sam(image_rgb, SAM_MAX_SIDE if max_side is None else max_side)
     generator = SAM_GLOBAL_INSTANCE.create_mask_generator(sam_parameters or defautlSamParameters())
+    torch = _lazy_import_torch()
     with SAM_GLOBAL_INSTANCE.get_generator_lock(), torch.inference_mode():
         masks = generator.generate(image_for_sam)
     scaled_min_area = max(1, int(round(min_area * (scale ** 2)))) if scale < 1.0 else min_area
     # Filter, deduplicate, and merge segments
+    from models.helpers import filter_and_merge_segments
     masks = filter_and_merge_segments(masks, min_area=scaled_min_area,
                                       iou_thresh=iou_thresh, 
                                       merge_thresh=merge_thresh)
@@ -152,6 +200,7 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
     if masks:
         for mask in masks:
             seg = mask["segmentation"]
+            np = _lazy_import_np()
             contours, _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(annotated, contours, -1, (0, 255, 0), 2)
 
@@ -161,6 +210,7 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
         os.makedirs(save_dir, exist_ok=True)
         # Save each isolated object
         for idx, mask in enumerate(masks):
+            np = _lazy_import_np()
             seg = mask["segmentation"].astype(np.uint8)
             obj_img = cv2.bitwise_and(image_rgb, image_rgb, mask=seg)
 
@@ -188,6 +238,7 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
     :overlap: Overlap between tiles.
     :returns: Tuple (masks, original_image, annotated_image)
     """
+    cv2 = _lazy_import_cv2()
     image = cv2.imread(image_path)
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     H , W , _ = image_rgb.shape
@@ -209,9 +260,11 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
             x2 = min(x1 + tile_size, W)
             y2 = min(y1 + tile_size, H)
             tile = image_for_sam[y1:y2, x1:x2]
+            torch = _lazy_import_torch()
             with SAM_GLOBAL_INSTANCE.get_generator_lock(), torch.inference_mode():
                 local_masks = generator.generate(tile)
             if local_masks:
+                from models.helpers import filter_and_merge_segments
                 local_masks = filter_and_merge_segments(
                     local_masks,
                     min_area=scaled_min_area,
@@ -220,6 +273,7 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
                 )
             for mask in local_masks:
                 seg = mask["segmentation"]
+                np = _lazy_import_np()
                 full_seg = np.zeros((H, W), dtype=seg.dtype)
                 full_seg[y1:y2, x1:x2] = seg
                 mask_reproj = {
@@ -228,6 +282,7 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
                 }
                 all_masks.append(mask_reproj)
         
+    from models.helpers import filter_and_merge_segments
     merged_masks = filter_and_merge_segments(all_masks, min_area=scaled_min_area,
                                              iou_thresh=iou_thresh, 
                                              merge_thresh=merge_thresh)
@@ -238,6 +293,7 @@ def segment_sam_tiled(image_path , save=True , sam_parameters=None , min_area=10
     if merged_masks:
         for m in merged_masks:
             seg = m["segmentation"]
+            np = _lazy_import_np()
             contours , _ = cv2.findContours(seg.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(annotated, contours, -1, (0,255,0), 2)
     return (merged_masks, image_rgb, annotated)

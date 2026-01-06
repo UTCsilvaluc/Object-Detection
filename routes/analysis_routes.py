@@ -22,10 +22,6 @@ from utils.helper import (
 
 from .main_routes import clear_temp
 from models.factory import ModelFactory
-from models.pretrained_models import (
-    SAM_GLOBAL_INSTANCE,
-    defautlSamParameters
-)
 from utils.database import (
     get_all_classes,
     get_all_metadata_keys,
@@ -146,6 +142,7 @@ def re_run_analysis():
     tile = request.form.get("tile-based-analysis", "off") == "on"
     if not os.path.exists(img_original_path):
         return {"error": "Image not found"}, 404
+    from models.pretrained_models import defautlSamParameters
     DEFAULT_SAM_PARAMS = defautlSamParameters()
     sam_parameters = {k: type(DEFAULT_SAM_PARAMS[k])(request.form.get(k, v))
                   for k, v in DEFAULT_SAM_PARAMS.items()}
@@ -254,6 +251,7 @@ def upload():
     metadatas_values = get_all_metadatas_values()
     thread_categories = get_ThreadCategory()
     os.remove(img_path)
+    from models.pretrained_models import defautlSamParameters
     return render_template(
         "upload.html",
         img_name=img_name,

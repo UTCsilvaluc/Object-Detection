@@ -23,6 +23,11 @@ body {
     display: flex;
     flex-direction: column;
     transition: transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+    color: inherit;
+    content-visibility: auto;
+    contain: content;
+    contain-intrinsic-size: 240px 260px;
 }
 
 .gallery-item:hover {

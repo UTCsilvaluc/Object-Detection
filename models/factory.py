@@ -1,9 +1,7 @@
-from .strategy import BaseModelStrategy
-from .strategy import YOLOStrategy , SAMStrategy
-
 class ModelFactory:
     @staticmethod
-    def get_model(strategy: str) -> BaseModelStrategy:
+    def get_model(strategy: str):
+        from .strategy import YOLOStrategy, SAMStrategy
         if strategy == "yolo":
             return YOLOStrategy()
         elif strategy == "sam":

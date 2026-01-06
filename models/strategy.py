@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 import os
-from .helpers import segment_object_with_sam
-from .pretrained_models import yolo_model , segment_sam , segment_sam_tiled
 from .process_detection import process_yolo_results , process_SAM
 from utils.helper import save_temp_img , build_img_temp_path
 import cv2
@@ -47,7 +45,8 @@ class YOLOStrategy(BaseModelStrategy):
     def __init__(self , save_dir="img/ModelGen/YOLO"):
         self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
-        self.model = yolo_model
+        from .pretrained_models import get_yolo_model
+        self.model = get_yolo_model()
     def run(self, image_path):
         img = cv2.imread(image_path)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -66,6 +65,7 @@ class YOLOStrategy(BaseModelStrategy):
         YOLO embedding generation using SAM for precise segmentation.
         Otherwise, backgrounds or other objects may interfere with the embedding.
         """
+        from .helpers import segment_object_with_sam
         crop_object , mask = segment_object_with_sam(img_rgb, bbox)
         _ , crop_path = save_temp_img(crop_object, "temp_embedding")
         from .object_embedding import generate_embedding_from_crop
@@ -83,6 +83,7 @@ class SAMStrategy(BaseModelStrategy):
         DefaultParameters: Optional SAM parameters to override defaults.
         Please follow : {"pred_iou_thresh": float, "stability_score_thresh": float, "stability_score_offset": float, "min_mask_region_area": int}
         """
+        from .pretrained_models import segment_sam , segment_sam_tiled
         if tiled:
             masks , img , img_result = segment_sam_tiled(image_path=image_path , sam_parameters=defaultParameters, save=False)
         else:
