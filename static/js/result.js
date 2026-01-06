@@ -27,40 +27,5 @@ window.addEventListener("beforeunload", function () {
     fetch("/clear_temp", { method: "POST", headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ img_name: window.AppConfig.name, img_annotated_path: window.AppConfig.annotated_image_path, img_original_path: window.AppConfig.original_image_path }) });
 });
 
-function waitForImagesReady() {
-    const images = Array.from(document.images || []);
-    if (!images.length) {
-        return Promise.resolve();
-    }
 
-    return Promise.allSettled(
-        images.map((img) => new Promise((resolve) => {
-            const src = img.getAttribute('src');
-            if (!src) {
-                resolve();
-                return;
-            }
-            if (img.complete && img.naturalWidth > 0) {
-                resolve();
-                return;
-            }
-            const onDone = () => resolve();
-            img.addEventListener('load', onDone, { once: true });
-            img.addEventListener('error', onDone, { once: true });
-        }))
-    );
-}
-
-function finishLoadingUI() {
-    document.body.classList.remove('is-loading');
-    const overlay = $('#page-loading');
-    if (overlay) {
-        overlay.classList.add('hidden');
-        overlay.setAttribute('aria-busy', 'false');
-    }
-}
-
-window.addEventListener('load', () => {
-    waitForImagesReady().then(finishLoadingUI);
-});
 
