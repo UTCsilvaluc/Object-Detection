@@ -106,7 +106,7 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
             img = img.convert("RGB")
             img.thumbnail(THUMB_MAX_SIZE, Image.LANCZOS)
             img.save(thumb_path, "WEBP", quality=THUMB_QUALITY, method=6, optimize=True)
-            os.chmod(thumb_path, 0o644)
+            make_public_static_file(thumb_path)
         make_public_static_file(thumb_path)
         return True
     except Exception:
