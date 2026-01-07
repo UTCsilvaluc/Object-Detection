@@ -6,6 +6,8 @@ import cv2
 import shutil
 import json
 import html
+import re
+import unicodedata
 from utils.database import *
 from ultralytics.utils.plotting import colors
 import io
@@ -46,6 +48,20 @@ def _sanitize_filename(name: str) -> str:
     if not name:
         return name
     return html.unescape(name).strip()
+
+def safe_filename(name: str, fallback: str = "image", max_length: int = 80) -> str:
+    """
+    Produce a filesystem-safe ASCII filename stem.
+    Keeps letters, numbers, dot, dash, underscore. Collapses spaces/invalid chars to underscores.
+    """
+    raw = _sanitize_filename(name) or ""
+    normalized = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.replace(" ", "_")
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip("._-")
+    if not normalized:
+        normalized = fallback
+    return normalized[:max_length]
 
 def build_json_temp_path(extension=None):
     """
@@ -253,10 +269,11 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     :original_image_path: Temp path of original image please have it in static folder
     """
     upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
+    safe_name = safe_filename(img_name)
     img_path = save_image_permanently(
-        original_image_path, upload_folder, f"{img_name}_original.jpg"
+        original_image_path, upload_folder, f"{safe_name}_original.jpg"
     )
-    file_name_in_db = f"{img_name}_original.jpg"
+    file_name_in_db = f"{safe_name}_original.jpg"
     thumb_path = build_image_thumb_absolute(file_name_in_db)
     ensure_image_thumbnail(img_path, thumb_path)
     latitude = metadata.get("latitude")
@@ -286,9 +303,9 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
         metadata.get("type")
     )
     img_annotated_path = save_image_permanently(
-        annotated_image_path, upload_folder, f"{img_name}_annotated.jpg"
+        annotated_image_path, upload_folder, f"{safe_name}_annotated.jpg"
     )
-    version_file_name_in_db = f"{img_name}_annotated.jpg"
+    version_file_name_in_db = f"{safe_name}_annotated.jpg"
     version_number = insert_annoted_image(image_id, version_file_name_in_db, model=model)
     return image_id , version_number , file_name_in_db
 
@@ -327,6 +344,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     """
     upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     objects_data = {}
+    safe_name = safe_filename(img_name)
     objects = json_data.get("objects", []) if json_data else []
     for i in range(max_objects):
         class_id = request.form.get(f"objects[{i}][class_id]")
@@ -344,7 +362,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         instance_value = request.form.get(f"objects[{i}][value]")
 
         crop_path = normalize_path(request.form.get(f"objects[{i}][crop_path]"))
-        object_path = save_image_permanently(crop_path, upload_folder, f"{img_name}_obj{i}.jpg")
+        object_path = save_image_permanently(crop_path, upload_folder, f"{safe_name}_obj{i}.jpg")
         object_file_name = os.path.basename(object_path)
 
         if similar_object:
