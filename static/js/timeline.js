@@ -53,9 +53,10 @@ function buildTimelineFromFilteredImages(filteredImages , URL_for_images) {
             return ms === null ? "N/A" : new Date(ms).getFullYear();
         })();
 
+        const imagePath = img.thumb_path || img.file_path;
         item.innerHTML = `
             <div class="timeline__content">
-                <img class="timeline__img" src="${URL_for_images + img.file_path}" alt="${img.title}" loading="lazy" decoding="async">
+                <img class="timeline__img" src="${URL_for_images + imagePath}" alt="${img.title}" loading="lazy" decoding="async">
                 <h2 class="timeline__content-title">${yearLabel}</h2>
                 <p class="timeline__content-desc">${img.description || "No description available."}</p>
             </div>

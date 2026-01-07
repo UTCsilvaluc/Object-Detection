@@ -16,6 +16,9 @@ from models.object_embedding import generate_embedding_from_crop
 from utils.database import get_instance_object_by_object_id , find_similar_objects
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
+THUMB_SUBDIR = os.path.join("static", "img", "Images", "thumbs")
+THUMB_MAX_SIZE = (320, 320)
+THUMB_QUALITY = 70
 
 def make_public_static_file(path: str, group: str = "www-data") -> None:
     """
@@ -65,6 +68,48 @@ def build_img_temp_path(extension=None):
     if extension is None:
         return img_dir
     return os.path.join(img_dir, extension)
+
+def build_image_path(file_name: str) -> str:
+    """
+    Build the absolute path for an image stored in static/img/Images.
+    """
+    if os.path.isabs(file_name):
+        return file_name
+    return os.path.join(ROOT_DIR, "static", "img", "Images", file_name)
+
+def build_image_thumb_relative(file_name: str, ext: str = "webp") -> str:
+    """
+    Build a thumb path relative to static/img/Images.
+    """
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return os.path.join("thumbs", f"{base}.{ext}").replace(os.sep, "/")
+
+def build_image_thumb_absolute(file_name: str, ext: str = "webp") -> str:
+    """
+    Build the absolute path for a thumbnail under static/img/Images/thumbs.
+    """
+    return os.path.join(ROOT_DIR, THUMB_SUBDIR, f"{os.path.splitext(os.path.basename(file_name))[0]}.{ext}")
+
+def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
+    """
+    Generate a thumbnail if it does not exist.
+    Returns True if the thumbnail exists or was created successfully.
+    """
+    if not source_path or not os.path.exists(source_path):
+        return False
+    if os.path.exists(thumb_path):
+        return True
+    os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+    try:
+        with Image.open(source_path) as img:
+            img = ImageOps.exif_transpose(img)
+            img = img.convert("RGB")
+            img.thumbnail(THUMB_MAX_SIZE, Image.LANCZOS)
+            img.save(thumb_path, "WEBP", quality=THUMB_QUALITY, method=6, optimize=True)
+        make_public_static_file(thumb_path)
+        return True
+    except Exception:
+        return False
 
 def save_temp_img(img_array, obj_index: int):
     """
@@ -212,6 +257,8 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
         original_image_path, upload_folder, f"{img_name}_original.jpg"
     )
     file_name_in_db = f"{img_name}_original.jpg"
+    thumb_path = build_image_thumb_absolute(file_name_in_db)
+    ensure_image_thumbnail(img_path, thumb_path)
     latitude = metadata.get("latitude")
     longitude = metadata.get("longitude")
     if latitude is not None:

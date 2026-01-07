@@ -163,7 +163,7 @@ export function renderImagesTab(threadDomId, imagesList) {
     let html = `
       <h2>Image #${img.image_id} — ${img.title ?? "No title"}</h2>
       <div class="image-header-row">
-        <img src="${window.appConfig.URL_for_images}${img.file_path}" class="thread-image-thumb">
+        <img src="${window.appConfig.URL_for_images}${img.thumb_path || img.file_path}" class="thread-image-thumb">
         <div class="image-info">
           <p><strong>Description:</strong> ${img.description ?? "None"}</p>
           <p><strong>Capture date:</strong> ${img.capture_date ?? "?"}</p>
@@ -234,4 +234,3 @@ export function renderFullThread(threadDomId, threadsData, context = {}) {
   enableSingleSelect(threadDomId, ".object-block");
   enableSingleSelect(threadDomId, ".image-block");
 }
-

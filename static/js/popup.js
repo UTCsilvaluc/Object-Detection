@@ -25,9 +25,10 @@ export function createPopupPoint(point) {
  * @returns {string} The HTML content for the popup.
  */
 export function createPopupHTML(image , URL_for_images , URL_for_view_image) {
+    const previewPath = image.thumb_path || image.file_path;
     return `
         <div class="popup-content">
-            <img src="${URL_for_images + image.file_path}" width="100" />
+            <img src="${URL_for_images + previewPath}" width="100" />
             <h3>${image.title || 'Untitled'}</h3>
             <p><strong>Type:</strong> ${image.type || 'Untitled'}</p>
             <p><strong>Description:</strong> ${image.description || 'No description available'}</p>
@@ -165,4 +166,3 @@ export function createPopUpForObjectLinks(objectData, URL_for_image) {
         `)
         .join('');
 }
-

@@ -3,7 +3,15 @@
 from flask import Blueprint, render_template, request, send_from_directory , jsonify
 import os
 
-from utils.helper import build_json_temp_path, build_img_temp_path, load_analysis_json
+from utils.helper import (
+    build_json_temp_path,
+    build_img_temp_path,
+    load_analysis_json,
+    build_image_path,
+    build_image_thumb_absolute,
+    build_image_thumb_relative,
+    ensure_image_thumbnail
+)
 from utils.database import (
     get_all_images,
     get_image_by_id,
@@ -38,6 +46,16 @@ def gallery():
     except Exception as e:
         print(f"Error fetching images: {e}")
         images = []
+
+    for image in images:
+        file_path = image.get("file_path")
+        if not file_path:
+            image["thumb_path"] = None
+            continue
+        source_path = build_image_path(file_path)
+        thumb_abs = build_image_thumb_absolute(file_path)
+        thumb_rel = build_image_thumb_relative(file_path)
+        image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
 
     return render_template('gallery.html', images=images)
 
@@ -92,10 +110,20 @@ def map_view():
 @main_routes_bp.route("/api/map-data" , methods=["POST"])
 def map_data():
     object_datas , shared_objects = build_object_links()
+    images = get_all_full_images()
+    for image in images:
+        file_path = image.get("file_path")
+        if not file_path:
+            image["thumb_path"] = None
+            continue
+        source_path = build_image_path(file_path)
+        thumb_abs = build_image_thumb_absolute(file_path)
+        thumb_rel = build_image_thumb_relative(file_path)
+        image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
     return jsonify({
         "status": True,
         "success": True,
-        "images": get_all_full_images(),
+        "images": images,
         "icons": get_all_icons(),
         "points": get_all_full_points(),
         "shared_objects": shared_objects,

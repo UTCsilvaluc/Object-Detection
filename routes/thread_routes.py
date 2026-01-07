@@ -7,6 +7,12 @@ from utils.database import (
     get_ThreadCategory,
     get_all_full_images
 )
+from utils.helper import (
+    build_image_path,
+    build_image_thumb_absolute,
+    build_image_thumb_relative,
+    ensure_image_thumbnail
+)
 
 from utils.thread_research import (
     build_thread_from_objectID,
@@ -19,12 +25,25 @@ from utils.thread_research import (
 
 thread_bp = Blueprint("thread", __name__)
 
+def _attach_thumb_paths(images):
+    for image in images or []:
+        file_path = image.get("file_path")
+        if not file_path:
+            image["thumb_path"] = None
+            continue
+        source_path = build_image_path(file_path)
+        thumb_abs = build_image_thumb_absolute(file_path)
+        thumb_rel = build_image_thumb_relative(file_path)
+        image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
+    return images
+
 @thread_bp.route('/thread')
 def thread_view():
     images = get_all_images() 
     points = get_all_full_points()
     metadata_keys = get_all_metadata_keys()
     thread_categories = get_ThreadCategory()
+    _attach_thumb_paths(images)
     return render_template(
         'thread.html',
         images=images,
@@ -46,6 +65,7 @@ def generate_thread():
             return jsonify({"success": False, "error": "object_id is required"}), 400
 
         threads = build_thread_from_objectID(object_id)
+        _attach_thumb_paths(threads.get("images_from_object"))
 
         return jsonify({
             "success": True,
@@ -57,6 +77,7 @@ def generate_thread():
         if not image_id:
             return jsonify({"success": False, "error": "image_id is required"}), 400
         threads = build_thread_from_imageID(image_id)
+        _attach_thumb_paths(threads.get("images_from_object"))
         return jsonify({
             "success": True,
             "threads": threads
@@ -67,6 +88,7 @@ def generate_thread():
         if not selectorsValues:
             return jsonify({"success": False, "error": "threads metadata is required"}), 400
         threads = build_thread_from_metadata(selectorsValues)
+        _attach_thumb_paths(threads.get("images_from_object"))
         return jsonify({
             "success": True,
             "threads": threads
@@ -116,6 +138,7 @@ def show_results():
         images = results.get("images", []) if isinstance(results, dict) else results
         links = results.get("links", []) if isinstance(results, dict) else []
         common_object = results.get("common_object") if isinstance(results, dict) else None
+        _attach_thumb_paths(images)
         focus_id = images[0]["image_id"] if images else None
         return jsonify({
             "success": True,
@@ -131,6 +154,7 @@ def show_results():
         if not image_id:
             return jsonify({"success": False, "error": "image_id is required"}), 400
         images = get_map_results_for_image(image_id)
+        _attach_thumb_paths(images)
         return jsonify({"success": True, "images": images, "focus_image_id": image_id, "relation": "image"})
 
     if mode == "thread":
@@ -146,6 +170,7 @@ def show_results():
             images = results or []
             links = []
             focus_id = images[0]["image_id"] if images else None
+        _attach_thumb_paths(images)
         return jsonify({"success": True, "images": images, "links": links, "focus_image_id": focus_id, "relation": "thread"})
 
     return jsonify({"success": False, "error": "Unknown mode"}), 400
@@ -159,6 +184,7 @@ def request_full_images():
         return jsonify({"success": False, "error": "image_ids is required"}), 400
 
     images = get_all_full_images(images_id=image_ids)
+    _attach_thumb_paths(images)
     return jsonify({
         "success": True,
         "images": images

@@ -77,8 +77,9 @@ function expandCluster(cluster, map, center, markers) {
         const angleDeg = (index / count) * 360;
         const [lat, lon] = destinationPoint(center.latitude, center.longitude, R, angleDeg);
 
+        const iconPath = point.thumb_path || point.file_path;
         const icon = L.icon({
-            iconUrl: window.appConfig.URL_for_images + point.file_path,
+            iconUrl: window.appConfig.URL_for_images + iconPath,
             iconSize: [80, 80],
             iconAnchor: [22, 94],
             popupAnchor: [-3, -76]

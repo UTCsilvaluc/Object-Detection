@@ -11,7 +11,7 @@
         {% for image in images %}
         <a class="gallery-item" href="{{ url_for('main_routes.view_image', image_id=image.image_id) }}">
             <img
-                src="{{ url_for('static', filename='img/Images/' + image.file_path) }}"
+                src="{{ url_for('static', filename='img/Images/' + (image.thumb_path or image.file_path)) }}"
                 alt="{{ image.title }}"
                 loading="lazy"
                 decoding="async"

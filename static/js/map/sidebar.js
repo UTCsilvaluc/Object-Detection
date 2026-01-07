@@ -15,8 +15,9 @@ function createSidebarThumbnail(img) {
   const title = img.title || "Untitled";
   const description = img.description || "No description";
   const type = img.type || "Unknown";
+  const imagePath = img.thumb_path || img.file_path;
   thumbDiv.innerHTML = `
-        <img src="${mapConfig.URL_for_images + img.file_path}" alt="${title}" loading="lazy" decoding="async">
+        <img src="${mapConfig.URL_for_images + imagePath}" alt="${title}" loading="lazy" decoding="async">
         <div class="image-meta">
             <span class="image-title">${title}</span>
             <span class="image-desc">${description}</span>

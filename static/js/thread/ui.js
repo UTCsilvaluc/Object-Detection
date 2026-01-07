@@ -128,7 +128,7 @@ export function navigateObject(button , idx , direction , threadDomId) {
   const thumb = card?.querySelector(".thumb");
   const newThumbPath = objects[newIndex]?.cropped_file_path || objects[newIndex]?.cropped_path || null;
   if (thumb) {
-    const fallbackPath = currentImage?.file_path || "";
+    const fallbackPath = currentImage?.thumb_path || currentImage?.file_path || "";
     const nextPath = newThumbPath || fallbackPath;
     if (nextPath) thumb.src = `${window.appConfig.URL_for_images}${nextPath}`;
   }

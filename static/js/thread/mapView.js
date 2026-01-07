@@ -458,10 +458,11 @@ function buildMapCardHTML({
   const { objects, objectCount, objectIdx } = objectSelection;
   const selectedObject = objectCount > 0 ? objects[objectIdx] : null;
   const objectThumb = selectedObject ? getObjectThumbPath(selectedObject) : null;
+  const imageThumb = raw.thumb_path || raw.file_path || "";
   const displayThumb =
     mode === "objects"
-      ? objectThumb || raw.file_path || ""
-      : raw.file_path || "";
+      ? objectThumb || imageThumb
+      : imageThumb;
   const objectLabelText =
     selectedObject ? formatObjectLabel(selectedObject) || "Object" : "No objects detected";
   const objectCountText = objectCount > 0 ? `${objectIdx + 1} / ${objectCount}` : "0 / 0";

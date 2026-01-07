@@ -33,8 +33,9 @@ export function applyFilters() {
 
   mapState.filteredImages.forEach((img) => {
     if (!img.latitude || !img.longitude) return;
+    const imagePath = img.thumb_path || img.file_path;
     const icon = L.icon({
-      iconUrl: mapConfig.URL_for_images + img.file_path,
+      iconUrl: mapConfig.URL_for_images + imagePath,
       iconSize: [80, 80],
       iconAnchor: [22, 94],
       popupAnchor: [-3, -76]

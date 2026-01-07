@@ -149,7 +149,8 @@ export function handleLinkCreationClick(item , marker , type='image' , URL_for_i
     let id = '';
     if (iconEl) {
         if (type === 'image') {
-            src = (URL_for_images + item.file_path);
+            const imagePath = item.thumb_path || item.file_path;
+            src = (URL_for_images + imagePath);
             title = item.title;
             id = item.image_id;
             iconEl.style.border = '3px solid red';
