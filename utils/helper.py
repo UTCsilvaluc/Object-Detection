@@ -1,4 +1,5 @@
 import os
+import grp
 import ast
 import tempfile, os
 import cv2
@@ -15,6 +16,26 @@ from models.object_embedding import generate_embedding_from_crop
 from utils.database import get_instance_object_by_object_id , find_similar_objects
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
+
+def make_public_static_file(path: str, group: str = "www-data") -> None:
+    """
+    Ensure a file placed under /static is readable by nginx (www-data).
+    - group owner set to www-data
+    - permissions set to 0644 (rw-r--r--)
+    """
+    static_root = os.path.join(ROOT_DIR, "static")
+    abs_path = os.path.abspath(path)
+    if not abs_path.startswith(static_root + os.sep):
+        return
+    try:
+        gid = grp.getgrnam(group).gr_gid
+        os.chown(abs_path, -1, gid)
+    except (KeyError, PermissionError):
+        pass
+    try:
+        os.chmod(abs_path, 0o644)
+    except PermissionError:
+        pass
 
 
 def _sanitize_filename(name: str) -> str:
@@ -103,6 +124,7 @@ def save_image_permanently(temp_path, dest_dir, new_name):
     if os.path.exists(dest_path):
         raise FileExistsError(f"Destination file {dest_path} already exists.")
     shutil.move(temp_path, dest_path)
+    make_public_static_file(dest_path)
     return dest_path
 
 def load_analysis_json(img_name, required=True):
