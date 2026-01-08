@@ -1,7 +1,8 @@
 # routes/main_routes.py
 
-from flask import Blueprint, render_template, request, send_from_directory , jsonify
+from flask import Blueprint, render_template, request, send_from_directory , jsonify, send_file
 import os
+from urllib.parse import unquote
 
 from utils.helper import (
     ROOT_DIR,
@@ -119,7 +120,15 @@ def temp_img(filename):
 @main_routes_bp.route('/images/<path:filename>')
 def image_file(filename):
     images_root = os.path.join(ROOT_DIR, "static", "img", "Images")
-    return send_from_directory(images_root, filename)
+    safe_name = unquote(filename or "").lstrip("/")
+    if safe_name.startswith("img/Images/"):
+        safe_name = safe_name[len("img/Images/"):]
+    if os.path.isabs(safe_name):
+        abs_path = os.path.abspath(safe_name)
+        if abs_path.startswith(images_root + os.sep) and os.path.exists(abs_path):
+            return send_file(abs_path)
+        return ("", 404)
+    return send_from_directory(images_root, safe_name)
 
 @main_routes_bp.route('/map')
 def map_view():
