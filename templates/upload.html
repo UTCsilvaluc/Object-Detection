@@ -196,7 +196,7 @@
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ url_for('static', filename=(obj.thumb_path)) }}" alt="Object {{ obj.id }}">
+                                            <img src="{{ url_for('main_routes.temp_img', filename=(obj.thumb_path)) }}" alt="Object {{ obj.id }}">
                                             <input type="hidden" name="objects[{{ obj.id }}][crop_path]" value="{{ obj.obj_crop_path }}">
                                         </div>
                                         <div class="right-obj-info">

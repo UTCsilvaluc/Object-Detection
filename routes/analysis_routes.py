@@ -42,10 +42,11 @@ def _attach_thumb_paths(images , key="file_path"):
         if not file_path:
             image["thumb_path"] = None
             continue
-        source_path = build_img_temp_path(file_path)
-        thumb_abs = build_image_thumb_absolute_temp(file_path)
-        thumb_rel = build_image_thumb_relative_temp(file_path)
-        image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
+        source_path = build_img_temp_path(file_path) if not os.path.isabs(file_path) else file_path
+        if not os.path.exists(source_path):
+            image["thumb_path"] = None
+            continue
+        image["thumb_path"] = _get_display_path(file_path)
     return images
 
 def _get_thumb_path(file_path: str) -> str:

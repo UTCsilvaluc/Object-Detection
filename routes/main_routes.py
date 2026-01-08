@@ -10,7 +10,9 @@ from utils.helper import (
     build_image_path,
     build_image_thumb_absolute,
     build_image_thumb_relative,
-    ensure_image_thumbnail
+    ensure_image_thumbnail,
+    build_image_thumb_absolute_temp,
+    build_temp_webp_path
 )
 from utils.database import (
     get_all_images,
@@ -80,14 +82,33 @@ def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None
     json_dir = build_json_temp_path(f"{json_name}.json")
     img_original_path = data.get("img_original_path", "") if not img_original_path else img_original_path
     img_annotated_path = data.get("img_annotated_path", "") if not img_annotated_path else img_annotated_path
-    result_data , json_path = load_analysis_json(json_name , required=False)
+    try:
+        result_data, _ = load_analysis_json(json_name, required=False)
+    except FileNotFoundError:
+        result_data = {"objects": []}
+
+    def _remove_if_exists(path):
+        if path and os.path.exists(path):
+            os.remove(path)
+
+    def _remove_related_temp(path):
+        if not path:
+            return
+        _remove_if_exists(path)
+        _remove_if_exists(build_image_thumb_absolute_temp(path))
+        webp_abs, _ = build_temp_webp_path(path)
+        _remove_if_exists(webp_abs)
+
     for obj in result_data.get("objects", []):
-        crop_path = obj.get("obj_crop_abs_path")
-        if crop_path and os.path.exists(crop_path):
-            os.remove(crop_path)
-            os.remove(img_original_path) if os.path.exists(img_original_path) else None
-            os.remove(img_annotated_path) if os.path.exists(img_annotated_path) else None
-    os.remove(json_dir)
+        crop_path = obj.get("obj_crop_abs_path") or obj.get("obj_crop_path")
+        if not crop_path:
+            continue
+        crop_abs = crop_path if os.path.isabs(crop_path) else build_img_temp_path(crop_path)
+        _remove_related_temp(crop_abs)
+
+    _remove_related_temp(img_original_path)
+    _remove_related_temp(img_annotated_path)
+    _remove_if_exists(json_dir)
     return {"success": True}, 200
 
 @main_routes_bp.route('/temp/img/<path:filename>')

@@ -12,6 +12,7 @@ from utils.helper import (
     empty_to_none,
     load_analysis_json
 )
+from routes.main_routes import clear_temp
 from utils.database import (
     insert_point,
     insert_metadata_point,
@@ -45,6 +46,11 @@ def save_metadata():
     json_data = build_json(metadata, img_name, num_objects, objects_data)
     
     #save_json(json_data, build_json_temp_path(), img_name)        
+    clear_temp(
+        json_name=img_name,
+        img_annotated_path=build_img_temp_path(request.form.get("annotated_image")),
+        img_original_path=build_img_temp_path(request.form.get("original_image"))
+    )
     if (metadata.get("csrf_token")):
         image = {
             "image_id": image_id,
