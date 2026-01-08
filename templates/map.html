@@ -177,7 +177,7 @@
             links: {{ links|tojson }},
             link_types: {{ link_types|tojson }},
             metadata_keys: {{ metadata_keys|tojson }},
-            URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
+            URL_for_images: "{{ url_for('main_routes.image_file', filename='') }}",
             URL_for_view_image: "{{ url_for('main_routes.view_image', image_id=0) }}",
             crossIcon: "{{ url_for('static', filename='img/svg/cross.png') }}",
             trashIcon: "{{ url_for('static', filename='img/svg/trash.png') }}",

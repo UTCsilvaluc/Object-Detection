@@ -61,7 +61,7 @@
             <div class="accordion-content">
               <div class="obj-wrapper">
                 <div class="left-obj-info">
-                  <img src="{{ url_for('static', filename='img/Images/' + object.cropped_file_path) }}" alt="Object Preview">
+                  <img src="{{ url_for('main_routes.image_file', filename=object.cropped_file_path) }}" alt="Object Preview">
                   <p><strong>Class:</strong> {{ object.class }}</p>
                   <p><strong>Confidence:</strong> {{ object.confidence }}</p>
                   <p><strong>Width:</strong> {{ object.width }}</p>
@@ -84,7 +84,7 @@
     <!-- ==== RIGHT PANEL : IMAGE DISPLAY ==== -->
     <div class="right-panel">
       <div class="image-box">
-        <img src="{{ url_for('static', filename='img/Images/' + image.file_path) }}" alt="Main Image">
+        <img src="{{ url_for('main_routes.image_file', filename=image.file_path) }}" alt="Main Image">
       </div>
     </div>
   </div>

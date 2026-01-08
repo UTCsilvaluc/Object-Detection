@@ -60,7 +60,7 @@
 
     <script>
         window.objectsData = {{ objects|tojson }};
-        window.imagesBaseUrl = "{{ url_for('static', filename='img/Images/') }}";
+        window.imagesBaseUrl = "{{ url_for('main_routes.image_file', filename='') }}";
         window.viewerBaseUrl = "{{ url_for('main_routes.view_image', image_id=0) }}";
     </script>
 

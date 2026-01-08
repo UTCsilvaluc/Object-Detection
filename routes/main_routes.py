@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, send_from_directory , jso
 import os
 
 from utils.helper import (
+    ROOT_DIR,
     build_json_temp_path,
     build_img_temp_path,
     load_analysis_json,
@@ -114,6 +115,11 @@ def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None
 @main_routes_bp.route('/temp/img/<path:filename>')
 def temp_img(filename):
     return send_from_directory(build_img_temp_path(), filename)
+
+@main_routes_bp.route('/images/<path:filename>')
+def image_file(filename):
+    images_root = os.path.join(ROOT_DIR, "static", "img", "Images")
+    return send_from_directory(images_root, filename)
 
 @main_routes_bp.route('/map')
 def map_view():

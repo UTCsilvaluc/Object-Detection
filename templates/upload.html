@@ -259,9 +259,11 @@
                                                             <p><strong>Similarity:</strong> {{ (1 - sim_obj.distance) * 100 | round(2) }}%</p>
                                                         </div>
                                                         <div class="similar-image-box">
-                                                            <img src="{{ url_for('static', filename='img/Images/' + sim_obj.cropped_file_path) }}"
+                                                            {% if sim_obj.cropped_file_path %}
+                                                            <img src="{{ url_for('main_routes.image_file', filename=sim_obj.cropped_file_path) }}"
                                                                 alt="Similar Object {{ sim_obj.object_id }}"
                                                                 class="similar-image">
+                                                            {% endif %}
                                                         </div>
                                                     </div>
 
@@ -380,7 +382,7 @@
         original_image_path: "{{ original_image_path }}",
         crossIcon : "{{ url_for('static', filename='img/svg/cross.png') }}",
         trashIcon : "{{ url_for('static', filename='img/svg/trash.png') }}",
-        URL_for_images: "{{ url_for('static', filename='img/Images/') }}",
+        URL_for_images: "{{ url_for('main_routes.image_file', filename='') }}",
         metadata_keys: {{ metadata_keys | tojson }},
         class_names: {{ class_name | tojson }},
     };
