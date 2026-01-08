@@ -99,6 +99,9 @@ export function addOrUpdateObjectSection(data) {
     if (data.simObj && data.simObj.length > 0) {
 
         data.simObj.forEach((simObj, index) => {
+            if (!simObj || !simObj.cropped_file_path) {
+                return;
+            }
 
             const grouped = {};
             (simObj.metadata || []).forEach(meta => {

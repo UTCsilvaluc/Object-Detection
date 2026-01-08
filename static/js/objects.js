@@ -27,6 +27,7 @@ async function mergeObjects(button) {
         img_original_path: window.AppConfig.original_image_path,
         img_annotated_path: window.AppConfig.annotated_image_path
     });
+    if (!data) return;
     if (data.success) {
         selectedObjects.forEach(id => document.getElementById(`obj${id}`)?.remove());
         addOrUpdateObjectSection(data);

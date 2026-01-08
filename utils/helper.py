@@ -19,8 +19,10 @@ from utils.database import get_instance_object_by_object_id , find_similar_objec
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
 THUMB_SUBDIR = os.path.join("static", "img", "Images", "thumbs")
+THUMB_TEMP_SUBDIR = os.path.join("static", "temp", "thumbs")
 THUMB_MAX_SIZE = (320, 320)
 THUMB_QUALITY = 70
+DISPLAY_WEBP_QUALITY = 95
 
 def make_public_static_file(path: str, group: str = "www-data") -> None:
     """
@@ -100,11 +102,32 @@ def build_image_thumb_relative(file_name: str, ext: str = "webp") -> str:
     base = os.path.splitext(os.path.basename(file_name))[0]
     return os.path.join("thumbs", f"{base}.{ext}").replace(os.sep, "/")
 
+def build_image_thumb_relative_temp(file_name: str, ext: str = "webp") -> str:
+    """
+    Build a thumb path relative to static/temp/thumbs.
+    """
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return os.path.join("temp", "thumbs", f"{base}.{ext}").replace(os.sep, "/")
+
 def build_image_thumb_absolute(file_name: str, ext: str = "webp") -> str:
     """
     Build the absolute path for a thumbnail under static/img/Images/thumbs.
     """
     return os.path.join(ROOT_DIR, THUMB_SUBDIR, f"{os.path.splitext(os.path.basename(file_name))[0]}.{ext}")
+
+def build_image_thumb_absolute_temp(file_name: str, ext: str = "webp") -> str:
+    """
+    Build the absolute path for a thumbnail under static/temp/thumbs.
+    """
+    return os.path.join(ROOT_DIR, THUMB_TEMP_SUBDIR, f"{os.path.splitext(os.path.basename(file_name))[0]}.{ext}")
+
+def build_temp_webp_path(file_name: str) -> tuple[str, str]:
+    """
+    Build absolute + relative path for a temp WebP display file in static/temp/img.
+    """
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    rel_name = f"{base}.webp"
+    return build_img_temp_path(rel_name), rel_name
 
 def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
     """
@@ -112,8 +135,10 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
     Returns True if the thumbnail exists or was created successfully.
     """
     if not source_path or not os.path.exists(source_path):
+        print(f"Source image not found: {source_path}")
         return False
     if os.path.exists(thumb_path):
+        print(f"Thumbnail already exists: {thumb_path}")
         return True
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     try:
@@ -122,7 +147,31 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
             img = img.convert("RGB")
             img.thumbnail(THUMB_MAX_SIZE, Image.LANCZOS)
             img.save(thumb_path, "WEBP", quality=THUMB_QUALITY, method=6, optimize=True)
+            print(f"Thumbnail created: {thumb_path}")
         make_public_static_file(thumb_path)
+        return True
+    except Exception:
+        return False
+
+def ensure_display_webp(source_path: str, webp_path: str, quality: int = DISPLAY_WEBP_QUALITY) -> bool:
+    """
+    Generate (or refresh) a WebP display file from a source image.
+    """
+    if not source_path or not os.path.exists(source_path):
+        return False
+    if os.path.exists(webp_path):
+        try:
+            if os.path.getmtime(webp_path) >= os.path.getmtime(source_path):
+                return True
+        except OSError:
+            pass
+    os.makedirs(os.path.dirname(webp_path), exist_ok=True)
+    try:
+        with Image.open(source_path) as img:
+            img = ImageOps.exif_transpose(img)
+            img = img.convert("RGB")
+            img.save(webp_path, "WEBP", quality=quality, method=6)
+        make_public_static_file(webp_path)
         return True
     except Exception:
         return False

@@ -13,7 +13,9 @@ from utils.helper import (
     draw_annotations,
     load_analysis_json,
     load_analysis_context,
-    add_new_detected_object
+    add_new_detected_object,
+    build_temp_webp_path,
+    ensure_display_webp
 )
 
 from utils.data_objects import build_object_links
@@ -61,10 +63,14 @@ def merge_objects():
     new_object, new_id = add_new_detected_object(result_data=result_data, obj_img=obj_img, bbox=bbox, contour=contours , score=1.0)
     object_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
     _ , temp_object_name = save_temp_img(object_img_rgb, new_id)
+    webp_abs, webp_rel = build_temp_webp_path(temp_object_name)
+    temp_object_display = webp_rel if ensure_display_webp(build_img_temp_path(temp_object_name), webp_abs) else temp_object_name
     save_json(result_data, build_json_temp_path(), img_name)
     image = draw_annotations(image, result_data["objects"])
     cv2.imwrite(img_annotated_path, image)
-    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_name) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"])) , "simObj": new_object}, 200
+    webp_abs, _ = build_temp_webp_path(os.path.basename(img_annotated_path))
+    ensure_display_webp(img_annotated_path, webp_abs)
+    return {"success": True , "num_objects": int(len(result_data["objects"])) , "img_annotated_path": str(img_annotated_path) , "nameNewObj":str(temp_object_name) , "pathObj":url_for('main_routes.temp_img', filename=temp_object_display) , "bbox":str(bbox) , "new_object_id":int(new_id) , "num_objects": int(len(result_data["objects"])) , "simObj": new_object}, 200
 
 @object_bp.route('/remove_object', methods=['POST'])
 def remove_object():
@@ -103,6 +109,8 @@ def remove_object():
 
     annotated_image = draw_annotations(image.copy(), objects)
     cv2.imwrite(img_annotated_path, annotated_image)
+    webp_abs, _ = build_temp_webp_path(os.path.basename(img_annotated_path))
+    ensure_display_webp(img_annotated_path, webp_abs)
 
     return {"success": True, "num_objects": len(objects)}, 200
 

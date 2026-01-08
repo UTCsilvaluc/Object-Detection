@@ -66,8 +66,8 @@
                 </div>
             </div>
             <div class="image-box">
-                <img src="{{ url_for('main_routes.temp_img', filename=annotated_image_path) }}" alt="Annotated YOLO Result" onclick="addPointToAnalyse(this , event);">
-                <img src="{{ url_for('main_routes.temp_img', filename=original_image_path) }}" alt="Original Image" class="original-image" onclick="addPointToAnalyse(this , event);" >
+                <img src="{{ url_for('main_routes.temp_img', filename=(annotated_image_display_path or annotated_image_path)) }}" alt="Annotated YOLO Result" onclick="addPointToAnalyse(this , event);">
+                <img src="{{ url_for('main_routes.temp_img', filename=(original_image_display_path or original_image_path)) }}" alt="Original Image" class="original-image" onclick="addPointToAnalyse(this , event);" >
             </div>
             <div class="info">
                 <p><strong>Name:</strong> {{ img_name }}</p>
@@ -196,7 +196,7 @@
                                     <div class="obj-wrapper">
                                         <div class="left-obj-info">
                                             <p><strong>BBox:</strong> {{ obj.bbox }}</p>
-                                            <img src="{{ url_for('main_routes.temp_img', filename=obj.obj_crop_path) }}" alt="Object {{ obj.id }}">
+                                            <img src="{{ url_for('static', filename=(obj.thumb_path)) }}" alt="Object {{ obj.id }}">
                                             <input type="hidden" name="objects[{{ obj.id }}][crop_path]" value="{{ obj.obj_crop_path }}">
                                         </div>
                                         <div class="right-obj-info">

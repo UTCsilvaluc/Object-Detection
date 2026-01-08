@@ -17,7 +17,13 @@ from utils.helper import (
     control_coordinate_format,
     get_similar_objects, 
     load_analysis_json,
-    add_new_detected_object
+    add_new_detected_object,
+    build_img_temp_path,
+    build_image_thumb_absolute_temp,
+    build_image_thumb_relative_temp,
+    ensure_image_thumbnail,
+    build_temp_webp_path,
+    ensure_display_webp
 )
 
 from .main_routes import clear_temp
@@ -29,6 +35,34 @@ from utils.database import (
     get_all_metadatas_values,
     get_ThreadCategory
 )
+
+def _attach_thumb_paths(images , key="file_path"):
+    for image in images or []:
+        file_path = image.get(key)
+        if not file_path:
+            image["thumb_path"] = None
+            continue
+        source_path = build_img_temp_path(file_path)
+        thumb_abs = build_image_thumb_absolute_temp(file_path)
+        thumb_rel = build_image_thumb_relative_temp(file_path)
+        image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
+    return images
+
+def _get_thumb_path(file_path: str) -> str:
+    source_path = build_img_temp_path(file_path)
+    thumb_abs = build_image_thumb_absolute_temp(file_path)
+    thumb_rel = build_image_thumb_relative_temp(file_path)
+    if ensure_image_thumbnail(source_path, thumb_abs):
+        return thumb_rel
+    return None
+
+def _get_display_path(file_path: str) -> str:
+    rel_path = os.path.basename(file_path) if os.path.isabs(file_path) else file_path
+    source_path = file_path if os.path.isabs(file_path) else build_img_temp_path(file_path)
+    webp_abs, webp_rel = build_temp_webp_path(rel_path)
+    if ensure_display_webp(source_path, webp_abs):
+        return webp_rel
+    return rel_path
 
 def run_detection_pipeline(img_path, img_cv, force_sam=False, sam_params=None, tiled=False):
     # YOLO → default
@@ -122,11 +156,13 @@ def analyse_point():
     new_id = int(get_next_id_available(result_data["objects"]))
     obj_img_rgb = cv2.cvtColor(obj_img, cv2.COLOR_BGR2RGB)
     _ , temp_object_name = save_temp_img(obj_img_rgb , new_id)
+    temp_object_display = _get_display_path(temp_object_name)
     new_object = add_new_detected_object(result_data=result_data, obj_img=obj_img, bbox=bbox, contour=contour_points , score=float(scores[0]) if masks is not None and scores is not None else 1.0)
     new_annotated_img = draw_annotations(img, result_data["objects"])
     cv2.imwrite(img_annotated_path, new_annotated_img)
+    _get_display_path(img_annotated_path)
     save_json(result_data, build_json_temp_path(), img_name)
-    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_name), "bbox": bbox , "tmpName": temp_object_name , "simObj": new_object}, 200
+    return {"success": True, "num_objects": result_data["num_objects"] , "image_id": new_id , "image_path": url_for('main_routes.temp_img', filename=temp_object_display), "bbox": bbox , "tmpName": temp_object_name , "simObj": new_object}, 200
 @analysis_bp.route('/re_run_analysis', methods=['POST'])
 def re_run_analysis():
     img_name = request.form.get("img_name", "")
@@ -165,6 +201,8 @@ def re_run_analysis():
     model = "SAM"
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
     _ , original_rel_path = save_temp_img(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), "original")
+    annotated_display_path = _get_display_path(annotated_rel_path)
+    original_display_path = _get_display_path(original_rel_path)
     clear_temp(json_name=img_name , img_original_path=img_original_path , img_annotated_path=img_annotated_path)
 
     json_dir = build_json_temp_path()
@@ -194,7 +232,9 @@ def re_run_analysis():
         **sam_parameters,
         model=model,
         annotated_image_path=annotated_rel_path,
+        annotated_image_display_path=annotated_display_path,
         original_image_path=original_rel_path,
+        original_image_display_path=original_display_path,
         class_name=class_name,
         metadata_keys=metadata_keys,
         csrf_token=csrf_token
@@ -222,6 +262,8 @@ def upload():
     result_data, img_result, model = run_detection_pipeline(img_path, img_cv)
     _ , annotated_rel_path = save_temp_img(img_result, "annotated")
     _ , original_rel_path = save_temp_img(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), "original")
+    annotated_display_path = _get_display_path(annotated_rel_path)
+    original_display_path = _get_display_path(original_rel_path)
 
     json_dir = build_json_temp_path()
     os.makedirs(json_dir, exist_ok=True)
@@ -252,6 +294,7 @@ def upload():
     thread_categories = get_ThreadCategory()
     os.remove(img_path)
     from models.pretrained_models import defautlSamParameters
+    _attach_thumb_paths(result_data.get("objects"), key="obj_crop_path")
     return render_template(
         "upload.html",
         img_name=img_name,
@@ -260,7 +303,11 @@ def upload():
         **defautlSamParameters(), 
         model=model,
         annotated_image_path=annotated_rel_path,
+        annotated_image_thumb_path=_get_thumb_path(annotated_rel_path),
+        annotated_image_display_path=annotated_display_path,
         original_image_path=original_rel_path,
+        original_image_thumb_path=_get_thumb_path(original_rel_path),
+        original_image_display_path=original_display_path,
         class_name=class_name,
         metadata_keys=metadata_keys,
         metadatas_values=metadatas_values,
