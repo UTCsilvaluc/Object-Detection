@@ -1,5 +1,3 @@
-import os
-
 class Config:
     UPLOAD_FOLDER = "static/img/Images"
     JSON_FOLDER = "static/json"

@@ -1,7 +1,7 @@
 import os
 import grp
 import ast
-import tempfile, os
+import tempfile
 import cv2
 import shutil
 import json
@@ -15,7 +15,7 @@ from PIL import Image , ImageOps
 import regex
 import numpy as np
 from models.object_embedding import generate_embedding_from_crop
-from utils.database import get_instance_object_by_object_id , find_similar_objects
+from utils.database import get_instance_object_by_object_id
 BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
 THUMB_SUBDIR = os.path.join("static", "img", "Images", "thumbs")
@@ -135,10 +135,8 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
     Returns True if the thumbnail exists or was created successfully.
     """
     if not source_path or not os.path.exists(source_path):
-        print(f"Source image not found: {source_path}")
         return False
     if os.path.exists(thumb_path):
-        print(f"Thumbnail already exists: {thumb_path}")
         return True
     os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
     try:
@@ -147,7 +145,6 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
             img = img.convert("RGB")
             img.thumbnail(THUMB_MAX_SIZE, Image.LANCZOS)
             img.save(thumb_path, "WEBP", quality=THUMB_QUALITY, method=6, optimize=True)
-            print(f"Thumbnail created: {thumb_path}")
         make_public_static_file(thumb_path)
         return True
     except Exception:
@@ -408,7 +405,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         score = float(score) if score is not None else None
         current_object_json = next((obj for obj in objects if obj.get("id") == i), {})
         embedding = current_object_json.get("embedding", None)
-        instance_value = request.form.get(f"objects[{i}][value]")
+        instance_value = empty_to_none(request.form.get(f"objects[{i}][value]"))
 
         crop_path = normalize_path(request.form.get(f"objects[{i}][crop_path]"))
         object_path = save_image_permanently(crop_path, upload_folder, f"{safe_name}_obj{i}.jpg")
@@ -590,12 +587,8 @@ def fileStorage_to_image(file_storage):
     return img
 
 def get_similar_objects(objects, top_k=5):
-    import time 
-    start = time.perf_counter()
     for idx, obj in enumerate(objects):
         objects[idx]['similar_objects'] = get_all_full_instances_from_embedding(obj["embedding"] , limit=top_k)
-    end = time.perf_counter()
-    print(f"Time to get similar objects: {end - start} seconds")
     return objects
 
 def get_similar_objects_by_metadatas(similar_objects: list):
@@ -658,7 +651,6 @@ def create_new_object(obj_img, bbox, contour, new_id, score=1.0):
 
     similar = get_similar_objects([new_obj], top_k=5)
     new_obj["similar_objects"] = similar[0]["similar_objects"]
-    print("similars : ", new_obj["similar_objects"])
     return new_obj
 
 def load_analysis_context(img_name, original_path, annotated_path, require_json=True):

@@ -1,6 +1,6 @@
 # routes/analysis_routes.py
 
-from flask import Blueprint, request, jsonify, render_template, current_app , url_for
+from flask import Blueprint, request, render_template, current_app , url_for
 import os
 import cv2
 import numpy as np
@@ -18,7 +18,6 @@ from utils.helper import (
     get_similar_objects, 
     load_analysis_json,
     add_new_detected_object,
-    build_img_temp_path,
     build_image_thumb_absolute_temp,
     build_image_thumb_relative_temp,
     ensure_image_thumbnail,
@@ -144,7 +143,6 @@ def analyse_point():
         else:
             contour_points = []
             # If no contours found, fallback to bounding box only
-            print("No contours found in mask — fallback to bounding box only.")
             bbox = [x - 100, y - 100, x + 100, y + 100]
             contour_points = []
             cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)

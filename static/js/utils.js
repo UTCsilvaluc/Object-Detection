@@ -249,7 +249,6 @@ window.addSelectOptionFromAll = addSelectOptionFromAll;
 export function showSimilar(button){
     button.innerText = button.innerText === "Show similar objects" ? "Hide similar objects" : "Show similar objects";
     const objWrapper = button.nextElementSibling;
-    console.log("objWrapper : ", objWrapper);
     if (!objWrapper) return;
     if (objWrapper && button.innerText === "Hide similar objects") {
         objWrapper.style.display = "block";

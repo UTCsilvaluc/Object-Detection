@@ -178,7 +178,6 @@ def show_results():
 @thread_bp.route('/request_full_images', methods=['POST'])
 def request_full_images():
     data = request.get_json()
-    print("Received data for full images request:", data)
     image_ids = data.get("image_ids", [])
     if not image_ids:
         return jsonify({"success": False, "error": "image_ids is required"}), 400

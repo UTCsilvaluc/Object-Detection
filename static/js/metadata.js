@@ -418,7 +418,6 @@ async function searchByMetadata(objID){
         });
         flaskData = { metadata: metadata };
     }
-    console.log(flaskData);
     const data = await apiPost('/metadata/search_by_metadata', flaskData);
     if (!data) return;
     if (data.success) {

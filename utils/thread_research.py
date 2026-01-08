@@ -821,9 +821,7 @@ def get_map_results_for_thread(selectersValue: list[dict]):
         return []
     try:
         object_ids = get_objects_from_thread(selectersValue)
-        print("Object IDs found for thread selectors:", object_ids)
         images = _fetch_images_for_objects(conn, object_ids)
-        print("Images fetched for thread selectors:", len(images))
         # No matches, early return
         if not images:
             return {"images": [], "links": [], "focus_image_id": None}

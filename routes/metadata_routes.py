@@ -1,7 +1,6 @@
 # routes/metadata_routes.py
 
-from flask import Blueprint, request, jsonify
-import os
+from flask import Blueprint, request
 
 from utils.database import (
     check_if_metadata_key_exist,

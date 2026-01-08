@@ -500,9 +500,7 @@ export async function addThreadToGlobalMap({
     if (!objectId) return;
     const color = getObjectColor(objectId);
     const label = formatObjectLabelWithFallback(obj, objectId);
-    console.log("Building timeline for object", objectId, "in thread", fullImages);
     const timeline = buildObjectTimeline(objectId, fullImages);
-    console.log("Timeline has", timeline, "points");
     if (!timeline.length) return;
     const { pointCount, coords, markers } = drawObjectTimeline(
       { layer, map: globalMapState.map },
