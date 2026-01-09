@@ -1,3 +1,7 @@
+# utils/helper.py
+
+# Imports
+
 import os
 import grp
 import ast
@@ -16,23 +20,39 @@ import regex
 import numpy as np
 from models.object_embedding import generate_embedding_from_crop
 from utils.database import get_instance_object_by_object_id
-BASE_DIR = os.path.abspath(os.path.dirname(__file__)) #Absolute path of the utils folder
-ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, os.pardir)) #Absolute path of the project root folder
-THUMB_SUBDIR = os.path.join("static", "img", "Images", "thumbs")
-THUMB_TEMP_SUBDIR = os.path.join("static", "temp", "thumbs")
+from utils.paths import ROOT_DIR , MEDIA_ROOT , MEDIA_IMAGES_DIR , MEDIA_THUMBS_DIR , MEDIA_CROPS_DIR , TEMP_IMG_DIR , TEMP_JSON_DIR  , TEMP_ROOT , TEMP_THUMBS_DIR , MEDIA_URL
+
+# Thumbnail configurations
 THUMB_MAX_SIZE = (320, 320)
 THUMB_QUALITY = 70
 DISPLAY_WEBP_QUALITY = 95
 
-def make_public_static_file(path: str, group: str = "www-data") -> None:
+def ensure_directories():
     """
-    Ensure a file placed under /static is readable by nginx (www-data).
-    - group owner set to www-data
-    - permissions set to 0644 (rw-r--r--)
+    Ensure that all necessary media and temporary directories exist.
     """
-    static_root = os.path.join(ROOT_DIR, "static")
+    os.makedirs(MEDIA_IMAGES_DIR, exist_ok=True)
+    os.makedirs(MEDIA_THUMBS_DIR, exist_ok=True)
+    os.makedirs(MEDIA_CROPS_DIR, exist_ok=True)
+    os.makedirs(TEMP_IMG_DIR, exist_ok=True)
+    os.makedirs(TEMP_JSON_DIR, exist_ok=True)
+    os.makedirs(TEMP_THUMBS_DIR, exist_ok=True)
+
+def media_url(rel_path: str) -> str:
+    """
+    Build the full media URL for a given relative path.
+    :rel_path: relative path under the media directory
+    Returns the full URL to access the media file.
+    """
+    rel_path = rel_path.lstrip(os.sep)
+    return f"{MEDIA_URL}/{rel_path.replace(os.sep, '/')}"
+
+def make_public_media_file(path: str, group: str = "www-data") -> None:
+    """
+    Ensure generated media files are readable by nginx (www-data).
+    """
     abs_path = os.path.abspath(path)
-    if not abs_path.startswith(static_root + os.sep):
+    if not abs_path.startswith(MEDIA_ROOT + os.sep) and not abs_path.startswith(TEMP_ROOT + os.sep):
         return
     try:
         gid = grp.getgrnam(group).gr_gid
@@ -40,10 +60,9 @@ def make_public_static_file(path: str, group: str = "www-data") -> None:
     except (KeyError, PermissionError):
         pass
     try:
-        os.chmod(abs_path, 0o644)
+        os.chmod(abs_path, 0o644)  
     except PermissionError:
         pass
-
 
 def _sanitize_filename(name: str) -> str:
     """Normalize filenames coming from the frontend (HTML entities, extra spaces)."""
@@ -71,10 +90,8 @@ def build_json_temp_path(extension=None):
     :extension: (optional) The filename (e.g., 'data.json'). 
     If not provided, returns the directory path.
     """
-    json_dir = os.path.join(ROOT_DIR, "static", "temp", "json")
-    if extension is None:
-        return json_dir
-    return os.path.join(json_dir, extension)
+    ensure_directories()
+    return TEMP_JSON_DIR if extension is None else os.path.join(TEMP_JSON_DIR, extension)
 
 def build_img_temp_path(extension=None):
     """
@@ -82,52 +99,46 @@ def build_img_temp_path(extension=None):
     :extension: (optional) The filename (e.g., 'data.jpg').
     If not provided, returns the directory path.
     """
-    img_dir = os.path.join(ROOT_DIR, "static", "temp", "img")
-    if extension is None:
-        return img_dir
-    return os.path.join(img_dir, extension)
+    ensure_directories()
+    return TEMP_IMG_DIR if extension is None else os.path.join(TEMP_IMG_DIR, extension)
 
 def build_image_path(file_name: str) -> str:
     """
     Build the absolute path for an image stored in static/img/Images.
     """
+    if not file_name:
+        return None
     if os.path.isabs(file_name):
         return file_name
-    return os.path.join(ROOT_DIR, "static", "img", "Images", file_name)
-
-def build_image_thumb_relative(file_name: str, ext: str = "webp") -> str:
-    """
-    Build a thumb path relative to static/img/Images.
-    """
-    base = os.path.splitext(os.path.basename(file_name))[0]
-    return os.path.join("thumbs", f"{base}.{ext}").replace(os.sep, "/")
-
-def build_image_thumb_relative_temp(file_name: str, ext: str = "webp") -> str:
-    """
-    Build a thumb path relative to static/temp/thumbs.
-    """
-    base = os.path.splitext(os.path.basename(file_name))[0]
-    return os.path.join("temp", "thumbs", f"{base}.{ext}").replace(os.sep, "/")
+    ensure_directories()
+    return os.path.join(MEDIA_IMAGES_DIR, file_name)
 
 def build_image_thumb_absolute(file_name: str, ext: str = "webp") -> str:
-    """
-    Build the absolute path for a thumbnail under static/img/Images/thumbs.
-    """
-    return os.path.join(ROOT_DIR, THUMB_SUBDIR, f"{os.path.splitext(os.path.basename(file_name))[0]}.{ext}")
+    ensure_directories()
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return os.path.join(MEDIA_THUMBS_DIR, f"{base}.{ext}")
+
+def build_image_thumb_relative(file_name: str, ext: str = "webp") -> str:
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return f"thumbs/{base}.{ext}"
+
 
 def build_image_thumb_absolute_temp(file_name: str, ext: str = "webp") -> str:
-    """
-    Build the absolute path for a thumbnail under static/temp/thumbs.
-    """
-    return os.path.join(ROOT_DIR, THUMB_TEMP_SUBDIR, f"{os.path.splitext(os.path.basename(file_name))[0]}.{ext}")
+    ensure_directories()
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return os.path.join(TEMP_THUMBS_DIR, f"{base}.{ext}")
+
+def build_image_thumb_relative_temp(file_name: str, ext: str = "webp") -> str:
+    base = os.path.splitext(os.path.basename(file_name))[0]
+    return f"temp/thumbs/{base}.{ext}"
 
 def build_temp_webp_path(file_name: str) -> tuple[str, str]:
-    """
-    Build absolute + relative path for a temp WebP display file in static/temp/img.
-    """
+    ensure_directories()
     base = os.path.splitext(os.path.basename(file_name))[0]
-    rel_name = f"{base}.webp"
-    return build_img_temp_path(rel_name), rel_name
+    rel = f"{base}.webp"
+    abs_path = os.path.join(TEMP_IMG_DIR, rel)
+    return abs_path, rel
+
 
 def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
     """
@@ -145,7 +156,7 @@ def ensure_image_thumbnail(source_path: str, thumb_path: str) -> bool:
             img = img.convert("RGB")
             img.thumbnail(THUMB_MAX_SIZE, Image.LANCZOS)
             img.save(thumb_path, "WEBP", quality=THUMB_QUALITY, method=6, optimize=True)
-        make_public_static_file(thumb_path)
+        make_public_media_file(thumb_path)
         return True
     except Exception:
         return False
@@ -168,7 +179,7 @@ def ensure_display_webp(source_path: str, webp_path: str, quality: int = DISPLAY
             img = ImageOps.exif_transpose(img)
             img = img.convert("RGB")
             img.save(webp_path, "WEBP", quality=quality, method=6)
-        make_public_static_file(webp_path)
+        make_public_media_file(webp_path)
         return True
     except Exception:
         return False
@@ -214,25 +225,28 @@ def normalize_path(path):
         return os.path.join(ROOT_DIR, build_img_temp_path(path))
     return path
 
-def save_image_permanently(temp_path, dest_dir, new_name):
-    """
-    move a temporary image to a permanent location if the user saves metadata.
-    :temp_path: absolute path of the temporary image
-    :dest_dir: directory where the image should be moved
-    :new_name: new name for the image file (e.g., 'image1.jpg')
-    Returns the absolute path of the moved image.
-    """
-    temp_path = os.path.join(ROOT_DIR, temp_path) if not os.path.isabs(temp_path) else temp_path
-    dest_dir = os.path.join(ROOT_DIR, dest_dir) if not os.path.isabs(dest_dir) else dest_dir
-    os.makedirs(dest_dir, exist_ok=True)
-    dest_path = os.path.join(dest_dir, new_name)
+def save_image_permanently(temp_path: str, dest_dir: str, new_name: str):
+    ensure_directories()
+    temp_path = normalize_path(temp_path)  
+
+    if dest_dir == "images":
+        final_dir = MEDIA_IMAGES_DIR
+    elif dest_dir == "crops":
+        final_dir = MEDIA_CROPS_DIR
+    else:
+        final_dir = dest_dir if os.path.isabs(dest_dir) else os.path.join(MEDIA_ROOT, dest_dir)
+    os.makedirs(final_dir, exist_ok=True)
+    dest_path = os.path.join(final_dir, new_name)
+
     if not os.path.exists(temp_path):
         raise FileNotFoundError(f"Temporary file {temp_path} does not exist.")
     if os.path.exists(dest_path):
         raise FileExistsError(f"Destination file {dest_path} already exists.")
+
     shutil.move(temp_path, dest_path)
-    make_public_static_file(dest_path)
+    make_public_media_file(dest_path)
     return dest_path
+
 
 def load_analysis_json(img_name, required=True):
     img_name = _sanitize_filename(img_name)
@@ -314,10 +328,9 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     :annotated_image_path: Temp path of annotated image, please have it in static folder
     :original_image_path: Temp path of original image please have it in static folder
     """
-    upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     safe_name = safe_filename(img_name)
     img_path = save_image_permanently(
-        original_image_path, upload_folder, f"{safe_name}_original.jpg"
+        original_image_path, "images", f"{safe_name}_original.jpg"
     )
     file_name_in_db = f"{safe_name}_original.jpg"
     thumb_path = build_image_thumb_absolute(file_name_in_db)
@@ -349,7 +362,7 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
         metadata.get("type")
     )
     img_annotated_path = save_image_permanently(
-        annotated_image_path, upload_folder, f"{safe_name}_annotated.jpg"
+        annotated_image_path, "images", f"{safe_name}_annotated.jpg"
     )
     version_file_name_in_db = f"{safe_name}_annotated.jpg"
     version_number = insert_annoted_image(image_id, version_file_name_in_db, model=model)
@@ -388,7 +401,6 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     :upload_folder: directory where cropped object images should be saved permanently
     Returns a dictionary with data of all processed objects.
     """
-    upload_folder = os.path.join(ROOT_DIR, upload_folder) if not os.path.isabs(upload_folder) else upload_folder
     objects_data = {}
     safe_name = safe_filename(img_name)
     objects = json_data.get("objects", []) if json_data else []
@@ -408,7 +420,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
         instance_value = empty_to_none(request.form.get(f"objects[{i}][value]"))
 
         crop_path = normalize_path(request.form.get(f"objects[{i}][crop_path]"))
-        object_path = save_image_permanently(crop_path, upload_folder, f"{safe_name}_obj{i}.jpg")
+        object_path = save_image_permanently(crop_path, "crops", f"{safe_name}_obj{i}.jpg")
         object_file_name = os.path.basename(object_path)
 
         if similar_object:
@@ -475,12 +487,16 @@ def cleanup_temp_dir():
     """
     temp_dir_img = build_img_temp_path()
     temp_json_dir = build_json_temp_path()
+    temp_thumb_dir = TEMP_THUMBS_DIR
     if os.path.exists(temp_dir_img):
         shutil.rmtree(temp_dir_img)
     if os.path.exists(temp_json_dir):
         shutil.rmtree(temp_json_dir)
+    if os.path.exists(temp_thumb_dir):
+        shutil.rmtree(temp_thumb_dir)
     os.makedirs(temp_dir_img, exist_ok=True)
     os.makedirs(temp_json_dir, exist_ok=True)
+    os.makedirs(temp_thumb_dir, exist_ok=True)
 
 def return_regex_by_name(name: str , enum_values: str = None) -> str:
     """

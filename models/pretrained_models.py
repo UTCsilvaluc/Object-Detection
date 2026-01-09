@@ -2,6 +2,7 @@ import os
 import math
 import threading
 from config import Config
+from utils.paths import TEMP_ROOT
 
 def _lazy_import_torch():
     import torch
@@ -45,9 +46,7 @@ def defautlSamParameters():
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKPOINTS_DIR = os.path.join(PROJECT_ROOT, "checkpoints")
-base_save_dir = "img/ModelGen"
-os.makedirs(base_save_dir, exist_ok=True)
-sam_dir = os.path.join(base_save_dir, "SAM")
+BASE_MODELGEN_DIR = os.path.join(TEMP_ROOT, "modelgen")
 
 SAM_MODEL_MAP = {
     "sam_vit_h": ("vit_h", "sam_vit_h.pth"),
@@ -206,7 +205,7 @@ def segment_sam(image_path, save=True, sam_parameters=None, min_area=15000, iou_
 
     if save:
         base_name = os.path.splitext(os.path.basename(image_path))[0]
-        save_dir = os.path.join(sam_dir, base_name)
+        save_dir = os.path.join(BASE_MODELGEN_DIR, "sam", base_name)
         os.makedirs(save_dir, exist_ok=True)
         # Save each isolated object
         for idx, mask in enumerate(masks):

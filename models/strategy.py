@@ -42,9 +42,10 @@ class BaseModelStrategy(ABC):
         return embedding    
 
 class YOLOStrategy(BaseModelStrategy):
-    def __init__(self , save_dir="img/ModelGen/YOLO"):
+    def __init__(self, save_dir=None):
         self.save_dir = save_dir
-        os.makedirs(self.save_dir, exist_ok=True)
+        if self.save_dir:
+            os.makedirs(self.save_dir, exist_ok=True)
         from .pretrained_models import get_yolo_model
         self.model = get_yolo_model()
     def run(self, image_path):
@@ -52,8 +53,9 @@ class YOLOStrategy(BaseModelStrategy):
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.model(img_rgb)
         img_result = results[0].plot()  # renvoie un np.array avec les
-        save_path = os.path.join(self.save_dir, os.path.basename(image_path))
-        cv2.imwrite(save_path, cv2.cvtColor(img_result, cv2.COLOR_RGB2BGR))
+        if self.save_dir:
+            save_path = os.path.join(self.save_dir, os.path.basename(image_path))
+            cv2.imwrite(save_path, cv2.cvtColor(img_result, cv2.COLOR_RGB2BGR))
         return results , img , img_result 
     def process_results(self, results, img , img_result):
         return process_yolo_results(self, results, img , img_result)
@@ -75,9 +77,10 @@ class YOLOStrategy(BaseModelStrategy):
 
 
 class SAMStrategy(BaseModelStrategy):
-    def __init__(self , save_dir="img/ModelGen/SAM"):
+    def __init__(self, save_dir=None):
         self.save_dir = save_dir
-        os.makedirs(self.save_dir, exist_ok=True)
+        if self.save_dir:
+            os.makedirs(self.save_dir, exist_ok=True)
     def run(self, image_path, tiled=False , defaultParameters=None):
         """
         DefaultParameters: Optional SAM parameters to override defaults.

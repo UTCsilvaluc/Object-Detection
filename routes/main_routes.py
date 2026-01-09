@@ -143,18 +143,44 @@ def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None
 def temp_img(filename):
     return send_from_directory(build_img_temp_path(), filename)
 
-@main_routes_bp.route('/images/<path:filename>')
+@main_routes_bp.route("/images/<path:filename>")
 def image_file(filename):
-    images_root = os.path.join(ROOT_DIR, "static", "img", "Images")
+    from utils.paths import MEDIA_IMAGES_DIR, MEDIA_THUMBS_DIR, MEDIA_CROPS_DIR  
+    from flask import abort
+    from werkzeug.utils import safe_join
+    images_root = os.path.abspath(MEDIA_IMAGES_DIR)
+    thumbs_root = os.path.abspath(MEDIA_THUMBS_DIR)
+    crops_root = os.path.abspath(MEDIA_CROPS_DIR)
+
     safe_name = unquote(filename or "").lstrip("/")
+
+    if safe_name.startswith("thumbs/"):
+        rel_name = safe_name[len("thumbs/"):]
+        abs_path = safe_join(thumbs_root, rel_name)
+        if abs_path and os.path.exists(abs_path):
+            return send_from_directory(thumbs_root, rel_name)
+        abort(404)
+
+    if safe_name.startswith("crops/"):
+        rel_name = safe_name[len("crops/"):]
+        abs_path = safe_join(crops_root, rel_name)
+        if abs_path and os.path.exists(abs_path):
+            return send_from_directory(crops_root, rel_name)
+        abort(404)
+
     if safe_name.startswith("img/Images/"):
         safe_name = safe_name[len("img/Images/"):]
-    if os.path.isabs(safe_name):
-        abs_path = os.path.abspath(safe_name)
-        if abs_path.startswith(images_root + os.sep) and os.path.exists(abs_path):
-            return send_file(abs_path)
-        return ("", 404)
-    return send_from_directory(images_root, safe_name)
+
+    abs_path = safe_join(images_root, safe_name)
+    if abs_path and os.path.exists(abs_path):
+        return send_from_directory(images_root, safe_name)
+
+    fallback_path = safe_join(crops_root, safe_name)
+    if fallback_path and os.path.exists(fallback_path):
+        return send_from_directory(crops_root, safe_name)
+
+    abort(404)
+
 
 @main_routes_bp.route('/map')
 def map_view():
