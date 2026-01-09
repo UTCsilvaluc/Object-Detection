@@ -50,6 +50,40 @@ h1 {
   margin-bottom: 15px;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.title-row h1 {
+  margin-bottom: 0;
+}
+
+.danger-button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #e53e3e;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.danger-button:hover {
+  background: #c53030;
+  transform: translateY(-1px);
+}
+
+.danger-button:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .info-box {
   background: linear-gradient(135deg, #e3f2fd, #ffffff);
   border-radius: 10px;

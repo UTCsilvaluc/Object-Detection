@@ -19,6 +19,8 @@ from utils.helper import (
 from utils.database import (
     get_all_images,
     get_image_by_id,
+    get_image_delete_payload,
+    delete_image_with_cleanup,
     get_versions_by_image_id,
     get_objects_by_image_version,
     get_metadata_by_object_id,
@@ -76,6 +78,30 @@ def view_image(image_id):
         objects[idx]['metadatas'] = obj_metadata
         idx += 1
     return render_template('viewer.html', image=image_data, versions=versionedImages, objects=objects, object_number=len(objects))
+
+@main_routes_bp.route('/delete_image/<int:image_id>', methods=['POST'])
+def delete_image(image_id):
+    payload = get_image_delete_payload(image_id)
+    if not payload:
+        return {"success": False, "error": "Image not found"}, 404
+    if not delete_image_with_cleanup(image_id):
+        return {"success": False, "error": "Unable to delete image"}, 500
+
+    def _remove_if_exists(path):
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+                return True
+            except OSError:
+                return False
+        return False
+
+    file_names = [payload.get("image_file")] + payload.get("version_files", []) + payload.get("cropped_files", [])
+    for file_name in set(fn for fn in file_names if fn):
+        _remove_if_exists(build_image_path(file_name))
+        _remove_if_exists(build_image_thumb_absolute(file_name))
+
+    return {"success": True}, 200
 
 @main_routes_bp.route('/clear_temp', methods=['POST'])
 def clear_temp(json_name=None , img_original_path=None , img_annotated_path=None):

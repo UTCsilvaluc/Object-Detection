@@ -8,7 +8,10 @@
 <body>
   <div class="container">
         <div class="left-panel">
-      <h1>Image Information</h1>
+      <div class="title-row">
+        <h1>Image Information</h1>
+        <button id="delete-image" class="danger-button" type="button">Supprimer l'image</button>
+      </div>
       <div class="info-box">
         <div class="info-item">
           <span class="info-label">Title:</span>
@@ -97,6 +100,33 @@
         content.style.display = content.style.display === 'block' ? 'none' : 'block';
       });
     });
+
+    const deleteButton = document.getElementById('delete-image');
+    if (deleteButton) {
+      deleteButton.addEventListener('click', async () => {
+        const confirmed = window.confirm("Delete this image, its versions, and detected objects?");
+        if (!confirmed) {
+          return;
+        }
+        deleteButton.disabled = true;
+        deleteButton.textContent = "Deleting...";
+        try {
+          const response = await fetch("{{ url_for('main_routes.delete_image', image_id=image.image_id) }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || "Error deleting the image.");
+          }
+          window.location.href = "{{ url_for('main_routes.gallery') }}";
+        } catch (error) {
+          window.alert(error.message || "Error deleting the image.");
+          deleteButton.disabled = false;
+          deleteButton.textContent = "Delete the image";
+        }
+      });
+    }
   </script>
 </body>
 </html>

@@ -539,6 +539,73 @@ def get_image_by_id(image_id):
     finally:
         close_db_connection(conn)
 
+def get_image_delete_payload(image_id: int):
+    """
+    Fetch file paths needed to fully delete an image and its related assets.
+    :param image_id: int ; must be a valid image_id in the Image table
+    :return: dict or None
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT file_path FROM Image WHERE image_id = %s;", (image_id,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            return None
+        image_file = row[0]
+        cur.execute("SELECT file_path FROM VersionedImage WHERE image_id = %s;", (image_id,))
+        version_files = [r[0] for r in cur.fetchall() if r[0]]
+        cur.execute("SELECT cropped_file_path FROM ObjectInstance WHERE image_id = %s;", (image_id,))
+        cropped_files = [r[0] for r in cur.fetchall() if r[0]]
+        cur.close()
+        return {
+            "image_file": image_file,
+            "version_files": version_files,
+            "cropped_files": cropped_files
+        }
+    except Exception as e:
+        print(f"Error fetching image deletion payload: {e}")
+        return None
+    finally:
+        close_db_connection(conn)
+
+def delete_image_with_cleanup(image_id: int) -> bool:
+    """
+    Delete an image and cleanup orphan objects.
+    :param image_id: int ; must be a valid image_id in the Image table
+    :return: bool ; True on success, False on failure
+    """
+    conn = get_db_connection()
+    if conn is None:
+        return False
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM Image WHERE image_id = %s RETURNING image_id;", (image_id,))
+        deleted = cur.fetchone()
+        if not deleted:
+            conn.rollback()
+            cur.close()
+            return False
+        cur.execute("""
+            DELETE FROM Object
+            WHERE object_id NOT IN (SELECT DISTINCT object_id FROM ObjectInstance);
+        """)
+        conn.commit()
+        cur.close()
+        return True
+    except Exception as e:
+        print(f"Error deleting image: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        close_db_connection(conn)
+
 def get_versions_by_image_id(image_id):
     """
     Get all versions of an image by its ID.
