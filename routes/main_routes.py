@@ -62,7 +62,6 @@ def gallery():
         thumb_abs = build_image_thumb_absolute(file_path)
         thumb_rel = build_image_thumb_relative(file_path)
         image["thumb_path"] = thumb_rel if ensure_image_thumbnail(source_path, thumb_abs) else None
-
     return render_template('gallery.html', images=images)
 
 @main_routes_bp.route('/view_image/<int:image_id>')
