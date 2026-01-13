@@ -15,6 +15,7 @@ const globalMapState = {
   emptyEl: null,
   threadEntries: new Map(),
   objectColors: new Map(),
+  objectVisibility: new Map(),
   fullImagesCache: new Map(),
   objectTimelines: new Map(),
   controlsBound: false,
@@ -64,6 +65,13 @@ function getObjectColor(objectId) {
   const color = generateRandomColor();
   globalMapState.objectColors.set(key, color);
   return color;
+}
+
+function getObjectVisibility(objectId) {
+  const key = Number(objectId);
+  if (!Number.isFinite(key)) return true;
+  if (globalMapState.objectVisibility.has(key)) return globalMapState.objectVisibility.get(key);
+  return true;
 }
 
 function formatObjectLabelWithFallback(obj = null, fallbackId = null) {
@@ -138,7 +146,9 @@ function buildObjectPopup({ label, item }) {
     </div>
   `;
 }
-
+/**
+ * Toggle the empty-state UI for the global map based on current entries.
+ */
 function updateGlobalEmptyState() {
   if (!globalMapState.emptyEl) return;
   globalMapState.emptyEl.classList.toggle("hidden", globalMapState.threadEntries.size > 0);
@@ -150,7 +160,12 @@ function updateGlobalBounds() {
   const coords = [];
   globalMapState.threadEntries.forEach((entry) => {
     if (!entry.enabled) return;
-    entry.coords.forEach((c) => coords.push(c));
+    (entry.objects || []).forEach((obj) => {
+      if (!obj.enabled) return;
+      (obj.coords || []).forEach((coord) => {
+        coords.push(coord);
+      });
+    });
   });
   if (!globalMapState.map) return;
   if (coords.length === 0) {
@@ -161,6 +176,10 @@ function updateGlobalBounds() {
   globalMapState.map.fitBounds(bounds, { padding: [30, 30] });
 }
 
+/**
+ * Build sorted object timelines for all enabled thread entries.
+ * @returns {Map} A map of object timelines keyed by objectId.
+ */
 function buildSortedObjectTimelines() {
   const merged = new Map();
   // Group by objectId across all enabled thread entries. objectId => {objectId, label, color, items: [], markers: []}
@@ -172,6 +191,7 @@ function buildSortedObjectTimelines() {
           objectId: obj.objectId,
           label: obj.label,
           color: obj.color,
+          enabled: getObjectVisibility(obj.objectId),
           items: [],
           markers: []
         });
@@ -202,6 +222,11 @@ function buildSortedObjectTimelines() {
   return merged;
 }
 
+/**
+ * Format the subtitle for an object instance.
+ * @param {Object} item - The object instance.
+ * @returns {string} Formatted subtitle.
+ */
 function formatInstanceSubtitle(item) {
   if (!item) return "";
   const date = item.dateLabel || "Unknown date";
@@ -221,6 +246,8 @@ function openFullImagePreview(item) {
 }
 /**
  * Object Menu List rendering
+ * This function renders the list of objects in the global map controls panel.
+ * The events are handle by bindObjectListInteractions()
  * @returns  {void}
  */
 function renderObjectList() {
@@ -256,6 +283,9 @@ function renderObjectList() {
             <span class="map-object-count">${countLabel}</span>
             <span class="global-object-sub">${subtitle}</span>
           </div>
+          <div> 
+          <input type="checkbox" class="object-map-toggle" id="obj-${obj.objectId}" ${obj.enabled ? "checked" : ""}> Displayed on map
+          </div>
         </div>
       `;
     })
@@ -270,12 +300,14 @@ function renderObjectList() {
  * @param {number} instanceIdx - The index of the instance in the timeline.
  */
 function focusObjectInstance(objectId, instanceIdx) {
+  if (!getObjectVisibility(objectId)) return;
   const timeline = globalMapState.objectTimelines.get(Number(objectId));
   if (!timeline) return;
   const idx = Math.max(0, Math.min(instanceIdx, timeline.items.length - 1));
   const item = timeline.items[idx];
   const marker = timeline.markers[idx];
   if (!item || !marker || !globalMapState.map) return;
+  if (!globalMapState.map.hasLayer(marker)) return;
   globalMapState.map.setView([item.lat, item.lng], 15);
   marker.openPopup();
 }
@@ -302,6 +334,30 @@ function updateObjectCard(card, timeline, nextIdx) {
 
 function bindObjectListInteractions() {
   if (globalMapState.controlsBound || !globalMapState.controlsEl) return;
+  globalMapState.controlsEl.addEventListener("change", (event) => {
+    const toggle = event.target.closest(".object-map-toggle");
+    const card = event.target.closest(".global-object-card");
+    if (!toggle || !card) return;
+    const objectId = Number(card.dataset.objectId);
+    if (!Number.isFinite(objectId)) return;
+    const enabled = toggle.checked;
+    globalMapState.objectVisibility.set(objectId, enabled); //Save the state, even after reload or change others objects.
+    globalMapState.threadEntries.forEach((entry) => { // Each thread has a layerGroup, find the object and add/remove from the layerGroup.
+      (entry.objects || []).forEach((obj) => {
+        if (Number(obj.objectId) !== objectId) return;
+        obj.enabled = enabled;
+        if (!entry.layer || !obj.layer) return;
+        if (enabled) {
+          if (entry.enabled && !entry.layer.hasLayer(obj.layer)) {
+            entry.layer.addLayer(obj.layer);
+          }
+        } else if (entry.layer.hasLayer(obj.layer)) {
+          entry.layer.removeLayer(obj.layer);
+        }
+      });
+    });
+    updateGlobalBounds();
+  });
   globalMapState.controlsEl.addEventListener("click", (event) => {
     const navBtn = event.target.closest(".obj-nav-btn");
     const card = event.target.closest(".global-object-card");
@@ -367,7 +423,6 @@ function ensureThreadToggle(threadEntry) {
     `;
     container.insertBefore(toggle, tabs || container.firstChild);
   }
-
   const checkbox = toggle.querySelector("input[type='checkbox']");
   const label = toggle.querySelector("span");
   checkbox.checked = threadEntry.enabled;
@@ -553,7 +608,6 @@ export async function addThreadToGlobalMap({
     controlEl: null,
     objectCount: 0,
     pointCount: 0,
-    coords: [],
     objects: []
   };
   objectSeeds.forEach((obj) => {
@@ -563,8 +617,13 @@ export async function addThreadToGlobalMap({
     const label = formatObjectLabelWithFallback(obj, objectId);
     const timeline = buildObjectTimeline(objectId, fullImages);
     if (!timeline.length) return;
+    const enabled = getObjectVisibility(objectId);
+    const objectLayer = L.layerGroup();
+    if (enabled) {
+      layer.addLayer(objectLayer);
+    }
     const { pointCount, coords, markers } = drawObjectTimeline(
-      { layer, map: globalMapState.map },
+      { layer: objectLayer, map: globalMapState.map },
       objectId,
       label,
       timeline,
@@ -572,13 +631,15 @@ export async function addThreadToGlobalMap({
     );
     entry.objectCount += 1;
     entry.pointCount += pointCount;
-    entry.coords.push(...coords);
     entry.objects.push({
       objectId: Number(objectId),
       label,
       color,
       timeline,
-      markers
+      markers,
+      coords,
+      enabled,
+      layer: objectLayer
     });
   });
 
