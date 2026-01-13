@@ -68,7 +68,10 @@ def _sanitize_filename(name: str) -> str:
     """Normalize filenames coming from the frontend (HTML entities, extra spaces)."""
     if not name:
         return name
-    return html.unescape(name).strip()
+    unescaped = html.unescape(name)
+    normalized = unicodedata.normalize("NFKC", unescaped)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Cf")
+    return normalized.strip()
 
 def safe_filename(name: str, fallback: str = "image", max_length: int = 80) -> str:
     """
@@ -83,6 +86,32 @@ def safe_filename(name: str, fallback: str = "image", max_length: int = 80) -> s
     if not normalized:
         normalized = fallback
     return normalized[:max_length]
+
+def safe_filename_unicode(name: str, fallback: str = "image", max_length: int = 80) -> str:
+    """
+    Produce a filesystem-safe filename stem while preserving Unicode characters.
+    """
+    raw = _sanitize_filename(name) or ""
+    normalized = unicodedata.normalize("NFKC", raw)
+    normalized = normalized.replace(" ", "_")
+    normalized = re.sub(r"[\\\\/]+", "_", normalized)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch)[0] != "C")
+    normalized = re.sub(r"_+", "_", normalized).strip("._-")
+    if not normalized:
+        normalized = fallback
+    return normalized[:max_length]
+
+def _derive_image_stem_from_temp_path(path: str) -> str | None:
+    if not path:
+        return None
+    stem = os.path.splitext(os.path.basename(path))[0]
+    stem = _sanitize_filename(stem)
+    lower = stem.lower()
+    for suffix in ("_original", "_annotated"):
+        if lower.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    return stem or None
 
 def build_json_temp_path(extension=None):
     """
@@ -251,6 +280,12 @@ def save_image_permanently(temp_path: str, dest_dir: str, new_name: str):
 def load_analysis_json(img_name, required=True):
     img_name = _sanitize_filename(img_name)
     json_path = build_json_temp_path(f"{img_name}.json")
+    if not os.path.exists(json_path):
+        alt_path = _find_matching_json_path(img_name)
+        if alt_path:
+            json_path = alt_path
+        elif not required:
+            return None, json_path
     data = load_json(json_path)
     if required and data is None:
         raise FileNotFoundError(f"JSON file not found: {json_path}")
@@ -267,6 +302,18 @@ def load_json(json_path):
     with open(json_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
+def _find_matching_json_path(img_name: str):
+    if not img_name or not os.path.isdir(TEMP_JSON_DIR):
+        return None
+    expected = _sanitize_filename(img_name)
+    for filename in os.listdir(TEMP_JSON_DIR):
+        if not filename.lower().endswith(".json"):
+            continue
+        stem = filename[:-5]
+        if _sanitize_filename(stem) == expected:
+            return os.path.join(TEMP_JSON_DIR, filename)
+    return None
+
 def save_json(data, json_dir, filename) -> None:
     """
     Save JSON data to a file.
@@ -275,6 +322,7 @@ def save_json(data, json_dir, filename) -> None:
     :filename: name of the JSON file (without .json extension)
     """
     os.makedirs(json_dir, exist_ok=True)
+    filename = _sanitize_filename(filename)
     with open(os.path.join(json_dir, f"{filename}.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
@@ -328,7 +376,11 @@ def handle_save_images(metadata , img_name , model , upload_folder , annotated_i
     :annotated_image_path: Temp path of annotated image, please have it in static folder
     :original_image_path: Temp path of original image please have it in static folder
     """
-    safe_name = safe_filename(img_name)
+    safe_name = safe_filename_unicode(img_name)
+    if safe_name == "image":
+        derived = _derive_image_stem_from_temp_path(original_image_path) or _derive_image_stem_from_temp_path(annotated_image_path)
+        if derived:
+            safe_name = safe_filename_unicode(derived)
     img_path = save_image_permanently(
         original_image_path, "images", f"{safe_name}_original.jpg"
     )
@@ -402,7 +454,7 @@ def handle_detected_objects(request, img_name, image_id, version_number, max_obj
     Returns a dictionary with data of all processed objects.
     """
     objects_data = {}
-    safe_name = safe_filename(img_name)
+    safe_name = safe_filename_unicode(img_name)
     objects = json_data.get("objects", []) if json_data else []
     for i in range(max_objects):
         class_id = request.form.get(f"objects[{i}][class_id]")
