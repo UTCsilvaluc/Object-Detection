@@ -202,6 +202,40 @@ h1 {
   margin-top: 3px;
 }
 
+.objects-button {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffffff, #eef2ff);
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 0.88em;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.objects-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(31, 41, 55, 0.18);
+  background: linear-gradient(135deg, #e0e7ff, #ffffff);
+}
+
+.objects-button:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 8px rgba(31, 41, 55, 0.16);
+}
+
+.objects-button:focus-visible {
+  outline: 2px solid #4338ca;
+  outline-offset: 2px;
+}
+
 /* ===== Scrollbars ===== */
 .left-panel::-webkit-scrollbar,
 .right-panel::-webkit-scrollbar {

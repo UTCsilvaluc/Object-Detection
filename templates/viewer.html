@@ -69,6 +69,12 @@
                   <p><strong>Confidence:</strong> {{ object.confidence }}</p>
                   <p><strong>Width:</strong> {{ object.width }}</p>
                   <p><strong>Height:</strong> {{ object.height }}</p>
+                  <button
+                    type="button"
+                    class="objects-button"
+                    onclick="window.open('{{ url_for('main_routes.objects_overview') }}?ObjectID={{ object.object_id }}', '_blank', 'noopener,noreferrer')">
+                    View All Objects Instances
+                  </button>
                 </div>
                 <div class="obj-meta">
                     <h1>Metadatas of the object : </h1>
