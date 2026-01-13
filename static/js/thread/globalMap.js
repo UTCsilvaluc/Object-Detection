@@ -131,7 +131,7 @@ function buildObjectPopup({ label, item }) {
     : "";
   return `
     <div class="global-object-popup">
-      <div class="global-object-title">${label}</div>
+      <div class="global-object-title">${item.imageTitle || label}</div>
       ${thumb}
       <div class="global-object-meta">${item.dateLabel}</div>
       <div class="global-object-meta">${item.location}</div>
@@ -249,9 +249,9 @@ function renderObjectList() {
           </div>
           <div class="global-object-header">
             <span class="global-object-swatch" style="background:${obj.color};"></span>
-            <span class="map-object-label">${obj.label}</span>
+            <span class="map-object-label">${obj.items?.[0]?.imageTitle || ""}</span>
           </div>
-          <img class="thumb map-object-thumb global-object-thumb" src="${thumb}" alt="${escapeHtmlAttr(obj.label)}" data-full-src="${escapeHtmlAttr(fullSrc)}" data-title="${escapeHtmlAttr(first?.imageTitle || obj.label)}" data-subtitle="${escapeHtmlAttr(subtitle)}">
+          <img class="thumb map-object-thumb global-object-thumb" src="${thumb}" alt="${escapeHtmlAttr(obj.items?.[0]?.imageTitle || obj.label)}" data-full-src="${escapeHtmlAttr(fullSrc)}" data-title="${escapeHtmlAttr(first?.imageTitle || obj.label)}" data-subtitle="${escapeHtmlAttr(subtitle)}">
           <div class="map-object-meta ${obj.items.length ? "" : "empty"}">
             <span class="map-object-count">${countLabel}</span>
             <span class="global-object-sub">${subtitle}</span>
@@ -285,9 +285,11 @@ function updateObjectCard(card, timeline, nextIdx) {
   const thumb = item?.croppedPath ? `${window.appConfig.URL_for_images}${item.croppedPath}` : "";
   const fullSrc = getFullImageSrc(item?.rawImage);
   const countEl = card.querySelector(".map-object-count");
+  const labelEl = card.querySelector(".map-object-label");
   const subtitleEl = card.querySelector(".global-object-sub");
   const thumbEl = card.querySelector(".global-object-thumb");
   if (countEl) countEl.textContent = `${nextIdx + 1} / ${timeline.items.length}`;
+  if (labelEl) labelEl.textContent = timeline.items?.[nextIdx]?.imageTitle || "";
   if (subtitleEl) subtitleEl.textContent = formatInstanceSubtitle(item);
   if (thumbEl && thumb) {
     thumbEl.src = thumb;
@@ -531,11 +533,10 @@ export async function addThreadToGlobalMap({
 }) {
   if (!ensureGlobalMap()) return;
   if (!threadDomId || !Array.isArray(imagesFromThread)) return;
-
-  const objectSeeds = await resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromThread });
+  //ObjectSeeds allows to get all objects related to the thread. 
+  const objectSeeds = await resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromThread }); // Return cropped_path, object_id, name
   if (!objectSeeds.length) return;
-
-  const resolvedImages = await resolveThreadImages({ mode, seedImageId, imagesFromThread });
+  const resolvedImages = await resolveThreadImages({ mode, seedImageId, imagesFromThread }); // Get all datas for images in the thread. 'ImagesFromThread' may be incomplete.
   const imageIds = (resolvedImages || [])
     .map((img) => Number(img.image_id))
     .filter((id) => Number.isFinite(id));
@@ -555,7 +556,6 @@ export async function addThreadToGlobalMap({
     coords: [],
     objects: []
   };
-
   objectSeeds.forEach((obj) => {
     const objectId = obj.object_id ?? obj.id;
     if (!objectId) return;

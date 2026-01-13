@@ -43,6 +43,12 @@ export function closeInstancePreview() {
   document.body.classList.remove("preview-open");
 }
 
+/**
+ * Wires up instance preview functionality within a given scope.
+ * On click of an instance image, opens the preview modal.
+ * @param {*} scope 
+ * @returns 
+ */
 export function wireInstancePreviews(scope) {
   const domRoot = scope || document;
   if (!domRoot) return;
