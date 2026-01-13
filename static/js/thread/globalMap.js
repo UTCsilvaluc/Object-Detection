@@ -5,6 +5,7 @@ import {
   getImageObjects,
   getObjectThumbPath
 } from "./mapView.js";
+import { openInstancePreview } from "./instancePreview.js";
 
 const globalMapState = {
   map: null,
@@ -16,7 +17,8 @@ const globalMapState = {
   objectColors: new Map(),
   fullImagesCache: new Map(),
   objectTimelines: new Map(),
-  controlsBound: false
+  controlsBound: false,
+  previewBound: false
 };
 
 const DEFAULT_CENTER = [34.33 , 134.05];
@@ -40,6 +42,7 @@ function ensureGlobalMap() {
 
   globalMapState.lineLayer = L.layerGroup().addTo(globalMapState.map);
   globalMapState.markerLayer = L.layerGroup().addTo(globalMapState.map);
+  bindGlobalPreviewHandler();
   return true;
 }
 
@@ -69,6 +72,22 @@ function formatObjectLabelWithFallback(obj = null, fallbackId = null) {
   if (label) return label;
   if (id) return `Object #${id}`;
   return "Object";
+}
+
+function escapeHtmlAttr(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getFullImageSrc(rawImage) {
+  if (!rawImage) return "";
+  const path = rawImage.file_path || rawImage.thumb_path || "";
+  if (!path) return "";
+  return `${window.appConfig.URL_for_images}${path}`;
 }
 /**
  * Create an object for the timeline. Ordered by date (buildGeoTimeline).
@@ -105,8 +124,10 @@ function buildObjectTimeline(objectId, images) {
  * @returns {string} HTML content for the popup.
  */
 function buildObjectPopup({ label, item }) {
+  const fullSrc = getFullImageSrc(item?.rawImage);
+  const subtitle = formatInstanceSubtitle(item);
   const thumb = item.croppedPath
-    ? `<img src="${window.appConfig.URL_for_images}${item.croppedPath}" class="global-object-thumb" alt="${label}">`
+    ? `<img src="${window.appConfig.URL_for_images}${item.croppedPath}" class="global-object-thumb" alt="${escapeHtmlAttr(label)}" data-full-src="${escapeHtmlAttr(fullSrc)}" data-title="${escapeHtmlAttr(item.imageTitle || label)}" data-subtitle="${escapeHtmlAttr(subtitle)}">`
     : "";
   return `
     <div class="global-object-popup">
@@ -187,6 +208,17 @@ function formatInstanceSubtitle(item) {
   const place = item.location || "Unknown location";
   return `${date} • ${place}`;
 }
+
+function openFullImagePreview(item) {
+  if (!item) return;
+  const src = getFullImageSrc(item.rawImage);
+  if (!src) return;
+  openInstancePreview({
+    src,
+    title: item.imageTitle || "Image",
+    subtitle: formatInstanceSubtitle(item)
+  });
+}
 /**
  * Object Menu List rendering
  * @returns  {void}
@@ -205,6 +237,7 @@ function renderObjectList() {
     .map((obj) => {
       const first = obj.items[0] || null;
       const thumb = first?.croppedPath ? `${window.appConfig.URL_for_images}${first.croppedPath}` : "";
+      const fullSrc = getFullImageSrc(first?.rawImage);
       const countLabel = obj.items.length ? `1 / ${obj.items.length}` : "0 / 0";
       const subtitle = formatInstanceSubtitle(first);
       const navDisabled = obj.items.length > 1 ? "" : "disabled";
@@ -218,7 +251,7 @@ function renderObjectList() {
             <span class="global-object-swatch" style="background:${obj.color};"></span>
             <span class="map-object-label">${obj.label}</span>
           </div>
-          <img class="thumb map-object-thumb global-object-thumb" src="${thumb}" alt="${obj.label}">
+          <img class="thumb map-object-thumb global-object-thumb" src="${thumb}" alt="${escapeHtmlAttr(obj.label)}" data-full-src="${escapeHtmlAttr(fullSrc)}" data-title="${escapeHtmlAttr(first?.imageTitle || obj.label)}" data-subtitle="${escapeHtmlAttr(subtitle)}">
           <div class="map-object-meta ${obj.items.length ? "" : "empty"}">
             <span class="map-object-count">${countLabel}</span>
             <span class="global-object-sub">${subtitle}</span>
@@ -250,12 +283,18 @@ function focusObjectInstance(objectId, instanceIdx) {
 function updateObjectCard(card, timeline, nextIdx) {
   const item = timeline.items[nextIdx] || null;
   const thumb = item?.croppedPath ? `${window.appConfig.URL_for_images}${item.croppedPath}` : "";
+  const fullSrc = getFullImageSrc(item?.rawImage);
   const countEl = card.querySelector(".map-object-count");
   const subtitleEl = card.querySelector(".global-object-sub");
   const thumbEl = card.querySelector(".global-object-thumb");
   if (countEl) countEl.textContent = `${nextIdx + 1} / ${timeline.items.length}`;
   if (subtitleEl) subtitleEl.textContent = formatInstanceSubtitle(item);
-  if (thumbEl && thumb) thumbEl.src = thumb;
+  if (thumbEl && thumb) {
+    thumbEl.src = thumb;
+    thumbEl.dataset.fullSrc = fullSrc;
+    thumbEl.dataset.title = item?.imageTitle || "";
+    thumbEl.dataset.subtitle = formatInstanceSubtitle(item);
+  }
   card.dataset.instanceIdx = String(nextIdx);
 }
 
@@ -282,10 +321,32 @@ function bindObjectListInteractions() {
     if (thumb) {
       const objectId = Number(card.dataset.objectId);
       const currentIdx = Number(card.dataset.instanceIdx) || 0;
+      const timeline = globalMapState.objectTimelines.get(objectId);
+      const item = timeline?.items?.[currentIdx] || null;
+      if (item) {
+        openFullImagePreview(item);
+      }
       focusObjectInstance(objectId, currentIdx);
     }
   });
   globalMapState.controlsBound = true;
+}
+
+function bindGlobalPreviewHandler() {
+  if (globalMapState.previewBound) return;
+  document.addEventListener("click", (event) => {
+    const thumb = event.target.closest(".global-object-thumb");
+    if (!thumb) return;
+    if (globalMapState.controlsEl && globalMapState.controlsEl.contains(thumb)) return;
+    const fullSrc = thumb.dataset.fullSrc;
+    if (!fullSrc) return;
+    openInstancePreview({
+      src: fullSrc,
+      title: thumb.dataset.title || "Image",
+      subtitle: thumb.dataset.subtitle || ""
+    });
+  });
+  globalMapState.previewBound = true;
 }
 
 function ensureThreadToggle(threadEntry) {
