@@ -216,7 +216,12 @@ export function renderImagesTab(threadDomId, imagesList) {
     container.appendChild(block);
   });
 }
-
+/**
+ * Renders the full thread including objects, thread details, images, and map.
+ * @param {*} threadDomId 
+ * @param {*} threadsData 
+ * @param {*} context 
+ */
 export function renderFullThread(threadDomId, threadsData, context = {}) {
   const allObjects = [
     ...(threadsData.objects_same_picture || []).map((obj) => ({ ...obj, relation: "cooccurrence" })),

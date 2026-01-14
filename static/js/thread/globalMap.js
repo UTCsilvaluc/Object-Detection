@@ -8,18 +8,18 @@ import {
 import { openInstancePreview } from "./instancePreview.js";
 
 const globalMapState = {
-  map: null,
-  lineLayer: null,
-  markerLayer: null,
-  controlsEl: null,
-  emptyEl: null,
-  threadEntries: new Map(),
-  objectColors: new Map(),
-  objectVisibility: new Map(),
-  fullImagesCache: new Map(),
-  objectTimelines: new Map(),
-  controlsBound: false,
-  previewBound: false
+  map: null, // Leaflet map instance for the global thread view.
+  lineLayer: null, // LayerGroup for link/trajectory polylines.
+  markerLayer: null, // LayerGroup for global markers (preview/hover markers).
+  controlsEl: null, // DOM node that holds the global map object controls.
+  emptyEl: null, // DOM node for the "empty state" message.
+  threadEntries: new Map(), // threadDomId -> { layer, objects, counts, toggle state }.
+  objectColors: new Map(), // objectId -> color (consistent color per object).
+  objectVisibility: new Map(), // objectId -> boolean (persisted visibility toggle).
+  fullImagesCache: new Map(), // imageId -> full image payload (avoid refetching).
+  objectTimelines: new Map(), // objectId -> timeline items used by controls/preview.
+  controlsBound: false, // Guard to avoid binding control events multiple times.
+  previewBound: false // Guard to avoid binding preview hover events multiple times.
 };
 
 const DEFAULT_CENTER = [34.33 , 134.05];
@@ -556,6 +556,19 @@ function collectSeedObjectsFromImage(image) {
   }));
 }
 
+/**
+ * Resolve the "seed" objects that define what gets plotted for a thread.
+ *
+ * Priority:
+ * 1) If seedObjects is provided, use it as-is.
+ * 2) If mode is "image", derive seeds from the seedImageId by reading that image's objects.
+ * @param {Object} params
+ * @param {string} params.mode
+ * @param {Array} [params.seedObjects]
+ * @param {number|string|null} [params.seedImageId]
+ * @param {Array} [params.imagesFromThread]
+ * @returns {Promise<Array>}
+ */
 async function resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromThread }) {
   if (Array.isArray(seedObjects) && seedObjects.length > 0) return seedObjects;
   if (mode === "image" && seedImageId) {
@@ -579,6 +592,24 @@ async function resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromTh
   return [];
 }
 
+/**
+ * Add a thread's object timelines to the global map and register a thread entry.
+ *
+ * The function resolves "seed" objects (which define what objects to draw for
+ * this thread), fetches full image data for the thread, then draws per-object
+ * timelines into a dedicated layer group.
+ *
+ * @param {Object} params
+ * @param {string} params.threadDomId Thread container id (e.g. "thread-3").
+ * @param {string} params.mode Origin mode: "object", "image", or "thread".
+ * @param {Array} [params.seedObjects] Objects that initiated the thread or were
+ *   derived from thread filters. Used as the primary source of object ids.
+ * @param {number|string|null} [params.seedImageId] Image id that initiated the
+ *   thread in "image" mode; used to infer seed objects when seedObjects is empty.
+ * @param {Array} params.imagesFromThread Images returned by the thread API; may
+ *   be partial and will be expanded into full image payloads.
+ * @returns {Promise<void>}
+ */
 export async function addThreadToGlobalMap({
   threadDomId,
   mode,
@@ -588,8 +619,8 @@ export async function addThreadToGlobalMap({
 }) {
   if (!ensureGlobalMap()) return;
   if (!threadDomId || !Array.isArray(imagesFromThread)) return;
-  //ObjectSeeds allows to get all objects related to the thread. 
-  const objectSeeds = await resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromThread }); // Return cropped_path, object_id, name
+  // Resolve the object ids that should be plotted for this thread on the global map.
+  const objectSeeds = await resolveSeedObjects({ mode, seedObjects, seedImageId, imagesFromThread }); // Return cropped_path, object_id, name for each object.
   if (!objectSeeds.length) return;
   const resolvedImages = await resolveThreadImages({ mode, seedImageId, imagesFromThread }); // Get all datas for images in the thread. 'ImagesFromThread' may be incomplete.
   const imageIds = (resolvedImages || [])

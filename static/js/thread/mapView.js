@@ -208,6 +208,24 @@ function computeChronoStepAssignments(rawLinks) {
   return assignment;
 }
 
+/**
+ * Draws chronological link polylines between images on the map for a given timeline.
+ *
+ * Strategy:
+ * - If explicit links are provided, use them to build connected components.
+ * - If no links are provided, infer links by shared object IDs across images.
+ * - For each connected component, sort images by date and draw step-by-step
+ *   polylines with a popup explaining the step and the link reason.
+ *
+ * This powers the "movement over time" visualization by showing how related
+ * images are connected in temporal order (by metadata, cooccurrence, thread, etc.).
+ *
+ * @param {Object} state Map state containing layer and drawing helpers.
+ * @param {Array} timeline Array of timeline items with raw image data and lat/lng.
+ * @param {string|null} [relation] Relationship type (e.g., "cooccurrence", "metadata", "thread").
+ * @param {Object|null} [commonObject] Shared object context used for labeling.
+ * @param {Array} [links] Optional explicit links {from_image_id, to_image_id, metadata}.
+ */
 function drawChronologicalLinks(state, timeline, relation = null, commonObject = null, links = []) {
   if (!state || !state.layer || !timeline || timeline.length < 2) return;
 
@@ -406,6 +424,8 @@ function resetMapState(state) {
   state.colors = {};
 }
 
+// Merge incremental image batches into state while deduping by image_id.
+// Latest payload wins so append/pagination refreshes data without duplicates.
 function mergeImagesIntoState(state, newImages) {
   const merged = new Map();
   state.images.forEach((img) => merged.set(img.image_id, img));
@@ -413,6 +433,8 @@ function mergeImagesIntoState(state, newImages) {
   state.images = Array.from(merged.values());
 }
 
+// Keep only object-selection indices for images still in state.images.
+// This prevents stale selections when the map list is replaced/filtered.
 function syncObjectIndex(state) {
   if (!state.objectIndexByImage) state.objectIndexByImage = new Map();
   const nextObjectIndexByImage = new Map();
@@ -534,6 +556,11 @@ function renderTimelineList({
   `;
 }
 
+/**
+ * Highlight the list card matching the image id and scroll it into view.
+ * @param {Element} listEl
+ * @param {number|string} imageId
+ */
 function selectCardInList(listEl, imageId) {
   const id = Number(imageId);
   if (!Number.isFinite(id)) return;
@@ -545,6 +572,14 @@ function selectCardInList(listEl, imageId) {
   }
 }
 
+/**
+ * Center the map on the marker tied to the image id and optionally open its popup.
+ * @param {Object} state
+ * @param {number|string} imageId
+ * @param {Object} [opts]
+ * @param {number} [opts.zoom]
+ * @param {boolean} [opts.openPopup]
+ */
 function focusMarkerOnMap(state, imageId, opts = {}) {
   const marker = state.markers.get(Number(imageId));
   if (!marker || !state.map) return;
@@ -553,6 +588,12 @@ function focusMarkerOnMap(state, imageId, opts = {}) {
   if (opts.openPopup !== false) marker.openPopup();
 }
 
+/**
+ * Bind a single click handler to the list that detects thumbnail clicks
+ * and forwards the image id to the provided callback.
+ * @param {Element} listEl
+ * @param {(imageId: number) => void} onThumbClick
+ */
 function bindThumbZoom(listEl, onThumbClick) {
   if (listEl.dataset.thumbZoomBound) return;
   listEl.addEventListener("click", (event) => {
@@ -646,6 +687,23 @@ function buildSharedObjectsHTML(imagesById, fromId, toId, objectIds = []) {
   `;
 }
 
+/**
+ * Build per-link step assignments for thread mode by type (presence/movement/metadata).
+ *
+ * Each link is normalized with image ids + dates from the timeline, then sent to
+ * computeChronoStepAssignments, which groups connected links, orders them by time,
+ * and assigns step numbers (step/total) for display and arrow direction.
+ *
+ * Returns null when not in thread mode.
+ *
+ * @param {Object} params
+ * @param {string|null} params.relation
+ * @param {Array} params.presenceLinks
+ * @param {Array} params.movementLinks
+ * @param {Array} params.metadataLinks
+ * @param {Map<number, Object>} params.timelineById
+ * @returns {Object|null}
+ */
 function computeThreadStepAssignments({ relation, presenceLinks, movementLinks, metadataLinks, timelineById }) {
   if (relation !== "thread") return null;
   return {
@@ -853,6 +911,7 @@ export function renderMapTab(
   const newImages = imagesList || [];
   mergeImagesIntoState(state, newImages);
   syncObjectIndex(state);
+
   const timeline = buildGeoTimeline(state.images);
   const newTimeline = buildGeoTimeline(newImages);
   const objectLabel = formatObjectLabel(commonObject);
@@ -867,12 +926,13 @@ export function renderMapTab(
     threadDomId,
     state
   });
-
+  //Allows to click on thumbnail to zoom to marker
   bindThumbZoom(listEl, (imageId) => {
     selectCardInList(listEl, imageId);
     focusMarkerOnMap(state, imageId, { zoom: 15, openPopup: true });
   });
 
+  // Add new markers for newly added images
   const { coordsAll, focusMarker, focusLatLng } = upsertMarkers({
     state,
     newTimeline,
@@ -880,6 +940,7 @@ export function renderMapTab(
     onMarkerClick: (imageId) => selectCardInList(listEl, imageId)
   });
 
+  //Allow drawing different link types separately (metadata, presence, movement)
   const { allLinks, metadataLinks, presenceLinks, movementLinks } = splitLinksByType(links);
 
   if (relation !== "thread") {
@@ -890,6 +951,7 @@ export function renderMapTab(
 
   const imagesById = new Map(state.images.map((img) => [Number(img.image_id), img]));
   const timelineById = new Map(timeline.map((item) => [Number(item.raw.image_id), item]));
+  // Precompute chronological step labels for thread links (used by drawThread*Links).
   const stepAssignments = computeThreadStepAssignments({
     relation,
     presenceLinks,

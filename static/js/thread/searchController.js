@@ -87,7 +87,11 @@ export async function performSearch() {
   if (!container) return;
   displayResultsIn(container, data.objects);
 }
-
+/**
+ * Function called by the "Select Object" button in search results.
+ * @param {*} objectId 
+ * @param {*} triggerEl 
+ */
 export async function selectObject(objectId, triggerEl = null) {
   const threadsData = await requestThreadGeneration({ mode: "object", object_id: objectId });
   if (!threadsData) return;
