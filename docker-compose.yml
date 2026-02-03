@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: objectdetection-db
     environment:
       POSTGRES_DB: ${DB_NAME}
