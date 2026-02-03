@@ -108,6 +108,7 @@ class SAMModel:
             self._set_sam_model()
         from segment_anything import SamPredictor
         self._GLOBAL_SAM_PREDICTOR = SamPredictor(self._GLOBAL_SAM_MODEL)
+        _patch_mps_transform(self._GLOBAL_SAM_PREDICTOR.transform)
 
     def get_mask_predictor(self, image_rgb=None):
         if not hasattr(self, "_GLOBAL_SAM_PREDICTOR") or self._GLOBAL_SAM_PREDICTOR is None:
@@ -123,7 +124,12 @@ class SAMModel:
     def create_mask_generator(self, sam_parameters):
         model = self.get_sam_model()
         from segment_anything import SamAutomaticMaskGenerator
-        return SamAutomaticMaskGenerator(model, **sam_parameters)
+        generator = SamAutomaticMaskGenerator(model, **sam_parameters)
+        if get_sam_device().type == "mps" and hasattr(generator, "point_grids"):
+            np = _lazy_import_np()
+            generator.point_grids = [grid.astype(np.float32) for grid in generator.point_grids]
+        _patch_mps_transform(generator.predictor.transform)
+        return generator
 
     def get_predictor_lock(self):
         return self._PREDICTOR_LOCK
@@ -154,6 +160,24 @@ def _upsample_mask(mask, target_shape):
     cv2 = _lazy_import_cv2()
     np = _lazy_import_np()
     return cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+
+def _patch_mps_transform(transform):
+    if get_sam_device().type != "mps":
+        return
+    if getattr(transform, "_mps_fp32_patch", False):
+        return
+    np = _lazy_import_np()
+    def apply_coords_fp32(coords, original_size):
+        old_h, old_w = original_size
+        new_h, new_w = transform.get_preprocess_shape(
+            original_size[0], original_size[1], transform.target_length
+        )
+        coords = coords.astype(np.float32, copy=True)
+        coords[..., 0] = coords[..., 0] * (new_w / old_w)
+        coords[..., 1] = coords[..., 1] * (new_h / old_h)
+        return coords
+    transform.apply_coords = apply_coords_fp32
+    transform._mps_fp32_patch = True
 
 def safe_predict_point(img_rgb , x , y):
     np = _lazy_import_np()
