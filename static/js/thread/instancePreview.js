@@ -2,7 +2,7 @@ let root = null;
 let img = null;
 let titleEl = null;
 let subtitleEl = null;
-
+let isAutoScrolling = false;
 function init() {
   if (root) return true;
   root = document.getElementById("instance-preview");
@@ -73,6 +73,36 @@ export function wireInstancePreviews(scope) {
         title: objectId ? `Object #${objectId}` : "Object instance",
         subtitle: subtitleParts.join(" · ")
       });
+    });
+  });
+  domRoot.querySelectorAll(".obj-instance").forEach((imgEl) => {
+    imgEl.addEventListener("mouseenter", () => {
+      if (isAutoScrolling) return;
+      imgEl.style.cursor = "pointer";
+
+      const scrollContainer = imgEl.parentElement;
+
+      if (!scrollContainer) return;
+
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const imageRect     = imgEl.getBoundingClientRect();
+
+      const imageCenterInContainer =
+        (imageRect.top - containerRect.top) +
+        scrollContainer.scrollTop +
+        imageRect.height / 2;
+
+      const targetScrollTop =
+        imageCenterInContainer - scrollContainer.clientHeight / 2;
+
+      scrollContainer.scrollTo({
+        top: targetScrollTop,
+        behavior: "smooth"
+      });
+      isAutoScrolling = true;
+      window.setTimeout(() => {
+        isAutoScrolling = false;
+      }, 800);
     });
   });
 }

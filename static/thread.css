@@ -148,6 +148,9 @@ button {
     align-items: start;
     margin-bottom: 18px;
     overflow: visible;
+    max-height: 400px;
+    overflow-y: auto;
+    border-right: 1px solid #f0f0f0;
 }
 
 .obj-instance {
