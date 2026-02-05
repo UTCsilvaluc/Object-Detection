@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Queue</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='queue.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Pre-analysis Queue</h1>
+            <a class="back-link" href="{{ url_for('main_routes.index') }}">Back to form</a>
+        </div>
+
+        {% if added %}
+            <div class="notice">{{ added }} image(s) added to the queue.</div>
+        {% endif %}
+
+        <form action="{{ url_for('analysis.queue_page') }}" method="post" enctype="multipart/form-data">
+            <label for="images">Select images</label>
+            <input type="file" id="images" name="images" accept="image/*" multiple required>
+            <button type="submit">Add to queue</button>
+        </form>
+
+        <div class="actions">
+            <button id="start-processing" type="button">Start processing</button>
+            <button id="refresh-status" type="button" class="secondary">Refresh</button>
+        </div>
+        <p class="note">Keep this page open while processing the queue.</p>
+
+        <div id="queue-status" class="queue-status"></div>
+    </div>
+
+    <script>
+        const statusUrl = "{{ url_for('analysis.queue_status') }}";
+        const processUrl = "{{ url_for('analysis.queue_process_next') }}";
+        const statusEl = document.getElementById("queue-status");
+        const startBtn = document.getElementById("start-processing");
+        const refreshBtn = document.getElementById("refresh-status");
+        let running = false;
+
+        function renderQueue(items) {
+            if (!items || items.length === 0) {
+                statusEl.innerHTML = "<p>No images in the queue.</p>";
+                return;
+            }
+            const rows = items.map(item => {
+                const count = item.num_objects !== null && item.num_objects !== undefined ? ` • ${item.num_objects} objects` : "";
+                const model = item.model ? ` • ${item.model}` : "";
+                const error = item.error ? ` • Error: ${item.error}` : "";
+                return `
+                    <div class="queue-item">
+                        <div class="queue-main">
+                            <span class="queue-name">${item.filename || item.id}</span>
+                            <span class="queue-status-pill status-${item.status}">${item.status}</span>
+                        </div>
+                        <div class="queue-meta">${count}${model}${error}</div>
+                    </div>
+                `;
+            }).join("");
+            statusEl.innerHTML = rows;
+        }
+
+        async function refreshStatus() {
+            const res = await fetch(statusUrl);
+            const data = await res.json();
+            if (!data.success) {
+                statusEl.innerHTML = "<p>Unable to load the queue.</p>";
+                return;
+            }
+            renderQueue(data.items || []);
+        }
+
+        async function processNext() {
+            const res = await fetch(processUrl, { method: "POST" });
+            return res.json();
+        }
+
+        async function runQueue() {
+            if (running) return;
+            running = true;
+            startBtn.disabled = true;
+            while (running) {
+                const data = await processNext();
+                if (!data.success) {
+                    statusEl.insertAdjacentHTML("afterbegin", `<p class=\"error\">${data.error || "Error during analysis."}</p>`);
+                    break;
+                }
+                if (data.status === "idle") {
+                    break;
+                }
+                await refreshStatus();
+            }
+            running = false;
+            startBtn.disabled = false;
+        }
+
+        startBtn.addEventListener("click", runQueue);
+        refreshBtn.addEventListener("click", refreshStatus);
+        refreshStatus();
+    </script>
+</body>
+</html>

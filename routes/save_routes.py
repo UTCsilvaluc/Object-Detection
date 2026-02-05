@@ -22,6 +22,7 @@ from utils.database import (
     insert_link_metadata,
     insert_link_geometry
 )
+from utils.analysis_queue import consume_queue_item
 
 save_bp = Blueprint("save", __name__)
 
@@ -51,6 +52,9 @@ def save_metadata():
         img_annotated_path=build_img_temp_path(request.form.get("annotated_image")),
         img_original_path=build_img_temp_path(request.form.get("original_image"))
     )
+    preanalysis_id = request.form.get("preanalysis_id")
+    if preanalysis_id:
+        consume_queue_item(preanalysis_id)
     if (metadata.get("csrf_token")):
         image = {
             "image_id": image_id,

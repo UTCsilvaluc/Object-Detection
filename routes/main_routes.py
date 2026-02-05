@@ -33,6 +33,7 @@ from utils.database import (
     get_all_full_points,
     get_all_full_links
 )
+from utils.analysis_queue import list_available_preanalysis
 
 from utils.data_objects import (
     build_object_links
@@ -43,7 +44,8 @@ main_routes_bp = Blueprint("main_routes", __name__)
 @main_routes_bp.route('/')
 def index():
     titles = get_all_image_title()
-    return render_template('index.html', titles=titles)
+    preanalysis = list_available_preanalysis()
+    return render_template('index.html', titles=titles, preanalysis=preanalysis)
 
 @main_routes_bp.route('/gallery')
 def gallery():

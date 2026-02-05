@@ -9,8 +9,34 @@
 <body>
     <div class="container">
         <h1>Object Detection (物体検出)</h1>
+        <div class="top-actions">
+            <a class="queue-link" href="{{ url_for('analysis.queue_page') }}">Pre-analyze multiple images</a>
+        </div>
         <form action="{{ url_for('analysis.upload') }}" method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="">
+
+            <div class="mode-toggle">
+                <label>Analysis mode</label>
+                <div class="mode-options">
+                    <label><input type="radio" name="analysis_mode" id="mode-new" value="new" checked> New image</label>
+                    <label><input type="radio" name="analysis_mode" id="mode-pre" value="pre"> Pre-analyzed image</label>
+                </div>
+            </div>
+
+            <div id="preanalysis-select" class="preanalysis-select" hidden>
+                <label for="preanalysis_id">Pre-analyzed image</label>
+                <select id="preanalysis_id" name="preanalysis_id">
+                    <option value="">— Select an image —</option>
+                    {% for item in preanalysis %}
+                        <option value="{{ item.id }}" data-preview="{{ item.preview_path }}">{{ item.label }}{% if item.num_objects is not none %} ({{ item.num_objects }} objects){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <p class="note">Pre-analyzed images come from the queue.</p>
+                <div class="preanalysis-preview" id="preanalysis-preview" hidden>
+                    <img id="preanalysis-preview-img" alt="Pre-analyzed preview">
+                    <p id="preanalysis-preview-empty">No preview available.</p>
+                </div>
+            </div>
             
             <label for="image">Select Image (画像を選択)</label>
             <input type="file" id="image" name="image" accept="image/*" required>
@@ -59,6 +85,19 @@
     </div>
     <script>
         const titles = {{ titles|tojson }};
+        const actionNew = "{{ url_for('analysis.upload') }}";
+        const actionPre = "{{ url_for('analysis.use_preanalyzed') }}";
+        const form = document.querySelector("form");
+        const fileInput = document.getElementById("image");
+        const preSelect = document.getElementById("preanalysis_id");
+        const preWrapper = document.getElementById("preanalysis-select");
+        const modeRadios = document.querySelectorAll("input[name='analysis_mode']");
+        const preRadio = document.getElementById("mode-pre");
+        const preAvailable = preSelect && preSelect.options.length > 1;
+        const tempBase = "{{ url_for('main_routes.temp_img', filename='') }}";
+        const previewWrap = document.getElementById("preanalysis-preview");
+        const previewImg = document.getElementById("preanalysis-preview-img");
+        const previewEmpty = document.getElementById("preanalysis-preview-empty");
         function checkTitleAvailability(){
             const titleInput = document.getElementById("img_name");
             const title = titleInput.value.trim();
@@ -82,6 +121,14 @@
             return true;
         }
         function validateForm(event) {
+            const mode = document.querySelector("input[name='analysis_mode']:checked")?.value || "new";
+            if (mode === "pre") {
+                if (!preSelect || !preSelect.value) {
+                    alert("Please select a pre-analyzed image.");
+                    event.preventDefault();
+                    return false;
+                }
+            }
             if (!checkTitleAvailability() || !checkIfCoordinateMatch()) {
                 event.preventDefault();
                 return false;
@@ -89,6 +136,7 @@
             return true;
         }
         document.getElementById("image").addEventListener("change", e => {
+            if (fileInput.disabled) return;
             const file = e.target.files[0];
             document.querySelectorAll("body > img").forEach(img => img.remove());
             if (file) document.body.insertAdjacentHTML("beforeend", `<img src="${URL.createObjectURL(file)}" style="max-width:200px;">`);
@@ -114,6 +162,66 @@
         window.onload = () => {
             getDataFromURL();
         };
+
+        function updateMode() {
+            let mode = document.querySelector("input[name='analysis_mode']:checked")?.value || "new";
+            if (!preAvailable && mode === "pre") {
+                const fallback = document.getElementById("mode-new");
+                if (fallback) fallback.checked = true;
+                mode = "new";
+            }
+            if (mode === "pre") {
+                form.action = actionPre;
+                if (preWrapper) preWrapper.hidden = false;
+                if (preSelect) {
+                    preSelect.disabled = false;
+                    preSelect.required = true;
+                }
+                fileInput.required = false;
+                fileInput.disabled = true;
+                fileInput.value = "";
+                document.querySelectorAll("body > img").forEach(img => img.remove());
+                updatePreview();
+            } else {
+                form.action = actionNew;
+                if (preWrapper) preWrapper.hidden = true;
+                if (preSelect) {
+                    preSelect.disabled = true;
+                    preSelect.required = false;
+                }
+                fileInput.required = true;
+                fileInput.disabled = false;
+                if (previewWrap) previewWrap.hidden = true;
+            }
+        }
+
+        function updatePreview() {
+            if (!previewWrap || !previewImg || !previewEmpty) return;
+            const opt = preSelect?.selectedOptions?.[0];
+            const previewPath = opt?.dataset?.preview || "";
+            if (!previewPath) {
+                previewImg.removeAttribute("src");
+                previewImg.style.display = "none";
+                previewEmpty.style.display = "block";
+                previewWrap.hidden = false;
+                return;
+            }
+            previewImg.src = tempBase + encodeURIComponent(previewPath);
+            previewImg.style.display = "block";
+            previewEmpty.style.display = "none";
+            previewWrap.hidden = false;
+        }
+
+        if (preSelect) {
+            preSelect.addEventListener("change", updatePreview);
+        }
+        modeRadios.forEach(radio => radio.addEventListener("change", updateMode));
+        if (!preAvailable && preRadio) {
+            preRadio.disabled = true;
+            const label = preRadio.closest("label");
+            if (label) label.classList.add("disabled");
+        }
+        updateMode();
         function toggleDateTime(inputId, checkbox) {
             const input = document.getElementById(inputId);
 

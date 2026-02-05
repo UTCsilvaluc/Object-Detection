@@ -1,6 +1,6 @@
 # routes/analysis_routes.py
 
-from flask import Blueprint, request, render_template, current_app , url_for
+from flask import Blueprint, request, render_template, current_app, url_for, jsonify, redirect
 import os
 import cv2
 import numpy as np
@@ -23,6 +23,15 @@ from utils.helper import (
     ensure_image_thumbnail,
     build_temp_webp_path,
     ensure_display_webp
+)
+
+from utils.analysis_queue import (
+    add_queue_files,
+    serialize_queue_items,
+    claim_next_pending,
+    update_queue_item,
+    get_queue_item,
+    mark_reserved
 )
 
 from .main_routes import clear_temp
@@ -311,4 +320,186 @@ def upload():
         metadata_keys=metadata_keys,
         metadatas_values=metadatas_values,
         thread_categories=thread_categories,
+    )
+
+
+def _queue_analysis_name(item_id: str) -> str:
+    return f"pre_{item_id}"
+
+
+def _process_queue_item(item: dict) -> dict:
+    img_path = item.get("upload_path")
+    if not img_path or not os.path.exists(img_path):
+        raise FileNotFoundError("Uploaded image not found on disk.")
+    img_cv = cv2.imread(img_path)
+    if img_cv is None:
+        raise ValueError("Invalid image file.")
+
+    result_data, img_result, model = run_detection_pipeline(img_path, img_cv)
+    objects = result_data.get("objects", [])
+    get_similar_objects(objects, top_k=5)
+
+    _, annotated_rel_path = save_temp_img(img_result, "annotated")
+    _, original_rel_path = save_temp_img(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB), "original")
+    annotated_display_path = _get_display_path(annotated_rel_path)
+    original_display_path = _get_display_path(original_rel_path)
+
+    analysis_name = _queue_analysis_name(item["id"])
+    json_dir = build_json_temp_path()
+    os.makedirs(json_dir, exist_ok=True)
+    JSON_data = {
+        "image_name": analysis_name,
+        "description": None,
+        "date": None,
+        "location": None,
+        "latitude": None,
+        "longitude": None,
+        "source": None,
+        "num_objects": result_data.get("num_objects", len(objects)),
+        "objects": objects
+    }
+    save_json(JSON_data, json_dir, analysis_name)
+
+    update_queue_item(
+        item["id"],
+        status="done",
+        analysis_name=analysis_name,
+        annotated_image_path=annotated_rel_path,
+        original_image_path=original_rel_path,
+        annotated_display_path=annotated_display_path,
+        original_display_path=original_display_path,
+        num_objects=JSON_data["num_objects"],
+        model=model
+    )
+
+    try:
+        os.remove(img_path)
+    except OSError:
+        pass
+
+    return {
+        "id": item["id"],
+        "filename": item.get("filename"),
+        "num_objects": JSON_data["num_objects"],
+        "model": model
+    }
+
+
+@analysis_bp.route('/queue', methods=['GET', 'POST'])
+def queue_page():
+    if request.method == "POST":
+        files = request.files.getlist("images")
+        added = add_queue_files(files)
+        return redirect(url_for("analysis.queue_page", added=len(added)))
+    items = serialize_queue_items()
+    added = request.args.get("added")
+    return render_template("queue.html", items=items, added=added)
+
+
+@analysis_bp.route('/queue/status', methods=['GET'])
+def queue_status():
+    return jsonify({"success": True, "items": serialize_queue_items()})
+
+
+@analysis_bp.route('/queue/process-next', methods=['POST'])
+def queue_process_next():
+    item = claim_next_pending()
+    if not item:
+        return jsonify({"success": True, "status": "idle"})
+    try:
+        processed = _process_queue_item(item)
+    except Exception as exc:
+        update_queue_item(item.get("id"), status="error", error=str(exc))
+        return jsonify({"success": False, "status": "error", "error": str(exc)})
+    return jsonify({"success": True, "status": "processed", "item": processed})
+
+
+@analysis_bp.route('/use-preanalyzed', methods=['POST'])
+def use_preanalyzed():
+    pre_id = (request.form.get("preanalysis_id") or "").strip()
+    if not pre_id:
+        return "No pre-analyzed image selected.", 400
+
+    item = get_queue_item(pre_id)
+    if not item or item.get("status") not in ("done", "reserved"):
+        return "Pre-analyzed image not available.", 404
+
+    if item.get("status") == "reserved":
+        assigned_name = item.get("assigned_name")
+        if assigned_name and assigned_name != (request.form.get("img_name") or "").strip():
+            return f"This pre-analyzed image is already reserved for '{assigned_name}'.", 400
+
+    analysis_name = item.get("analysis_name")
+    if not analysis_name:
+        return "Pre-analyzed image missing analysis data.", 404
+
+    metadata = get_form_metadata(request)
+    img_name = metadata.get("name", "unnamed")
+    if not img_name:
+        return "Image name is required.", 400
+    if check_if_title_exist(img_name):
+        return f"The image name '{img_name}' already exists. Please choose a different name. 画像名 '{img_name}' は既に存在します。別の名前を選んでください。", 400
+    existing_json = build_json_temp_path(f"{img_name}.json")
+    if os.path.exists(existing_json) and img_name != analysis_name:
+        return f"An analysis already exists for the name '{img_name}'. Please choose a different name.", 400
+    if (metadata.get("latitude") and not control_coordinate_format(metadata.get("latitude"))) or \
+       (metadata.get("longitude") and not control_coordinate_format(metadata.get("longitude"))):
+        return "Invalid coordinate format for latitude or longitude. 緯度または経度の座標形式が無効です。", 400
+
+    result_data, json_path = load_analysis_json(analysis_name)
+    objects = result_data.get("objects", [])
+    get_similar_objects(objects, top_k=5)
+    result_data.update({
+        "image_name": img_name,
+        "description": metadata.get("desc"),
+        "date": metadata.get("event_date"),
+        "location": metadata.get("location"),
+        "latitude": metadata.get("latitude"),
+        "longitude": metadata.get("longitude"),
+        "source": metadata.get("source"),
+        "num_objects": result_data.get("num_objects", len(objects)),
+        "objects": objects
+    })
+    save_json(result_data, build_json_temp_path(), img_name)
+    if analysis_name != img_name:
+        try:
+            os.remove(json_path)
+        except OSError:
+            pass
+
+    mark_reserved(pre_id, assigned_name=img_name, analysis_name=img_name)
+
+    annotated_rel_path = item.get("annotated_image_path")
+    original_rel_path = item.get("original_image_path")
+    if not annotated_rel_path or not original_rel_path:
+        return "Pre-analyzed image missing generated assets.", 404
+
+    annotated_display_path = _get_display_path(annotated_rel_path)
+    original_display_path = _get_display_path(original_rel_path)
+
+    class_name = get_all_classes()
+    metadata_keys = get_all_metadata_keys()
+    metadatas_values = get_all_metadatas_values()
+    thread_categories = get_ThreadCategory()
+    from models.pretrained_models import defautlSamParameters
+    _attach_thumb_paths(result_data.get("objects"), key="obj_crop_path")
+
+    return render_template(
+        "upload.html",
+        img_name=img_name,
+        result=result_data,
+        **metadata,
+        **defautlSamParameters(),
+        model=item.get("model") or "Unknown",
+        annotated_image_path=annotated_rel_path,
+        annotated_image_thumb_path=_get_thumb_path(annotated_rel_path),
+        annotated_image_display_path=annotated_display_path,
+        original_image_path=original_rel_path,
+        original_image_thumb_path=_get_thumb_path(original_rel_path),
+        original_image_display_path=original_display_path,
+        class_name=class_name,
+        metadata_keys=metadata_keys,
+        metadatas_values=metadatas_values,
+        thread_categories=thread_categories,
+        preanalysis_id=pre_id
     )
